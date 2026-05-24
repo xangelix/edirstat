@@ -60,7 +60,7 @@ To prevent traversal worker threads from blocking the UI rendering cycle, `edirs
 
 To conserve system memory and minimize pointers, the scanned directory hierarchy is flattened into a single contiguous array (arena):
 
-```
+```text
 [ Root Node ] ---> [ Child A ] ---> [ Child B ] ---> [ Child C ]
                         |
                         v
@@ -75,7 +75,7 @@ To conserve system memory and minimize pointers, the scanned directory hierarchy
 
 The `.edst` snapshot file layout matches the structure of the in-memory arena:
 
-```
+```text
 +------------------------------------------------------------+
 |  Header (32 Bytes)                                         |
 |  - Magic: "EDST"                                           |
