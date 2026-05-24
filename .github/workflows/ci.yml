@@ -19,6 +19,9 @@ jobs:
       - name: Check formatting
         run: cargo fmt --all -- --check
 
+      - name: Check for unused dependencies
+        run: cargo shear
+
       - name: Run tests (no default features)
         run: cargo test --no-default-features
 
