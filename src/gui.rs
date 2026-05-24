@@ -46,6 +46,7 @@ pub struct GuiApp {
 
     // Extension breakdown stats
     extension_stats: Vec<ExtensionStat>,
+    last_extension_update: Option<Instant>, // tracking for live throttled updates
 }
 
 struct ExtensionStat {
@@ -71,6 +72,7 @@ impl GuiApp {
             scan_start_time: None,
             total_scan_duration: None,
             extension_stats: Vec::new(),
+            last_extension_update: None, // Added initialization
         }
     }
 
@@ -78,6 +80,7 @@ impl GuiApp {
         self.selected_node_idx = None;
         self.expanded_nodes.clear();
         self.extension_stats.clear();
+        self.last_extension_update = None; // Added reset
         self.delete_confirm_checked = false;
         self.delete_node_idx = None;
         self.active_modal = None;
@@ -278,10 +281,22 @@ impl eframe::App for GuiApp {
                             prettier_bytes::ByteFormatter::new().format(speed as u64)
                         ));
                     }
-                } else if let Some(ref _path) = self.current_scan_path {
-                    // Update extension stats only once after scan finishes
-                    if self.extension_stats.is_empty() && !snapshot.nodes.is_empty() {
+
+                    // Periodically update extension stats during active scanning
+                    let should_update = self
+                        .last_extension_update
+                        .is_none_or(|last| last.elapsed() >= Duration::from_millis(250));
+                    if should_update && !snapshot.nodes.is_empty() {
                         self.update_extension_stats(&snapshot);
+                        self.last_extension_update = Some(Instant::now());
+                    }
+                } else if let Some(ref _path) = self.current_scan_path {
+                    // Run one final sync on completion or if loading a static snapshot
+                    if self.last_extension_update.is_some() || self.extension_stats.is_empty() {
+                        if !snapshot.nodes.is_empty() {
+                            self.update_extension_stats(&snapshot);
+                        }
+                        self.last_extension_update = None; // Reset tracker post-scan
                     }
                 }
 
