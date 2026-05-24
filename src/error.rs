@@ -19,7 +19,4 @@ pub enum EdirstatError {
 
     #[error("Truncated snapshot file; string pool missing")]
     TruncatedStringPool,
-
-    #[error("Glob compilation error: {0}")]
-    Glob(#[from] globset::Error),
 }

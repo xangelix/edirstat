@@ -1,6 +1,6 @@
 use std::{
     fs,
-    path::{Path, PathBuf},
+    path::PathBuf,
     sync::{
         Arc,
         atomic::{AtomicBool, AtomicUsize, Ordering},
@@ -13,16 +13,9 @@ use crossbeam::{
     channel::Sender,
     deque::{Injector, Worker},
 };
-use globset::{Glob, GlobSet, GlobSetBuilder};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct LocalId(pub u32);
-
-#[derive(Clone)]
-pub struct IgnoreRuleGroup {
-    pub dir_path: PathBuf,
-    pub glob_set: GlobSet,
-}
 
 #[derive(Clone)]
 pub struct ScanTask {
@@ -30,7 +23,6 @@ pub struct ScanTask {
     pub parent_id: LocalId,
     pub worker_id: u8,
     pub ancestors: Vec<(u64, u64)>,
-    pub ignore_stack: Vec<IgnoreRuleGroup>,
 }
 
 pub enum ScanEvent {
@@ -103,25 +95,6 @@ impl TraversalEngine {
         let num_threads = self.num_threads;
         let stats = self.stats.clone();
 
-        // Setup base system ignore rule group (e.g. system files / directories)
-        let mut root_ignore_builder = GlobSetBuilder::new();
-        // Default ignores
-        let ignores = [
-            "**/$RECYCLE.BIN",
-            "**/System Volume Information",
-            "**/.git",
-            "**/node_modules",
-            "**/target",
-            "**/tmp",
-        ];
-        for pat in ignores {
-            root_ignore_builder.add(Glob::new(pat)?);
-        }
-        let root_ignore = IgnoreRuleGroup {
-            dir_path: root_path.clone(),
-            glob_set: root_ignore_builder.build()?,
-        };
-
         let handle = thread::spawn(move || {
             // Setup global injector for starting and overflow tasks
             let injector = Arc::new(Injector::new());
@@ -136,7 +109,6 @@ impl TraversalEngine {
                 parent_id: LocalId(0),
                 worker_id: 0,
                 ancestors: vec![root_file_id],
-                ignore_stack: vec![root_ignore],
             };
             injector.push(initial_task);
 
@@ -276,28 +248,6 @@ fn scan_directory<F>(
     let dir_path = &task.path;
     let parent_local_id = task.parent_id;
 
-    // Check for custom ignore files inside this directory (e.g. `.gitignore`)
-    let mut current_ignore_stack = task.ignore_stack.clone();
-    let gitignore_path = dir_path.join(".gitignore");
-    if let Ok(content) = fs::read_to_string(&gitignore_path) {
-        let mut builder = GlobSetBuilder::new();
-        for line in content.lines() {
-            let trimmed = line.trim();
-            if trimmed.is_empty() || trimmed.starts_with('#') {
-                continue;
-            }
-            if let Ok(glob) = Glob::new(trimmed) {
-                builder.add(glob);
-            }
-        }
-        if let Ok(glob_set) = builder.build() {
-            current_ignore_stack.push(IgnoreRuleGroup {
-                dir_path: dir_path.clone(),
-                glob_set,
-            });
-        }
-    }
-
     // Try reading directory entries
     let Ok(entries) = fs::read_dir(dir_path) else {
         return;
@@ -309,11 +259,6 @@ fn scan_directory<F>(
         let Ok(entry) = entry_res else { continue };
 
         let path = entry.path();
-
-        // Filter via ignore stack
-        if should_ignore(&path, &current_ignore_stack) {
-            continue;
-        }
 
         let Ok(metadata) = entry.metadata() else {
             continue;
@@ -357,7 +302,6 @@ fn scan_directory<F>(
                 parent_id: child_local_id,
                 worker_id,
                 ancestors: new_ancestors,
-                ignore_stack: current_ignore_stack.clone(),
             };
             local_worker.push(new_task);
         } else {
@@ -394,21 +338,6 @@ fn scan_directory<F>(
         true,
         event_tx,
     );
-}
-
-#[must_use]
-pub fn should_ignore(path: &Path, ignore_stack: &[IgnoreRuleGroup]) -> bool {
-    for group in ignore_stack.iter().rev() {
-        if let Ok(rel_path) = path.strip_prefix(&group.dir_path) {
-            if rel_path.as_os_str().is_empty() {
-                continue;
-            }
-            if group.glob_set.is_match(rel_path) {
-                return true;
-            }
-        }
-    }
-    false
 }
 
 #[cfg(unix)]

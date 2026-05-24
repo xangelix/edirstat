@@ -21,7 +21,6 @@ arc-swap = "1.9.1"
 bytemuck = { version = "1.25.0", features = ["derive"] }
 crossbeam = "0.8.4"
 eframe = "0.34.2"
-globset = "0.4.18"
 memmap2 = "0.9.10"
 open = "5.3.5"
 prettier-bytes = "0.2.1"
