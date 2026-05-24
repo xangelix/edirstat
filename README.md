@@ -1,6 +1,6 @@
 # eDirStat
 
-![](https://raw.githubusercontent.com/Xangelix/edirstat/main/docs/videos/steam-library-demo.mp4)
+![](https://media.githubusercontent.com/media/Xangelix/edirstat/main/docs/videos/steam-library-demo.mp4)
 
 [![Crates.io](https://img.shields.io/crates/v/edirstat)](https://crates.io/crates/edirstat)
 [![Docs.rs](https://docs.rs/edirstat/badge.svg)](https://docs.rs/edirstat)
