@@ -12,7 +12,7 @@ jobs:
     name: Build & Upload Linux Asset
     runs-on: ubuntu-latest
     container:
-      image: registry.gitlab.com/xangelix-pub/containers/arch-znver4-rust-nightly-pin-common:latest
+      image: registry.gitlab.com/xangelix-pub/containers/arch-rust-nightly-pin-common:latest
       options: --user root # How I wish this were GitLab
 
     steps:
