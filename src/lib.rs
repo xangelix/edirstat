@@ -24,6 +24,8 @@
 #![allow(clippy::used_underscore_binding)]
 #![allow(clippy::crate_in_macro_def)]
 #![allow(clippy::too_many_lines)]
+// Docs
+#![doc = include_str!("../README.md")]
 // --- Feature Gates ---
 #![cfg_attr(windows, feature(windows_by_handle))]
 
