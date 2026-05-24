@@ -816,104 +816,100 @@ impl GuiApp {
 
         let is_expanded = self.expanded_nodes.contains(&node_idx);
         let has_children = node.is_directory() && node.first_child != NO_INDEX;
+        let is_selected = self.selected_node_idx == Some(node_idx);
 
-        let response = ui
-            .horizontal(|ui| {
-                // Indent padding
-                #[allow(clippy::cast_precision_loss)]
-                ui.add_space(indent_level as f32 * 16.0);
+        let horizontal_res = ui.horizontal(|ui| {
+            // Indent padding
+            #[allow(clippy::cast_precision_loss)]
+            ui.add_space(indent_level as f32 * 16.0);
 
-                // Icon & Expand Arrow
-                let icon_text = if node.is_symlink() {
-                    "🔗"
-                } else if node.is_directory() {
-                    "📁"
-                } else {
-                    "📄"
-                };
+            // Icon & Expand Arrow
+            let icon_text = if node.is_symlink() {
+                "🔗"
+            } else if node.is_directory() {
+                "📁"
+            } else {
+                "📄"
+            };
 
-                if has_children {
-                    let arrow = if is_expanded { "[-]" } else { "[+]" };
-                    let rich_arrow = egui::RichText::new(arrow).monospace();
-                    let label = ui.selectable_label(is_expanded, rich_arrow);
-                    if label.clicked() {
-                        if is_expanded {
-                            self.expanded_nodes.remove(&node_idx);
-                        } else {
-                            self.expanded_nodes.insert(node_idx);
-                        }
+            if has_children {
+                let arrow = if is_expanded { "[-]" } else { "[+]" };
+                let rich_arrow = egui::RichText::new(arrow).monospace();
+                let label = ui.selectable_label(is_expanded, rich_arrow);
+                if label.clicked() {
+                    if is_expanded {
+                        self.expanded_nodes.remove(&node_idx);
+                    } else {
+                        self.expanded_nodes.insert(node_idx);
                     }
-                } else {
-                    ui.add_space(22.0); // Arrow placeholder alignment space matching "[+]"
                 }
+            } else {
+                ui.add_space(22.0); // Arrow placeholder alignment space matching "[+]"
+            }
 
-                ui.label(icon_text);
+            ui.label(icon_text);
 
-                // Node Name / Selectable label with automatic left-aligned truncation
-                let is_selected = self.selected_node_idx == Some(node_idx);
-                let mut rich_name = egui::RichText::new(name);
-                if self.monospace_paths {
-                    rich_name = rich_name.monospace();
-                }
+            // Node Name / Label with automatic left-aligned truncation
+            let mut rich_name = egui::RichText::new(name);
+            if self.monospace_paths {
+                rich_name = rich_name.monospace();
+            }
+            if is_selected {
+                rich_name = rich_name
+                    .strong()
+                    .color(ui.visuals().selection.stroke.color);
+            }
 
-                // Allocate exactly the remaining width minus space for the size column (72px subtracted for a beautifully balanced gap)
-                let name_width = (ui.available_width() - 72.0).max(50.0);
+            // Allocate exactly the remaining width minus space for the size column (72px subtracted)
+            let name_width = (ui.available_width() - 72.0).max(50.0);
 
-                ui.allocate_ui(egui::vec2(name_width, ui.spacing().interact_size.y), |ui| {
-                    ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Truncate);
-                    let name_label = ui.selectable_label(is_selected, rich_name);
-                    if name_label.clicked() {
-                        self.selected_node_idx = Some(node_idx);
-                    }
-                });
+            ui.allocate_ui(egui::vec2(name_width, ui.spacing().interact_size.y), |ui| {
+                ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Truncate);
+                ui.label(rich_name);
+            });
 
-                // Muted size details (far right aligned)
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.label(
-                        prettier_bytes::ByteFormatter::new()
-                            .format(node.size)
-                            .to_string(),
-                    );
-                });
-            })
-            .response;
+            // Muted size details (far right aligned)
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.label(
+                    prettier_bytes::ByteFormatter::new()
+                        .format(node.size)
+                        .to_string(),
+                );
+            });
+        });
 
-        // Select the path first when right-clicked
-        if response.clicked_by(egui::PointerButton::Secondary) {
+        // Get the bounding box of the whole row
+        let rect = horizontal_res.response.rect;
+
+        // --- Offset the interaction hitbox strictly to the right of the expand button ---
+        let mut interactive_rect = rect;
+        #[allow(clippy::cast_precision_loss)]
+        let expand_button_width = (indent_level as f32).mul_add(16.0, 24.0);
+        interactive_rect.min.x += expand_button_width;
+
+        let row_id = ui.id().with(("tree_row", node_idx));
+        let response = ui.interact(interactive_rect, row_id, egui::Sense::click());
+
+        // Draw professional background selection / hover highlights over the FULL row (for seamless visual style)
+        if is_selected {
+            let fill_color = ui.visuals().selection.bg_fill.linear_multiply(0.12);
+            ui.painter().rect_filled(rect, 4.0, fill_color);
+        } else if response.hovered() {
+            let hover_color = ui.visuals().widgets.hovered.bg_fill.linear_multiply(0.04);
+            ui.painter().rect_filled(rect, 4.0, hover_color);
+        }
+
+        // Handle selection on Left-Click or Right-Click (only outside of the expand button)
+        if response.clicked() || response.secondary_clicked() {
             self.selected_node_idx = Some(node_idx);
         }
 
-        // Render context menu on right-click
+        // Render the context menu on Right-Click
         response.context_menu(|ui| {
-            let has_selection = self.selected_node_idx.is_some();
-            let open_btn = ui.add_enabled(has_selection, egui::Button::new("Open in File Manager"));
-            if open_btn.clicked() {
-                let idx_opt = self.selected_node_idx;
-                if let Some(idx) = idx_opt {
-                    let path_str = snapshot.get_full_path(idx);
-                    let path = std::path::Path::new(&path_str);
-                    let dir_to_open = if path.is_dir() {
-                        path
-                    } else {
-                        path.parent().map_or(path, |p| p)
-                    };
-                    let _ = open::that(dir_to_open);
-                }
-                ui.close_kind(egui::UiKind::Menu);
-            }
-
-            let delete_btn =
-                ui.add_enabled(has_selection, egui::Button::new("🗑 Delete (Permanent)"));
-            if delete_btn.clicked() {
-                self.active_modal = Some(ActiveModal::Delete);
-                self.delete_confirm_checked = false;
-                self.delete_node_idx = self.selected_node_idx;
-                ui.close_kind(egui::UiKind::Menu);
-            }
+            self.draw_file_menu_contents(ui, snapshot);
         });
 
         // Draw vertical indentation guidelines to visually track nested containers
-        let rect = response.rect;
         let painter = ui.painter();
         let stroke = egui::Stroke::new(1.0, egui::Color32::from_gray(65));
         for i in 0..indent_level {
