@@ -26,6 +26,15 @@ pub struct FileNode {
     /// Cumulative size in bytes on disk.
     pub size: u64,
 
+    /// Last modified timestamp (seconds since Unix Epoch)
+    pub modified_timestamp: i64,
+
+    /// Creation timestamp (seconds since Unix Epoch)
+    pub created_timestamp: i64,
+
+    /// Last access timestamp (seconds since Unix Epoch)
+    pub accessed_timestamp: i64,
+
     /// Total number of files nested under this node (if directory).
     pub file_count: u32,
 
@@ -42,7 +51,15 @@ impl FileNode {
 
     #[must_use]
     #[inline]
-    pub fn new(name_id: StringId, parent: Option<u32>, is_dir: bool, is_symlink: bool) -> Self {
+    pub fn new(
+        name_id: StringId,
+        parent: Option<u32>,
+        is_dir: bool,
+        is_symlink: bool,
+        modified_timestamp: i64,
+        created_timestamp: i64,
+        accessed_timestamp: i64,
+    ) -> Self {
         let mut flags = 0u8;
         if is_dir {
             flags |= Self::FLAG_DIRECTORY;
@@ -56,6 +73,9 @@ impl FileNode {
             first_child: NO_INDEX,
             next_sibling: NO_INDEX,
             size: 0,
+            modified_timestamp,
+            created_timestamp,
+            accessed_timestamp,
             file_count: 0,
             flags,
             _padding: [0; 3],
@@ -236,9 +256,9 @@ mod tests {
         // Node 1: Dir (Documents), parent=0
         // Node 2: File (test.rs), parent=1
         let nodes = vec![
-            FileNode::new(root_id, None, true, false),
-            FileNode::new(dir_id, Some(0), true, false),
-            FileNode::new(file_id, Some(1), false, false),
+            FileNode::new(root_id, None, true, false, 0, 0, 0),
+            FileNode::new(dir_id, Some(0), true, false, 0, 0, 0),
+            FileNode::new(file_id, Some(1), false, false, 0, 0, 0),
         ];
 
         let snapshot = FileArenaSnapshot {

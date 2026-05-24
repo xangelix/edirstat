@@ -77,7 +77,7 @@ impl Coordinator {
 
         // Register root directory node (Global ID 0)
         let root_name_id = string_pool.get_or_insert(root_path_str.as_bytes());
-        let root_node = FileNode::new(root_name_id, None, true, false);
+        let root_node = FileNode::new(root_name_id, None, true, false, 0, 0, 0);
         arena.push(root_node);
         last_child_map.push(NO_INDEX);
 
@@ -97,6 +97,9 @@ impl Coordinator {
                         local_parent_id,
                         local_child_id,
                         name,
+                        modified_timestamp,
+                        created_timestamp,
+                        accessed_timestamp,
                     } => {
                         // Resolve parent global index using the parent's creator worker ID
                         if let Some(parent_global_id) =
@@ -105,9 +108,16 @@ impl Coordinator {
                             let name_id = string_pool.get_or_insert(name.as_bytes());
                             let child_global_id = arena.len() as u32;
 
-                            // Create the directory node
-                            let dir_node =
-                                FileNode::new(name_id, Some(parent_global_id), true, false);
+                            // Create the directory node with initial timestamps
+                            let dir_node = FileNode::new(
+                                name_id,
+                                Some(parent_global_id),
+                                true,
+                                false,
+                                modified_timestamp,
+                                created_timestamp,
+                                accessed_timestamp,
+                            );
                             arena.push(dir_node);
                             last_child_map.push(NO_INDEX);
 
@@ -136,6 +146,9 @@ impl Coordinator {
                         name,
                         size,
                         is_symlink,
+                        modified_timestamp,
+                        created_timestamp,
+                        accessed_timestamp,
                     } => {
                         if name.is_empty() && size == 0 {
                             // Directory completion signal
@@ -150,8 +163,15 @@ impl Coordinator {
                             let file_global_id = arena.len() as u32;
 
                             // Create file node (parent pointer is set)
-                            let mut file_node =
-                                FileNode::new(name_id, Some(parent_global_id), false, is_symlink);
+                            let mut file_node = FileNode::new(
+                                name_id,
+                                Some(parent_global_id),
+                                false,
+                                is_symlink,
+                                modified_timestamp,
+                                created_timestamp,
+                                accessed_timestamp,
+                            );
                             file_node.size = size;
                             arena.push(file_node);
                             last_child_map.push(NO_INDEX);
@@ -164,8 +184,15 @@ impl Coordinator {
                                 file_global_id,
                             );
 
-                            // Propagate size upwards through parent indices
-                            propagate_size(&mut arena, parent_global_id, size);
+                            // Propagate size and latest metadata upwards through parent indices
+                            propagate_size_and_time(
+                                &mut arena,
+                                parent_global_id,
+                                size,
+                                modified_timestamp,
+                                created_timestamp,
+                                accessed_timestamp,
+                            );
 
                             // O(1) Background Live Extension Tracking
                             let ext = std::path::Path::new(&name).extension().map_or_else(
@@ -272,12 +299,28 @@ fn connect_child(
 }
 
 #[inline]
-fn propagate_size(arena: &mut [FileNode], start_parent_idx: u32, size: u64) {
+fn propagate_size_and_time(
+    arena: &mut [FileNode],
+    start_parent_idx: u32,
+    size: u64,
+    modified: i64,
+    created: i64,
+    accessed: i64,
+) {
     let mut current_idx = Some(start_parent_idx);
     while let Some(idx) = current_idx {
         let node = &mut arena[idx as usize];
         node.size += size;
         node.file_count += 1;
+        if modified > node.modified_timestamp {
+            node.modified_timestamp = modified;
+        }
+        if created > node.created_timestamp {
+            node.created_timestamp = created;
+        }
+        if accessed > node.accessed_timestamp {
+            node.accessed_timestamp = accessed;
+        }
         current_idx = node.parent_opt();
     }
 }

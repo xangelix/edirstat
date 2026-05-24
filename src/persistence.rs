@@ -177,9 +177,9 @@ mod tests {
         let name_file = pool.get_or_insert(b"lib.rs");
 
         let mut nodes = vec![
-            FileNode::new(name_root, None, true, false),
-            FileNode::new(name_dir, Some(0), true, false),
-            FileNode::new(name_file, Some(1), false, false),
+            FileNode::new(name_root, None, true, false, 0, 0, 0),
+            FileNode::new(name_dir, Some(0), true, false, 0, 0, 0),
+            FileNode::new(name_file, Some(1), false, false, 0, 0, 0),
         ];
 
         // Connect nodes

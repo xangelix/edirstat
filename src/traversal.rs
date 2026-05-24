@@ -32,6 +32,9 @@ pub enum ScanEvent {
         local_parent_id: LocalId,
         local_child_id: LocalId,
         name: String,
+        modified_timestamp: i64,
+        created_timestamp: i64,
+        accessed_timestamp: i64,
     },
     FileDiscovered {
         parent_worker_id: u8,
@@ -39,6 +42,9 @@ pub enum ScanEvent {
         name: String,
         size: u64,
         is_symlink: bool,
+        modified_timestamp: i64,
+        created_timestamp: i64,
+        accessed_timestamp: i64,
     },
 }
 
@@ -234,6 +240,17 @@ impl TraversalEngine {
     }
 }
 
+/// Safely translates `SystemTime` to seconds since Unix Epoch, maintaining signs for pre-1970 dates.
+fn system_time_to_unix_timestamp(t: std::time::SystemTime) -> i64 {
+    match t.duration_since(std::time::SystemTime::UNIX_EPOCH) {
+        Ok(duration) => duration.as_secs() as i64,
+        Err(err) => {
+            let neg_duration = err.duration();
+            -(neg_duration.as_secs() as i64)
+        }
+    }
+}
+
 fn scan_directory<F>(
     task: &ScanTask,
     worker_id: u8,
@@ -267,6 +284,11 @@ fn scan_directory<F>(
         let name = entry.file_name().to_string_lossy().into_owned();
         let is_symlink = metadata.is_symlink();
 
+        // Query metadata timestamps
+        let modified_timestamp = metadata.modified().map_or(0, system_time_to_unix_timestamp);
+        let created_timestamp = metadata.created().map_or(0, system_time_to_unix_timestamp);
+        let accessed_timestamp = metadata.accessed().map_or(0, system_time_to_unix_timestamp);
+
         // Check if directory
         if metadata.is_dir() {
             let file_id = get_file_id(&metadata);
@@ -288,6 +310,9 @@ fn scan_directory<F>(
                     local_parent_id: parent_local_id,
                     local_child_id: child_local_id,
                     name,
+                    modified_timestamp,
+                    created_timestamp,
+                    accessed_timestamp,
                 },
                 true,
                 event_tx,
@@ -319,6 +344,9 @@ fn scan_directory<F>(
                     name,
                     size,
                     is_symlink,
+                    modified_timestamp,
+                    created_timestamp,
+                    accessed_timestamp,
                 },
                 false,
                 event_tx,
@@ -334,6 +362,9 @@ fn scan_directory<F>(
             name: String::new(),
             size: 0,
             is_symlink: false,
+            modified_timestamp: 0,
+            created_timestamp: 0,
+            accessed_timestamp: 0,
         },
         true,
         event_tx,
