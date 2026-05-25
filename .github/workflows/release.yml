@@ -8,8 +8,8 @@ permissions:
   contents: write
 
 jobs:
-  build-and-upload:
-    name: Build & Upload (${{ matrix.target }})
+  build-linux-windows:
+    name: Build & Upload Linux/Windows (${{ matrix.target }})
     runs-on: ubuntu-latest
 
     container:
@@ -48,6 +48,51 @@ jobs:
 
       - name: Compile optimized release binary
         run: ${{ matrix.build_cmd }}
+
+      - name: Stage Release Asset
+        run: |
+          mkdir -p staging
+          cp ${{ matrix.binary_path }} staging/${{ matrix.asset_name }}
+
+      - name: Upload Asset to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: staging/${{ matrix.asset_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-macos:
+    name: Build & Upload macOS (${{ matrix.target }})
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            asset_name: edirstat-macos-arm64
+            binary_path: target/release/edirstat
+          - target: x86_64-apple-darwin
+            asset_name: edirstat-macos-x86_64
+            binary_path: target/x86_64-apple-darwin/release/edirstat
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      # Installs the specific toolchain directly onto the host Mac VM
+      - name: Install Rust Toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-04-15
+          targets: ${{ matrix.target }}
+
+      - name: Cache dependencies
+        uses: swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Compile optimized release binary
+        run: cargo build --release --target ${{ matrix.target }}
 
       - name: Stage Release Asset
         run: |
