@@ -36,7 +36,7 @@ jobs:
 
     steps:
       - name: Checkout Source Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Cache dependencies
         uses: swatinem/rust-cache@v2
@@ -55,7 +55,7 @@ jobs:
           cp ${{ matrix.binary_path }} staging/${{ matrix.asset_name }}
 
       - name: Upload Asset to GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: staging/${{ matrix.asset_name }}
         env:
@@ -77,7 +77,7 @@ jobs:
 
     steps:
       - name: Checkout Source Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       # Installs the specific toolchain directly onto the host Mac VM
       - name: Install Rust Toolchain
@@ -100,7 +100,7 @@ jobs:
           cp ${{ matrix.binary_path }} staging/${{ matrix.asset_name }}
 
       - name: Upload Asset to GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: staging/${{ matrix.asset_name }}
         env:
