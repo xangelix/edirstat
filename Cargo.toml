@@ -31,6 +31,9 @@ rfd = "0.17.2"
 smallvec = "1.15.1"
 thiserror = "2.0.18"
 
+[build-dependencies]
+winresource = "0.1.31"
+
 [[bin]]
 name = "edirstat"
 path = "src/bin/edirstat.rs"
