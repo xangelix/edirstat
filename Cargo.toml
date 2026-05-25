@@ -20,12 +20,16 @@ exclude = ["docs/videos/*", "*.mp4"]
 
 [dependencies]
 arc-swap = "1.9.1"
+atomic-progress = { version = "0.1.5", default-features = false, features = ["prettier-bytes"] }
+blake3 = "1.8.5"
 bytemuck = { version = "1.25.0", features = ["derive"] }
 crossbeam = "0.8.4"
 eframe = "0.34.2"
+egui_extras = "0.34.2"
 egui_plot = "0.35.0"
 memmap2 = "0.9.10"
 open = "5.3.5"
+parking_lot = { version = "0.12.5", features = ["hardware-lock-elision"] }
 prettier-bytes = "0.2.1"
 rfd = "0.17.2"
 smallvec = "1.15.1"

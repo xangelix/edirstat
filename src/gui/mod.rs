@@ -16,6 +16,7 @@ use super::{
     traversal::TraversalEngine,
 };
 
+pub mod deduplicator_tab;
 pub mod explorer;
 pub mod extensions;
 pub mod modals;
@@ -28,6 +29,7 @@ pub use modals::ActiveModal;
 pub enum VisMode {
     Treemap,
     Plots,
+    Deduplicator,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -39,6 +41,7 @@ pub enum PlotType {
     TemporalTimeline,
 }
 
+#[allow(clippy::struct_excessive_bools)]
 pub struct GuiApp {
     pub(crate) shared_state: Arc<SharedState>,
     pub(crate) traversal_engine: Arc<TraversalEngine>,
@@ -48,6 +51,8 @@ pub struct GuiApp {
     pub(crate) expanded_nodes: HashSet<u32>,
     pub(crate) search_query: String,
     pub(crate) monospace_paths: bool,
+    pub(crate) left_panel_collapsed: bool,
+    pub(crate) right_panel_collapsed: bool,
 
     // Visualization tabs
     pub(crate) vis_mode: VisMode,
@@ -77,6 +82,17 @@ pub struct GuiApp {
 
     // Single-use trigger to automatically scroll the list view to the target row
     pub(crate) scroll_to_selected: bool,
+
+    // Deduplicator states
+    pub(crate) deduplicator_config: crate::stats::deduplicator::DeduplicatorConfig,
+    pub(crate) deduplicator_progress: atomic_progress::Progress,
+    pub(crate) deduplicator_results:
+        Arc<parking_lot::RwLock<Vec<crate::stats::deduplicator::DuplicateGroup>>>,
+    pub(crate) deduplicator_cancel: Arc<std::sync::atomic::AtomicBool>,
+    pub(crate) selected_duplicates: HashSet<u32>,
+    pub(crate) delete_duplicates_indices: Vec<u32>,
+    pub(crate) deduplicator_flat_rows: Vec<crate::gui::deduplicator_tab::DuplicateRow>,
+    pub(crate) deduplicator_last_sig: (usize, usize),
 }
 
 impl GuiApp {
@@ -89,6 +105,8 @@ impl GuiApp {
             expanded_nodes: HashSet::new(),
             search_query: String::new(),
             monospace_paths: false,
+            left_panel_collapsed: false,
+            right_panel_collapsed: false,
             vis_mode: VisMode::Treemap,
             plot_type: PlotType::SizeDistribution,
             treemap_chart: stats::treemap::TreemapChart::new(),
@@ -106,6 +124,14 @@ impl GuiApp {
             extension_stats: Vec::new(),
             last_extension_update: None,
             scroll_to_selected: false,
+            deduplicator_config: crate::stats::deduplicator::DeduplicatorConfig::default(),
+            deduplicator_progress: atomic_progress::Progress::new_spinner("Deduplicator"),
+            deduplicator_results: Arc::new(parking_lot::RwLock::new(Vec::new())),
+            deduplicator_cancel: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            selected_duplicates: HashSet::new(),
+            delete_duplicates_indices: Vec::new(),
+            deduplicator_flat_rows: Vec::new(),
+            deduplicator_last_sig: (0, 0),
         }
     }
 
@@ -117,6 +143,14 @@ impl GuiApp {
         self.delete_confirm_checked = false;
         self.delete_node_idx = None;
         self.active_modal = None;
+        self.selected_duplicates.clear();
+        self.delete_duplicates_indices.clear();
+        self.deduplicator_flat_rows.clear();
+        self.deduplicator_last_sig = (0, 0);
+        self.deduplicator_cancel
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        self.deduplicator_progress = atomic_progress::Progress::new_spinner("Deduplicator");
+        *self.deduplicator_results.write() = Vec::new();
         self.traversal_engine.stats().reset();
         self.treemap_chart = stats::treemap::TreemapChart::default();
         self.size_dist_chart = stats::size_distribution::SizeDistributionChart::default();
@@ -165,6 +199,15 @@ impl GuiApp {
 impl eframe::App for GuiApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
+
+        // Handle keyboard shortcuts
+        if ctx.input(|i| i.key_pressed(egui::Key::F9)) {
+            self.left_panel_collapsed = !self.left_panel_collapsed;
+        }
+        if ctx.input(|i| i.key_pressed(egui::Key::F11)) {
+            self.right_panel_collapsed = !self.right_panel_collapsed;
+        }
+
         // Fetch current snapshot
         let snapshot = self.shared_state.current_snapshot.load();
         let is_scanning = self.shared_state.is_scanning.load(Ordering::SeqCst);
@@ -187,6 +230,65 @@ impl eframe::App for GuiApp {
                         .strong()
                         .color(ui.visuals().strong_text_color()),
                 );
+                ui.separator();
+
+                // Temporarily disable button frames to make top-level menus flat & clean
+                let saved_button_frame = ui.visuals().button_frame;
+                ui.style_mut().visuals.button_frame = false;
+
+               // Top menu buttons (File / View / Help)
+                ui.menu_button("File", |ui| {
+                    ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
+                    self.draw_file_menu_contents(ui, &snapshot);
+                });
+                ui.menu_button("View", |ui| {
+                    ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
+
+                    // Aligned emoji checkbox layout
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 4.0;
+                        let mut checked = self.monospace_paths;
+                        if ui.checkbox(&mut checked, "").changed() {
+                            self.monospace_paths = checked;
+                        }
+                        let response = ui.horizontal(|ui| {
+                            ui.label(egui::RichText::new("🅰").size(12.0));
+                            ui.label("Monospace Paths");
+                        }).response;
+
+                        let label_click = ui.interact(response.rect, ui.id().with("monospace_label"), egui::Sense::click());
+                        if label_click.clicked() {
+                            self.monospace_paths = !self.monospace_paths;
+                        }
+                    });
+
+                    ui.separator();
+
+                    let left_label = if self.left_panel_collapsed { "▶ Show Left Panel (F9)" } else { "◀ Hide Left Panel (F9)" };
+                    if ui.button(left_label).clicked() {
+                        self.left_panel_collapsed = !self.left_panel_collapsed;
+                        ui.close_kind(egui::UiKind::Menu);
+                    }
+
+                    let right_label = if self.right_panel_collapsed { "◀ Show Right Panel (F11)" } else { "▶ Hide Right Panel (F11)" };
+                    if ui.button(right_label).clicked() {
+                        self.right_panel_collapsed = !self.right_panel_collapsed;
+                        ui.close_kind(egui::UiKind::Menu);
+                    }
+
+                    ui.separator();
+                    if ui.button("🗂 Collapse All").clicked() {
+                        self.expanded_nodes.clear();
+                        ui.close_kind(egui::UiKind::Menu);
+                    }
+                });
+                ui.menu_button("Help", |ui| {
+                    ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
+                    if ui.button("ℹ About").clicked() {
+                        self.active_modal = Some(ActiveModal::About);
+                    }
+                });
+
                 ui.separator();
 
                 if ui.button("📁 Scan Directory").clicked() {
@@ -219,6 +321,8 @@ impl eframe::App for GuiApp {
                     }
                 }
 
+                ui.add_space(10.0);
+
                 if ui.button("💾 Save Snapshot").clicked() && !snapshot.nodes.is_empty() {
                     let file_opt = FileDialog::new()
                         .add_filter("eDirStat Snapshot", &["edst"])
@@ -232,6 +336,8 @@ impl eframe::App for GuiApp {
                         }
                     }
                 }
+
+                ui.add_space(10.0);
 
                 if ui.button("📖 Load Snapshot").clicked() {
                     let file_opt = FileDialog::new()
@@ -313,6 +419,8 @@ impl eframe::App for GuiApp {
                     ui.colored_label(theme::GLOW_INNER_CORE, badge_text)
                         .on_hover_text("The number of parallel, work-stealing CPU cores allocated for directory traversal.");
                 });
+
+                ui.style_mut().visuals.button_frame = saved_button_frame; // Restore default button frames
             });
         });
 
@@ -373,99 +481,93 @@ impl eframe::App for GuiApp {
         });
 
         // Left Panel - Directory Tree Explorer
-        egui::Panel::left("left_panel")
-            .resizable(true)
-            .default_size(450.0)
-            .show_inside(ui, |ui| {
-                ui.vertical(|ui| {
-                    // Toolbar above the root tree
-                    egui::MenuBar::new().ui(ui, |ui| {
-                        ui.menu_button("File", |ui| {
-                            self.draw_file_menu_contents(ui, &snapshot);
-                        });
-                        ui.menu_button("View", |ui| {
-                            ui.checkbox(&mut self.monospace_paths, "🅰 Monospace Paths");
-                            ui.separator();
-                            if ui.button("🗂 Collapse All").clicked() {
-                                self.expanded_nodes.clear();
-                                ui.close_kind(egui::UiKind::Menu);
+        if !self.left_panel_collapsed {
+            egui::Panel::left("left_panel")
+                .resizable(true)
+                .default_size(300.0)
+                .show_inside(ui, |ui| {
+                    ui.vertical(|ui| {
+                        ui.add_space(6.0);
+                        ui.horizontal(|ui| {
+                            ui.label("🔍 Filter:");
+                            let clear_btn_width = if self.search_query.is_empty() {
+                                0.0
+                            } else {
+                                26.0
+                            };
+                            let desired_width = ui.available_width() - clear_btn_width - 8.0;
+                            ui.add(
+                                egui::TextEdit::singleline(&mut self.search_query)
+                                    .desired_width(desired_width.max(10.0)),
+                            );
+                            if !self.search_query.is_empty() && ui.button("❌").clicked() {
+                                self.search_query.clear();
                             }
                         });
-                        ui.menu_button("Help", |ui| {
-                            if ui.button("ℹ About").clicked() {
-                                self.active_modal = Some(ActiveModal::About);
+                        ui.add_space(4.0);
+                        ui.separator();
+
+                        if snapshot.nodes.is_empty() {
+                            ui.centered_and_justified(|ui| {
+                                ui.label("Click 'Scan Directory' to explore disk usage.");
+                            });
+                        } else {
+                            // Auto-expand the root node (0) if expanded_nodes is empty
+                            if self.expanded_nodes.is_empty() {
+                                self.expanded_nodes.insert(0);
                             }
-                        });
-                    });
-                    ui.separator();
 
-                    ui.horizontal(|ui| {
-                        ui.label("🔍 Filter:");
-                        ui.text_edit_singleline(&mut self.search_query);
-                        if !self.search_query.is_empty() && ui.button("❌").clicked() {
-                            self.search_query.clear();
-                        }
-                    });
-                    ui.separator();
+                            let mut visible_nodes = Vec::new();
+                            self.flatten_visible_tree(&snapshot, 0, 0, &mut visible_nodes);
 
-                    if snapshot.nodes.is_empty() {
-                        ui.centered_and_justified(|ui| {
-                            ui.label("Click 'Scan Directory' to explore disk usage.");
-                        });
-                    } else {
-                        // Auto-expand the root node (0) if expanded_nodes is empty
-                        if self.expanded_nodes.is_empty() {
-                            self.expanded_nodes.insert(0);
-                        }
+                            // Fetch the exact layout spacing variables
+                            let row_height = ui.spacing().interact_size.y;
+                            let spacing_y = ui.spacing().item_spacing.y;
+                            let row_stride = row_height + spacing_y; // Actual pixel gap per item index
+                            let available_height = ui.available_height(); // Height of the left panel
 
-                        let mut visible_nodes = Vec::new();
-                        self.flatten_visible_tree(&snapshot, 0, 0, &mut visible_nodes);
+                            // --- Mathematically Correct Programmatic Scrolling ---
+                            let mut scroll_area = egui::ScrollArea::vertical();
+                            if self.scroll_to_selected {
+                                if let Some(selected_idx) = self.selected_node_idx {
+                                    // Find the index of the selected item in the flat visible list
+                                    if let Some(row_index) = visible_nodes
+                                        .iter()
+                                        .position(|&(node_idx, _)| node_idx == selected_idx)
+                                    {
+                                        #[allow(clippy::cast_precision_loss)]
+                                        let target_y = (row_index as f32) * row_stride;
 
-                        // Fetch the exact layout spacing variables
-                        let row_height = ui.spacing().interact_size.y;
-                        let spacing_y = ui.spacing().item_spacing.y;
-                        let row_stride = row_height + spacing_y; // Actual pixel gap per item index
-                        let available_height = ui.available_height(); // Height of the left panel
+                                        // Calculate center offset relative to the available height of the viewport
+                                        let center_offset = (available_height - row_height) / 2.0;
+                                        let offset = (target_y - center_offset).max(0.0);
 
-                        // --- Mathematically Correct Programmatic Scrolling ---
-                        let mut scroll_area = egui::ScrollArea::vertical();
-                        if self.scroll_to_selected {
-                            if let Some(selected_idx) = self.selected_node_idx {
-                                // Find the index of the selected item in the flat visible list
-                                if let Some(row_index) = visible_nodes
-                                    .iter()
-                                    .position(|&(node_idx, _)| node_idx == selected_idx)
-                                {
-                                    #[allow(clippy::cast_precision_loss)]
-                                    let target_y = (row_index as f32) * row_stride;
-
-                                    // Calculate center offset relative to the available height of the viewport
-                                    let center_offset = (available_height - row_height) / 2.0;
-                                    let offset = (target_y - center_offset).max(0.0);
-
-                                    scroll_area = scroll_area.vertical_scroll_offset(offset);
+                                        scroll_area = scroll_area.vertical_scroll_offset(offset);
+                                    }
                                 }
+                                self.scroll_to_selected = false; // Reset the scroll trigger
                             }
-                            self.scroll_to_selected = false; // Reset the scroll trigger
-                        }
 
-                        scroll_area.show_rows(
-                            ui,
-                            row_height,
-                            visible_nodes.len(),
-                            |ui, row_range| {
-                                for idx in row_range {
-                                    let (node_idx, indent) = visible_nodes[idx];
-                                    self.render_tree_node_row(ui, &snapshot, node_idx, indent);
-                                }
-                            },
-                        );
-                    }
+                            scroll_area.show_rows(
+                                ui,
+                                row_height,
+                                visible_nodes.len(),
+                                |ui, row_range| {
+                                    for idx in row_range {
+                                        let (node_idx, indent) = visible_nodes[idx];
+                                        self.render_tree_node_row(ui, &snapshot, node_idx, indent);
+                                    }
+                                },
+                            );
+                        }
+                    });
                 });
-            });
+        }
 
         // Right Panel - Extension statistics
-        self.render_extension_panel(ui);
+        if !self.right_panel_collapsed {
+            self.render_extension_panel(ui);
+        }
 
         // Central Panel - Canvas visual Treemap / Plot Panel
         egui::CentralPanel::default().show_inside(ui, |ui| {
@@ -473,96 +575,112 @@ impl eframe::App for GuiApp {
                 ui.horizontal(|ui| {
                     ui.selectable_value(&mut self.vis_mode, VisMode::Treemap, "🗺 Treemap");
                     ui.selectable_value(&mut self.vis_mode, VisMode::Plots, "📈 Plots");
-                });
-                if self.vis_mode == VisMode::Treemap {
-                    ui.heading(
-                        egui::RichText::new("📊 Treemap Visualization")
-                            .strong()
-                            .color(ui.visuals().strong_text_color()),
+                    ui.selectable_value(
+                        &mut self.vis_mode,
+                        VisMode::Deduplicator,
+                        "👥 Deduplicator",
                     );
-                    ui.separator();
+                });
 
-                    if snapshot.nodes.is_empty() {
-                        ui.centered_and_justified(|ui| {
-                            ui.label("Scanned filesystem will be visualized as a treemap here.");
-                        });
-                    } else {
-                        let mut context = stats::StatContext {
-                            selected_node_idx: &mut self.selected_node_idx,
-                            expanded_nodes: &mut self.expanded_nodes,
-                            scroll_to_selected: &mut self.scroll_to_selected,
-                        };
-                        self.treemap_chart.render(ui, &snapshot, &mut context);
-                    }
-                } else {
-                    // Plots rendering block
-                    ui.horizontal(|ui| {
-                        ui.label("Select Plot:");
-                        egui::ComboBox::from_id_salt("plot_type_combo")
-                            .selected_text(match self.plot_type {
-                                PlotType::SizeDistribution => "📊 File Size Distribution",
-                                PlotType::AgeSizeScatter => "🌌 File Age vs. File Size",
-                                PlotType::DirComposition => "🍰 Directory Composition",
-                                PlotType::ExtensionBoxplot => "📦 File Sizes by Extension",
-                                PlotType::TemporalTimeline => "⏱ Linked Temporal Timelines",
-                            })
-                            .show_ui(ui, |ui| {
-                                ui.selectable_value(
-                                    &mut self.plot_type,
-                                    PlotType::SizeDistribution,
-                                    "📊 File Size Distribution",
-                                );
-                                ui.selectable_value(
-                                    &mut self.plot_type,
-                                    PlotType::AgeSizeScatter,
-                                    "🌌 File Age vs. File Size",
-                                );
-                                ui.selectable_value(
-                                    &mut self.plot_type,
-                                    PlotType::DirComposition,
-                                    "🍰 Directory Composition",
-                                );
-                                ui.selectable_value(
-                                    &mut self.plot_type,
-                                    PlotType::ExtensionBoxplot,
-                                    "📦 File Sizes by Extension",
-                                );
-                                ui.selectable_value(
-                                    &mut self.plot_type,
-                                    PlotType::TemporalTimeline,
-                                    "⏱ Linked Temporal Timelines",
+                ui.add_space(5.0);
+
+                match self.vis_mode {
+                    VisMode::Treemap => {
+                        ui.heading(
+                            egui::RichText::new("📊 Treemap Visualization")
+                                .strong()
+                                .color(ui.visuals().strong_text_color()),
+                        );
+                        ui.separator();
+
+                        if snapshot.nodes.is_empty() {
+                            ui.centered_and_justified(|ui| {
+                                ui.label(
+                                    "Scanned filesystem will be visualized as a treemap here.",
                                 );
                             });
-                    });
-                    ui.separator();
-
-                    if snapshot.nodes.is_empty() {
-                        ui.centered_and_justified(|ui| {
-                            ui.label("Scanned filesystem will be plotted here.");
+                        } else {
+                            let mut context = stats::StatContext {
+                                selected_node_idx: &mut self.selected_node_idx,
+                                expanded_nodes: &mut self.expanded_nodes,
+                                scroll_to_selected: &mut self.scroll_to_selected,
+                            };
+                            self.treemap_chart.render(ui, &snapshot, &mut context);
+                        }
+                    }
+                    VisMode::Plots => {
+                        // Plots rendering block
+                        ui.horizontal(|ui| {
+                            ui.label("Select Plot:");
+                            egui::ComboBox::from_id_salt("plot_type_combo")
+                                .selected_text(match self.plot_type {
+                                    PlotType::SizeDistribution => "📊 File Size Distribution",
+                                    PlotType::AgeSizeScatter => "🌌 File Age vs. File Size",
+                                    PlotType::DirComposition => "🍰 Directory Composition",
+                                    PlotType::ExtensionBoxplot => "📦 File Sizes by Extension",
+                                    PlotType::TemporalTimeline => "⏱ Linked Temporal Timelines",
+                                })
+                                .show_ui(ui, |ui| {
+                                    ui.selectable_value(
+                                        &mut self.plot_type,
+                                        PlotType::SizeDistribution,
+                                        "📊 File Size Distribution",
+                                    );
+                                    ui.selectable_value(
+                                        &mut self.plot_type,
+                                        PlotType::AgeSizeScatter,
+                                        "🌌 File Age vs. File Size",
+                                    );
+                                    ui.selectable_value(
+                                        &mut self.plot_type,
+                                        PlotType::DirComposition,
+                                        "🍰 Directory Composition",
+                                    );
+                                    ui.selectable_value(
+                                        &mut self.plot_type,
+                                        PlotType::ExtensionBoxplot,
+                                        "📦 File Sizes by Extension",
+                                    );
+                                    ui.selectable_value(
+                                        &mut self.plot_type,
+                                        PlotType::TemporalTimeline,
+                                        "⏱ Linked Temporal Timelines",
+                                    );
+                                });
                         });
-                    } else {
-                        let mut context = stats::StatContext {
-                            selected_node_idx: &mut self.selected_node_idx,
-                            expanded_nodes: &mut self.expanded_nodes,
-                            scroll_to_selected: &mut self.scroll_to_selected,
-                        };
-                        match self.plot_type {
-                            PlotType::SizeDistribution => {
-                                self.size_dist_chart.render(ui, &snapshot, &mut context);
-                            }
-                            PlotType::AgeSizeScatter => {
-                                self.scatter_chart.render(ui, &snapshot, &mut context);
-                            }
-                            PlotType::DirComposition => {
-                                self.dir_comp_chart.render(ui, &snapshot, &mut context);
-                            }
-                            PlotType::ExtensionBoxplot => {
-                                self.boxplot_chart.render(ui, &snapshot, &mut context);
-                            }
-                            PlotType::TemporalTimeline => {
-                                self.timeline_chart.render(ui, &snapshot, &mut context);
+                        ui.separator();
+
+                        if snapshot.nodes.is_empty() {
+                            ui.centered_and_justified(|ui| {
+                                ui.label("Scanned filesystem will be plotted here.");
+                            });
+                        } else {
+                            let mut context = stats::StatContext {
+                                selected_node_idx: &mut self.selected_node_idx,
+                                expanded_nodes: &mut self.expanded_nodes,
+                                scroll_to_selected: &mut self.scroll_to_selected,
+                            };
+                            match self.plot_type {
+                                PlotType::SizeDistribution => {
+                                    self.size_dist_chart.render(ui, &snapshot, &mut context);
+                                }
+                                PlotType::AgeSizeScatter => {
+                                    self.scatter_chart.render(ui, &snapshot, &mut context);
+                                }
+                                PlotType::DirComposition => {
+                                    self.dir_comp_chart.render(ui, &snapshot, &mut context);
+                                }
+                                PlotType::ExtensionBoxplot => {
+                                    self.boxplot_chart.render(ui, &snapshot, &mut context);
+                                }
+                                PlotType::TemporalTimeline => {
+                                    self.timeline_chart.render(ui, &snapshot, &mut context);
+                                }
                             }
                         }
+                    }
+                    VisMode::Deduplicator => {
+                        self.render_deduplicator_tab(ui, &snapshot);
                     }
                 }
             });

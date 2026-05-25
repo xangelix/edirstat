@@ -1,3 +1,4 @@
+pub mod deduplicator;
 pub mod dir_composition;
 pub mod extension_boxplot;
 pub mod scatter_plot;
