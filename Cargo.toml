@@ -20,7 +20,9 @@ exclude = ["docs/videos/*", "*.mp4"]
 
 [dependencies]
 arc-swap = "1.9.1"
-atomic-progress = { version = "0.1.5", default-features = false, features = ["prettier-bytes"] }
+atomic-progress = { version = "0.1.5", default-features = false, features = [
+    "prettier-bytes",
+] }
 blake3 = "1.8.5"
 bytemuck = { version = "1.25.0", features = ["derive"] }
 crossbeam = "0.8.4"
