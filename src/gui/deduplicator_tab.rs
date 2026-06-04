@@ -513,6 +513,61 @@ impl super::GuiApp {
                 }
             }
 
+            if ui.button("🎯 Select All But Shortest Path").clicked() {
+                self.selected_duplicates.clear();
+                for group in &active_groups {
+                    let mut best_node: Option<(u32, usize)> = None;
+                    for &idx in &group.nodes {
+                        let path_len = snapshot.get_full_path(idx).len();
+                        match best_node {
+                            None => best_node = Some((idx, path_len)),
+                            Some((_, best_len)) => {
+                                if path_len < best_len {
+                                    best_node = Some((idx, path_len));
+                                }
+                            }
+                        }
+                    }
+                    if let Some((kept_idx, _)) = best_node {
+                        for &idx in &group.nodes {
+                            if idx != kept_idx {
+                                self.selected_duplicates.insert(idx);
+                            }
+                        }
+                    }
+                }
+            }
+
+            if ui.button("🎯 Select All But Root-most").clicked() {
+                self.selected_duplicates.clear();
+                for group in &active_groups {
+                    let mut best_node: Option<(u32, usize)> = None;
+                    for &idx in &group.nodes {
+                        let mut depth = 0;
+                        let mut curr = idx;
+                        while let Some(parent) = snapshot.nodes.get(curr as usize).and_then(|n| n.parent_opt()) {
+                            depth += 1;
+                            curr = parent;
+                        }
+                        match best_node {
+                            None => best_node = Some((idx, depth)),
+                            Some((_, best_depth)) => {
+                                if depth < best_depth {
+                                    best_node = Some((idx, depth));
+                                }
+                            }
+                        }
+                    }
+                    if let Some((kept_idx, _)) = best_node {
+                        for &idx in &group.nodes {
+                            if idx != kept_idx {
+                                self.selected_duplicates.insert(idx);
+                            }
+                        }
+                    }
+                }
+            }
+
             if ui.button("❌ Clear Selection").clicked() {
                 self.selected_duplicates.clear();
             }
