@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use eframe::egui;
 
 use super::{GuiApp, theme};
@@ -12,16 +14,67 @@ pub enum ActiveModal {
     TrashDuplicates,
 }
 
+fn count_nested_stats(nodes: &[crate::arena::FileNode], idx: u32, files: &mut usize, dirs: &mut usize) {
+    if idx as usize >= nodes.len() {
+        return;
+    }
+    let node = &nodes[idx as usize];
+    if node.is_directory() {
+        *dirs += 1;
+        let mut curr = node.first_child;
+        while curr != crate::arena::NO_INDEX {
+            count_nested_stats(nodes, curr, files, dirs);
+            curr = nodes[curr as usize].next_sibling;
+        }
+    } else {
+        *files += 1;
+    }
+}
+
+fn collect_descendants(nodes: &[crate::arena::FileNode], idx: u32, out: &mut Vec<u32>) {
+    if idx as usize >= nodes.len() {
+        return;
+    }
+    let mut curr = nodes[idx as usize].first_child;
+    while curr != crate::arena::NO_INDEX {
+        out.push(curr);
+        collect_descendants(nodes, curr, out);
+        curr = nodes[curr as usize].next_sibling;
+    }
+}
+
 impl GuiApp {
     /// Performs a zero-copy update to the active snapshot by unlinking deleted nodes,
     /// backtracking size weights up to the root, and swapping the updated tree structure.
-    pub(crate) fn remove_nodes_from_snapshot(&self, target_indices: &[u32]) {
+    pub(crate) fn remove_nodes_from_snapshot(&mut self, target_indices: &[u32]) {
         if target_indices.is_empty() {
             return;
         }
 
         let current_snap = self.shared_state.current_snapshot.load();
         let mut cloned_nodes = (*current_snap.nodes).clone();
+
+        let mut files_to_remove = 0;
+        let mut dirs_to_remove = 0;
+        let mut bytes_to_remove = 0u64;
+
+        for &node_idx in target_indices {
+            let idx = node_idx as usize;
+            if idx >= cloned_nodes.len() {
+                continue;
+            }
+            bytes_to_remove += cloned_nodes[idx].size;
+            count_nested_stats(&cloned_nodes, node_idx, &mut files_to_remove, &mut dirs_to_remove);
+        }
+
+        use std::sync::atomic::Ordering;
+        self.traversal_engine.stats().files_scanned.fetch_sub(files_to_remove, Ordering::SeqCst);
+        self.traversal_engine.stats().dirs_scanned.fetch_sub(dirs_to_remove, Ordering::SeqCst);
+        self.traversal_engine.stats().bytes_scanned.fetch_sub(bytes_to_remove as usize, Ordering::SeqCst);
+
+        // Clear chart caches to force re-computation
+        self.size_dist_chart.cached_counts = None;
+        self.dir_comp_chart.children_composition.clear();
 
         for &node_idx in target_indices {
             let node_idx = node_idx as usize;
@@ -554,5 +607,196 @@ impl GuiApp {
                 self.active_modal = None;
             }
         }
+    }
+
+    pub(crate) fn refresh_directory_subtree(&mut self, dir_idx: u32) {
+        let current_snap = self.shared_state.current_snapshot.load();
+        let path_str = current_snap.get_full_path(dir_idx);
+        let path = std::path::PathBuf::from(path_str);
+        if !path.exists() || !path.is_dir() {
+            return;
+        }
+
+        let state = self.shared_state.clone();
+        let traversal_stats = self.traversal_engine.stats().clone();
+
+        use std::sync::atomic::Ordering;
+        state.is_scanning.store(true, Ordering::SeqCst);
+
+        std::thread::spawn(move || {
+            let current_snap = state.current_snapshot.load();
+            let mut cloned_nodes = (*current_snap.nodes).clone();
+            let mut string_pool = (*current_snap.string_pool).clone();
+
+            // 1. Collect and delete old descendants of dir_idx
+            let mut descendants = Vec::new();
+            collect_descendants(&cloned_nodes, dir_idx, &mut descendants);
+
+            let old_size = cloned_nodes[dir_idx as usize].size;
+            let old_file_count = cloned_nodes[dir_idx as usize].file_count;
+
+            // Roll back ancestors size/counts
+            let mut current_parent = cloned_nodes[dir_idx as usize].parent_opt();
+            while let Some(p_idx) = current_parent {
+                let p_node = &mut cloned_nodes[p_idx as usize];
+                p_node.size = p_node.size.saturating_sub(old_size);
+                p_node.file_count = p_node.file_count.saturating_sub(old_file_count);
+                current_parent = p_node.parent_opt();
+            }
+
+            let mut files_removed = 0;
+            let mut dirs_removed = 0;
+            for &idx in &descendants {
+                let node = &cloned_nodes[idx as usize];
+                if node.is_directory() {
+                    dirs_removed += 1;
+                } else {
+                    files_removed += 1;
+                }
+            }
+
+            traversal_stats.files_scanned.fetch_sub(files_removed, Ordering::SeqCst);
+            traversal_stats.dirs_scanned.fetch_sub(dirs_removed, Ordering::SeqCst);
+            traversal_stats.bytes_scanned.fetch_sub(old_size as usize, Ordering::SeqCst);
+
+            // Isolate old descendants
+            for &idx in &descendants {
+                let idx = idx as usize;
+                cloned_nodes[idx].size = 0;
+                cloned_nodes[idx].file_count = 0;
+                cloned_nodes[idx].first_child = crate::arena::NO_INDEX;
+                cloned_nodes[idx].next_sibling = crate::arena::NO_INDEX;
+                cloned_nodes[idx].parent = crate::arena::NO_INDEX;
+            }
+
+            cloned_nodes[dir_idx as usize].first_child = crate::arena::NO_INDEX;
+            cloned_nodes[dir_idx as usize].size = 0;
+            cloned_nodes[dir_idx as usize].file_count = 0;
+
+            // 2. Scan the directory recursively on disk and append new nodes
+            let mut last_child_map = vec![crate::arena::NO_INDEX; cloned_nodes.len()];
+            
+            // Helper to recursively walk and append to cloned_nodes
+            fn walk_dir(
+                dir_path: &std::path::Path,
+                parent_idx: u32,
+                cloned_nodes: &mut Vec<crate::arena::FileNode>,
+                string_pool: &mut crate::arena::StringPool,
+                last_child_map: &mut Vec<u32>,
+                traversal_stats: &crate::engine::traversal::TraversalStats,
+                dir_idx: u32,
+            ) {
+                let Ok(entries) = std::fs::read_dir(dir_path) else { return; };
+                traversal_stats.dirs_scanned.fetch_add(1, Ordering::SeqCst);
+
+                for entry_res in entries {
+                    let Ok(entry) = entry_res else { continue; };
+                    let path = entry.path();
+                    let Ok(metadata) = entry.metadata() else { continue; };
+
+                    let name = entry.file_name().to_string_lossy().into_owned();
+                    let is_symlink = metadata.is_symlink();
+                    let modified_timestamp = metadata.modified().map_or(0, |t| {
+                        t.duration_since(std::time::SystemTime::UNIX_EPOCH).map_or(0, |d| d.as_secs() as i64)
+                    });
+                    let created_timestamp = metadata.created().map_or(0, |t| {
+                        t.duration_since(std::time::SystemTime::UNIX_EPOCH).map_or(0, |d| d.as_secs() as i64)
+                    });
+                    let accessed_timestamp = metadata.accessed().map_or(0, |t| {
+                        t.duration_since(std::time::SystemTime::UNIX_EPOCH).map_or(0, |d| d.as_secs() as i64)
+                    });
+
+                    let name_id = string_pool.get_or_insert(name.as_bytes());
+                    let child_idx = cloned_nodes.len() as u32;
+
+                    if metadata.is_dir() {
+                        let dir_node = crate::arena::FileNode::new(
+                            name_id,
+                            Some(parent_idx),
+                            true,
+                            false,
+                            modified_timestamp,
+                            created_timestamp,
+                            accessed_timestamp,
+                        );
+                        cloned_nodes.push(dir_node);
+                        last_child_map.push(crate::arena::NO_INDEX);
+
+                        // Connect to parent sibling chain
+                        let p_idx = parent_idx as usize;
+                        let last_child = last_child_map[p_idx];
+                        if last_child == crate::arena::NO_INDEX {
+                            cloned_nodes[p_idx].first_child = child_idx;
+                        } else {
+                            cloned_nodes[last_child as usize].next_sibling = child_idx;
+                        }
+                        last_child_map[p_idx] = child_idx;
+
+                        walk_dir(&path, child_idx, cloned_nodes, string_pool, last_child_map, traversal_stats, dir_idx);
+                    } else {
+                        let size = metadata.len();
+                        let mut file_node = crate::arena::FileNode::new(
+                            name_id,
+                            Some(parent_idx),
+                            false,
+                            is_symlink,
+                            modified_timestamp,
+                            created_timestamp,
+                            accessed_timestamp,
+                        );
+                        file_node.size = size;
+                        cloned_nodes.push(file_node);
+                        last_child_map.push(crate::arena::NO_INDEX);
+
+                        // Connect to parent sibling chain
+                        let p_idx = parent_idx as usize;
+                        let last_child = last_child_map[p_idx];
+                        if last_child == crate::arena::NO_INDEX {
+                            cloned_nodes[p_idx].first_child = child_idx;
+                        } else {
+                            cloned_nodes[last_child as usize].next_sibling = child_idx;
+                        }
+                        last_child_map[p_idx] = child_idx;
+
+                        traversal_stats.files_scanned.fetch_add(1, Ordering::SeqCst);
+                        traversal_stats.bytes_scanned.fetch_add(size as usize, Ordering::SeqCst);
+
+                        // Propagate size and count upwards through parent indices up to dir_idx
+                        let mut current_idx = Some(parent_idx);
+                        while let Some(idx) = current_idx {
+                            cloned_nodes[idx as usize].size += size;
+                            cloned_nodes[idx as usize].file_count += 1;
+                            if idx == dir_idx {
+                                break;
+                            }
+                            current_idx = cloned_nodes[idx as usize].parent_opt();
+                        }
+                    }
+                }
+            }
+
+            walk_dir(&path, dir_idx, &mut cloned_nodes, &mut string_pool, &mut last_child_map, &traversal_stats, dir_idx);
+
+            // 3. Now propagate the new size/counts of dir_idx to all its ancestors!
+            let new_size = cloned_nodes[dir_idx as usize].size;
+            let new_file_count = cloned_nodes[dir_idx as usize].file_count;
+
+            let mut current_parent = cloned_nodes[dir_idx as usize].parent_opt();
+            while let Some(p_idx) = current_parent {
+                let p_node = &mut cloned_nodes[p_idx as usize];
+                p_node.size += new_size;
+                p_node.file_count += new_file_count;
+                current_parent = p_node.parent_opt();
+            }
+
+            // 4. Swap snapshot
+            let new_snapshot = FileArenaSnapshot {
+                nodes: Arc::new(cloned_nodes),
+                string_pool: Arc::new(string_pool),
+            };
+            state.current_snapshot.store(Arc::new(new_snapshot));
+
+            state.is_scanning.store(false, Ordering::SeqCst);
+        });
     }
 }

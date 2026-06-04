@@ -212,6 +212,18 @@ impl GuiApp {
             ui.close_kind(egui::UiKind::Menu); // Closes the active menu/context-menu
         }
 
+        let is_dir_selected = self.selected_node_idx.map_or(false, |idx| {
+            idx < snapshot.nodes.len() as u32 && snapshot.nodes[idx as usize].is_directory()
+        }) && !self.shared_state.is_scanning.load(Ordering::SeqCst);
+
+        let refresh_btn = ui.add_enabled(is_dir_selected, egui::Button::new("🔄 Refresh Directory"));
+        if refresh_btn.clicked() {
+            if let Some(idx) = self.selected_node_idx {
+                self.refresh_directory_subtree(idx);
+            }
+            ui.close_kind(egui::UiKind::Menu); // Closes the active menu/context-menu
+        }
+
         let trash_btn = ui.add_enabled(has_selection, egui::Button::new("♻ Move to Trash"));
         if trash_btn.clicked() {
             self.active_modal = Some(ActiveModal::Trash);
