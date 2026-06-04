@@ -212,11 +212,12 @@ impl GuiApp {
             ui.close_kind(egui::UiKind::Menu); // Closes the active menu/context-menu
         }
 
-        let is_dir_selected = self.selected_node_idx.map_or(false, |idx| {
+        let is_dir_selected = self.selected_node_idx.is_some_and(|idx| {
             idx < snapshot.nodes.len() as u32 && snapshot.nodes[idx as usize].is_directory()
         }) && !self.shared_state.is_scanning.load(Ordering::SeqCst);
 
-        let refresh_btn = ui.add_enabled(is_dir_selected, egui::Button::new("🔄 Refresh Directory"));
+        let refresh_btn =
+            ui.add_enabled(is_dir_selected, egui::Button::new("🔄 Refresh Directory"));
         if refresh_btn.clicked() {
             if let Some(idx) = self.selected_node_idx {
                 self.refresh_directory_subtree(idx);
@@ -331,7 +332,7 @@ impl eframe::App for GuiApp {
                     if ui.button("⏏ Collapse All").clicked() {
                         self.expanded_nodes.clear();
                         ui.close_kind(egui::UiKind::Menu);
-                    }                  
+                    }
                 });
                 ui.menu_button("Help", |ui| {
                     ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);

@@ -335,11 +335,17 @@ impl super::GuiApp {
         let mut flat_rows = Vec::with_capacity(current_total_files);
         for (g_idx, group) in active_groups.iter().enumerate() {
             // Pair each node with its file ID
-            let mut paired: Vec<(u32, (u64, u64))> = group.nodes.iter().copied()
+            let mut paired: Vec<(u32, (u64, u64))> = group
+                .nodes
+                .iter()
+                .copied()
                 .zip(group.file_ids.iter().copied())
                 .collect();
             if paired.len() < group.nodes.len() {
-                paired = group.nodes.iter().copied()
+                paired = group
+                    .nodes
+                    .iter()
+                    .copied()
                     .map(|idx| (idx, (0, 0)))
                     .collect();
             }
@@ -366,7 +372,11 @@ impl super::GuiApp {
 
             // Calculate total reclaimable space for the group based on unique inodes
             let unique_inodes_count = {
-                let mut ids: Vec<(u64, u64)> = paired.iter().map(|p| p.1).filter(|&id| id != (0, 0)).collect();
+                let mut ids: Vec<(u64, u64)> = paired
+                    .iter()
+                    .map(|p| p.1)
+                    .filter(|&id| id != (0, 0))
+                    .collect();
                 ids.sort_unstable();
                 ids.dedup();
                 ids.len()
@@ -395,7 +405,9 @@ impl super::GuiApp {
 
                 // A node is a hardlink if it shares its file ID with another node in the group
                 let is_hardlink = file_id != (0, 0)
-                    && paired.iter().any(|other| other.0 != node_idx && other.1 == file_id);
+                    && paired
+                        .iter()
+                        .any(|other| other.0 != node_idx && other.1 == file_id);
 
                 let size_str = prettier_bytes::ByteFormatter::new()
                     .format(group.size)
@@ -406,11 +418,7 @@ impl super::GuiApp {
                         .format(total_reclaimable)
                         .to_string()
                 } else {
-                    let individual_reclaimable = if is_hardlink {
-                        0
-                    } else {
-                        group.size
-                    };
+                    let individual_reclaimable = if is_hardlink { 0 } else { group.size };
                     prettier_bytes::ByteFormatter::new()
                         .format(individual_reclaimable)
                         .to_string()
@@ -545,7 +553,11 @@ impl super::GuiApp {
                     for &idx in &group.nodes {
                         let mut depth = 0;
                         let mut curr = idx;
-                        while let Some(parent) = snapshot.nodes.get(curr as usize).and_then(|n| n.parent_opt()) {
+                        while let Some(parent) = snapshot
+                            .nodes
+                            .get(curr as usize)
+                            .and_then(crate::arena::FileNode::parent_opt)
+                        {
                             depth += 1;
                             curr = parent;
                         }
@@ -710,8 +722,20 @@ impl super::GuiApp {
                                         if row_data.is_hardlink {
                                             ui.add_space(4.0);
                                             let frame = egui::Frame::new()
-                                                .fill(ui.visuals().selection.bg_fill.linear_multiply(0.15))
-                                                .stroke(egui::Stroke::new(1.0, ui.visuals().selection.stroke.color.linear_multiply(0.5)))
+                                                .fill(
+                                                    ui.visuals()
+                                                        .selection
+                                                        .bg_fill
+                                                        .linear_multiply(0.15),
+                                                )
+                                                .stroke(egui::Stroke::new(
+                                                    1.0,
+                                                    ui.visuals()
+                                                        .selection
+                                                        .stroke
+                                                        .color
+                                                        .linear_multiply(0.5),
+                                                ))
                                                 .inner_margin(egui::Margin::symmetric(4, 2))
                                                 .corner_radius(3.0);
                                             frame.show(ui, |ui| {

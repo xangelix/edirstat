@@ -531,7 +531,12 @@ pub fn run_deduplication(
         .iter()
         .map(|g| {
             let unique_count = {
-                let mut ids: Vec<(u64, u64)> = g.file_ids.iter().copied().filter(|&id| id != (0, 0)).collect();
+                let mut ids: Vec<(u64, u64)> = g
+                    .file_ids
+                    .iter()
+                    .copied()
+                    .filter(|&id| id != (0, 0))
+                    .collect();
                 ids.sort_unstable();
                 ids.dedup();
                 ids.len()
@@ -610,11 +615,14 @@ mod tests {
         assert_eq!(groups.len(), 1);
 
         let group = &groups[0];
+
         assert_eq!(group.nodes.len(), 3);
         assert_eq!(group.file_ids.len(), 3);
 
         // Verify we have 2 unique inodes
         let mut unique_ids = group.file_ids.clone();
+
+        drop(groups);
         unique_ids.sort_unstable();
         unique_ids.dedup();
         assert_eq!(unique_ids.len(), 2);
