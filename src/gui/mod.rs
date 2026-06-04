@@ -103,6 +103,8 @@ pub struct GuiApp {
     pub(crate) delete_duplicates_indices: Vec<u32>,
     pub(crate) deduplicator_flat_rows: Vec<crate::gui::deduplicator_tab::DuplicateRow>,
     pub(crate) deduplicator_last_sig: (usize, usize),
+
+    pub(crate) highlight_duplicates: bool,
 }
 
 impl GuiApp {
@@ -149,6 +151,8 @@ impl GuiApp {
             delete_duplicates_indices: Vec::new(),
             deduplicator_flat_rows: Vec::new(),
             deduplicator_last_sig: (0, 0),
+
+            highlight_duplicates: false,
         }
     }
 
@@ -287,6 +291,8 @@ impl eframe::App for GuiApp {
                         }
                     });
 
+                    ui.checkbox(&mut self.highlight_duplicates, "✨ Highlight Duplicates");  
+
                     ui.separator();
 
                     let left_label = if self.left_panel_collapsed { "▶ Show Left Panel (F9)" } else { "◀ Hide Left Panel (F9)" };
@@ -305,7 +311,7 @@ impl eframe::App for GuiApp {
                     if ui.button("⏏ Collapse All").clicked() {
                         self.expanded_nodes.clear();
                         ui.close_kind(egui::UiKind::Menu);
-                    }
+                    }                  
                 });
                 ui.menu_button("Help", |ui| {
                     ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);

@@ -28,10 +28,9 @@ impl GuiApp {
             self.last_search_snapshot_ptr = snapshot_ptr;
 
             self.cached_node_matches.clear();
+            self.cached_node_matches.resize(snapshot.nodes.len(), false);
 
             if !self.search_query.is_empty() && !snapshot.nodes.is_empty() {
-                self.cached_node_matches.resize(snapshot.nodes.len(), false);
-
                 let regex_matcher = if self.filter_regex {
                     let mut builder = regex::RegexBuilder::new(&self.search_query);
                     builder.case_insensitive(!self.filter_case_sensitive);
@@ -64,6 +63,27 @@ impl GuiApp {
                         && (parent as usize) < self.cached_node_matches.len()
                     {
                         self.cached_node_matches[parent as usize] = true;
+                    }
+                }
+            }
+
+            if self.highlight_duplicates {
+                let duplicate_set = &self.selected_duplicates;
+                for idx in 0..snapshot.nodes.len() {
+                    if duplicate_set.contains(&(idx as u32)) {
+                        self.cached_node_matches[idx] = true;
+
+                        // Propagate match to parents to keep them visible in the tree
+                        let mut curr = Some(idx as u32);
+                        while let Some(c_idx) = curr {
+                            let node = &snapshot.nodes[c_idx as usize];
+                            if let Some(parent) = node.parent_opt() {
+                                self.cached_node_matches[parent as usize] = true;
+                                curr = Some(parent);
+                            } else {
+                                break;
+                            }
+                        }
                     }
                 }
             }
@@ -135,6 +155,9 @@ impl GuiApp {
         node_idx: u32,
         indent_level: usize,
     ) {
+        let is_duplicate =
+            self.highlight_duplicates && self.selected_duplicates.contains(&node_idx);
+
         let node = &snapshot.nodes[node_idx as usize];
         let name = snapshot.string_pool.get(node.name_id).unwrap_or("unknown");
 
@@ -182,6 +205,8 @@ impl GuiApp {
                 rich_name = rich_name
                     .strong()
                     .color(ui.visuals().selection.stroke.color);
+            } else if is_duplicate {
+                rich_name = rich_name.color(crate::colors::GLOW_INNER_CORE);
             }
 
             // Allocate exactly the remaining width minus space for the size column (72px subtracted)
