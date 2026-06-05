@@ -59,18 +59,18 @@ impl super::GuiApp {
                     if !fully_selected_groups_info.is_empty() {
                         ui.ctx().request_repaint_after(std::time::Duration::from_millis(16));
 
-                    let time = ui.input(|i| i.time);
-                    let pulse = 0.5f64.mul_add((time * 6.0).sin(), 0.5) as f32;
-                    let alpha = 0.6f32.mul_add(pulse, 0.4);
-                    let warning_red = egui::Color32::from_rgb(239, 68, 68);
-                    let glow_color = warning_red.linear_multiply(alpha * 0.15);
-                    let text_color = warning_red.linear_multiply(0.4f32.mul_add(pulse, 0.6));
+                        let time = ui.input(|i| i.time);
+                        let pulse = 0.5f64.mul_add((time * 6.0).sin(), 0.5) as f32;
+                        let alpha = 0.6f32.mul_add(pulse, 0.4);
+                        let warning_red = egui::Color32::from_rgb(239, 68, 68);
+                        let glow_color = warning_red.linear_multiply(alpha * 0.15);
+                        let text_color = warning_red.linear_multiply(0.4f32.mul_add(pulse, 0.6));
 
-                let frame = egui::Frame::new()
-                    .fill(glow_color)
-                    .stroke(egui::Stroke::new(1.0, warning_red.linear_multiply(alpha * 0.4)))
-                    .inner_margin(egui::Margin::symmetric(8, 4))
-                    .corner_radius(4.0);
+                        let frame = egui::Frame::new()
+                            .fill(glow_color)
+                            .stroke(egui::Stroke::new(1.0, warning_red.linear_multiply(alpha * 0.4)))
+                            .inner_margin(egui::Margin::symmetric(8, 4))
+                            .corner_radius(4.0);
 
                         let response = frame.show(ui, |ui| {
                             ui.horizontal(|ui| {
@@ -277,178 +277,190 @@ impl super::GuiApp {
 
             if results_guard.groups.is_empty() && results_guard.flat_rows.is_empty() {
                 ui.centered_and_justified(|ui| {
-                if is_running {
-                    ui.label("Analyzing files...");
-                } else {
-                    ui.label("No duplicate groups found. Try reducing the Minimum File Size or scanning a different folder.");
-                }
-            });
+                    if is_running {
+                        ui.label("Analyzing files...");
+                    } else {
+                        ui.label("No duplicate groups found. Try reducing the Minimum File Size or scanning a different folder.");
+                    }
+                });
                 return;
             }
         }
 
         ui.horizontal_wrapped(|ui| {
-            if ui.button("🎯 Select All But Oldest").clicked() {
-                self.selected_duplicates.clear();
-                for group in &results_lock.read().groups {
-                    let mut oldest_node: Option<(u32, i64)> = None;
-                    for &idx in &group.nodes {
-                        let mod_time = snapshot.nodes[idx as usize].modified_timestamp;
-                        match oldest_node {
-                            None => oldest_node = Some((idx, mod_time)),
-                            Some((_, oldest_time)) => {
-                                if mod_time < oldest_time {
-                                    oldest_node = Some((idx, mod_time));
-                                }
-                            }
-                        }
-                    }
-                    if let Some((oldest_idx, _)) = oldest_node {
-                        for &idx in &group.nodes {
-                            if idx != oldest_idx {
-                                self.selected_duplicates.insert(idx);
-                            }
-                        }
-                    }
-                }
-            }
+            ui.menu_button("🎯 Select items...", |ui| {
+                ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
 
-            if ui.button("🎯 Select All But Newest").clicked() {
-                self.selected_duplicates.clear();
-                for group in &results_lock.read().groups {
-                    let mut newest_node: Option<(u32, i64)> = None;
-                    for &idx in &group.nodes {
-                        let mod_time = snapshot.nodes[idx as usize].modified_timestamp;
-                        match newest_node {
-                            None => newest_node = Some((idx, mod_time)),
-                            Some((_, newest_time)) => {
-                                if mod_time > newest_time {
-                                    newest_node = Some((idx, mod_time));
-                                }
-                            }
-                        }
-                    }
-                    if let Some((newest_idx, _)) = newest_node {
+                if ui.button("🎯 All But Oldest").clicked() {
+                    self.selected_duplicates.clear();
+                    for group in &results_lock.read().groups {
+                        let mut oldest_node: Option<(u32, i64)> = None;
                         for &idx in &group.nodes {
-                            if idx != newest_idx {
-                                self.selected_duplicates.insert(idx);
+                            let mod_time = snapshot.nodes[idx as usize].modified_timestamp;
+                            match oldest_node {
+                                None => oldest_node = Some((idx, mod_time)),
+                                Some((_, oldest_time)) => {
+                                    if mod_time < oldest_time {
+                                        oldest_node = Some((idx, mod_time));
+                                    }
+                                }
                             }
                         }
-                    }
-                }
-            }
-
-            if ui.button("🎯 Select All But Shortest Path").clicked() {
-                self.selected_duplicates.clear();
-                for group in &results_lock.read().groups {
-                    let mut best_node: Option<(u32, usize)> = None;
-                    for &idx in &group.nodes {
-                        let path_len = snapshot.get_full_path(idx).len();
-                        match best_node {
-                            None => best_node = Some((idx, path_len)),
-                            Some((_, best_len)) => {
-                                if path_len < best_len {
-                                    best_node = Some((idx, path_len));
+                        if let Some((oldest_idx, _)) = oldest_node {
+                            for &idx in &group.nodes {
+                                if idx != oldest_idx {
+                                    self.selected_duplicates.insert(idx);
                                 }
                             }
                         }
                     }
-                    if let Some((kept_idx, _)) = best_node {
+                    ui.close_kind(egui::UiKind::Menu);
+                }
+
+                if ui.button("🎯 All But Newest").clicked() {
+                    self.selected_duplicates.clear();
+                    for group in &results_lock.read().groups {
+                        let mut newest_node: Option<(u32, i64)> = None;
+                        for &idx in &group.nodes {
+                            let mod_time = snapshot.nodes[idx as usize].modified_timestamp;
+                            match newest_node {
+                                None => newest_node = Some((idx, mod_time)),
+                                Some((_, newest_time)) => {
+                                    if mod_time > newest_time {
+                                        newest_node = Some((idx, mod_time));
+                                    }
+                                }
+                            }
+                        }
+                        if let Some((newest_idx, _)) = newest_node {
+                            for &idx in &group.nodes {
+                                if idx != newest_idx {
+                                    self.selected_duplicates.insert(idx);
+                                }
+                            }
+                        }
+                    }
+                    ui.close_kind(egui::UiKind::Menu);
+                }
+
+                if ui.button("🎯 All But Shortest Path").clicked() {
+                    self.selected_duplicates.clear();
+                    for group in &results_lock.read().groups {
+                        let mut best_node: Option<(u32, usize)> = None;
+                        for &idx in &group.nodes {
+                            let path_len = snapshot.get_full_path(idx).len();
+                            match best_node {
+                                None => best_node = Some((idx, path_len)),
+                                Some((_, best_len)) => {
+                                    if path_len < best_len {
+                                        best_node = Some((idx, path_len));
+                                    }
+                                }
+                            }
+                        }
+                        if let Some((kept_idx, _)) = best_node {
+                            for &idx in &group.nodes {
+                                if idx != kept_idx {
+                                    self.selected_duplicates.insert(idx);
+                                }
+                            }
+                        }
+                    }
+                    ui.close_kind(egui::UiKind::Menu);
+                }
+
+                if ui.button("🎯 All But Root-most").clicked() {
+                    self.selected_duplicates.clear();
+                    for group in &results_lock.read().groups {
+                        let mut best_node: Option<(u32, usize)> = None;
+                        for &idx in &group.nodes {
+                            let mut depth = 0;
+                            let mut curr = idx;
+                            while let Some(parent) = snapshot
+                                .nodes
+                                .get(curr as usize)
+                                .and_then(crate::arena::FileNode::parent_opt)
+                            {
+                                depth += 1;
+                                curr = parent;
+                            }
+                            match best_node {
+                                None => best_node = Some((idx, depth)),
+                                Some((_, best_depth)) => {
+                                    if depth < best_depth {
+                                        best_node = Some((idx, depth));
+                                    }
+                                }
+                            }
+                        }
+                        if let Some((kept_idx, _)) = best_node {
+                            for &idx in &group.nodes {
+                                if idx != kept_idx {
+                                    self.selected_duplicates.insert(idx);
+                                }
+                            }
+                        }
+                    }
+                    ui.close_kind(egui::UiKind::Menu);
+                }
+
+                if ui.button("🎯 All But Longest Path").clicked() {
+                    self.selected_duplicates.clear();
+                    for group in &results_lock.read().groups {
+                        let mut best_node: Option<(u32, usize)> = None;
+                        for &idx in &group.nodes {
+                            let path_len = snapshot.get_full_path(idx).len();
+                            match best_node {
+                                None => best_node = Some((idx, path_len)),
+                                Some((_, max_len)) => {
+                                    if path_len > max_len {
+                                        best_node = Some((idx, path_len));
+                                    }
+                                }
+                            }
+                        }
+                        if let Some((kept_idx, _)) = best_node {
+                            for &idx in &group.nodes {
+                                if idx != kept_idx {
+                                    self.selected_duplicates.insert(idx);
+                                }
+                            }
+                        }
+                    }
+                    ui.close_kind(egui::UiKind::Menu);
+                }
+
+                if ui.button("🎯 All But Preferred Directory").clicked() {
+                    self.selected_duplicates.clear();
+                    for group in &results_lock.read().groups {
+                        let mut preferred_idx: Option<u32> = None;
+                        for &idx in &group.nodes {
+                            let path_str = snapshot.get_full_path(idx);
+                            if !self.deduplicator_dir_filter.is_empty()
+                                && path_str.contains(&self.deduplicator_dir_filter)
+                            {
+                                preferred_idx = Some(idx);
+                                break;
+                            }
+                        }
+                        let kept_idx = preferred_idx
+                            .unwrap_or_else(|| group.nodes.first().copied().unwrap_or(0));
                         for &idx in &group.nodes {
                             if idx != kept_idx {
                                 self.selected_duplicates.insert(idx);
                             }
                         }
                     }
+                    ui.close_kind(egui::UiKind::Menu);
                 }
-            }
 
-            if ui.button("🎯 Select All But Root-most").clicked() {
-                self.selected_duplicates.clear();
-                for group in &results_lock.read().groups {
-                    let mut best_node: Option<(u32, usize)> = None;
-                    for &idx in &group.nodes {
-                        let mut depth = 0;
-                        let mut curr = idx;
-                        while let Some(parent) = snapshot
-                            .nodes
-                            .get(curr as usize)
-                            .and_then(crate::arena::FileNode::parent_opt)
-                        {
-                            depth += 1;
-                            curr = parent;
-                        }
-                        match best_node {
-                            None => best_node = Some((idx, depth)),
-                            Some((_, best_depth)) => {
-                                if depth < best_depth {
-                                    best_node = Some((idx, depth));
-                                }
-                            }
-                        }
-                    }
-                    if let Some((kept_idx, _)) = best_node {
-                        for &idx in &group.nodes {
-                            if idx != kept_idx {
-                                self.selected_duplicates.insert(idx);
-                            }
-                        }
-                    }
+                ui.separator();
+
+                if ui.button("❌ Clear Selection").clicked() {
+                    self.selected_duplicates.clear();
+                    ui.close_kind(egui::UiKind::Menu);
                 }
-            }
-
-            if ui.button("🎯 Select All But Longest Path").clicked() {
-                self.selected_duplicates.clear();
-                for group in &results_lock.read().groups {
-                    let mut best_node: Option<(u32, usize)> = None;
-                    for &idx in &group.nodes {
-                        let path_len = snapshot.get_full_path(idx).len();
-                        match best_node {
-                            None => best_node = Some((idx, path_len)),
-                            Some((_, max_len)) => {
-                                if path_len > max_len {
-                                    best_node = Some((idx, path_len));
-                                }
-                            }
-                        }
-                    }
-                    if let Some((kept_idx, _)) = best_node {
-                        for &idx in &group.nodes {
-                            if idx != kept_idx {
-                                self.selected_duplicates.insert(idx);
-                            }
-                        }
-                    }
-                }
-            }
-
-            if ui.button("🎯 Select All But Preferred Directory").clicked() {
-                self.selected_duplicates.clear();
-                for group in &results_lock.read().groups {
-                    let mut preferred_idx: Option<u32> = None;
-                    for &idx in &group.nodes {
-                        let path_str = snapshot.get_full_path(idx);
-                        if !self.deduplicator_dir_filter.is_empty()
-                            && path_str.contains(&self.deduplicator_dir_filter)
-                        {
-                            preferred_idx = Some(idx);
-                            break;
-                        }
-                    }
-                    // Fallback securely to the baseline original element if no copies reside in the filtered track
-                    let kept_idx =
-                        preferred_idx.unwrap_or_else(|| group.nodes.first().copied().unwrap_or(0));
-                    for &idx in &group.nodes {
-                        if idx != kept_idx {
-                            self.selected_duplicates.insert(idx);
-                        }
-                    }
-                }
-            }
-
-            if ui.button("❌ Clear Selection").clicked() {
-                self.selected_duplicates.clear();
-            }
+            });
 
             ui.separator();
 
@@ -474,45 +486,54 @@ impl super::GuiApp {
                 .format(total_selected_size)
                 .to_string();
 
-            let trash_btn = ui.add_enabled(
-                has_selection,
-                egui::Button::new(
-                    egui::RichText::new(format!(
-                        "♻ Move Selected to Trash ({} files, {})",
-                        self.selected_duplicates.len(),
-                        reclaim_str
-                    ))
-                    .color(egui::Color32::WHITE)
-                    .strong(),
-                )
-                .fill(crate::colors::TRASH_BORDER),
-            );
+            // Combined drop-down menu button styled with deletion red hues
+            ui.add_enabled_ui(has_selection, |ui| {
+                ui.scope(|ui| {
+                    // Custom styles to make the dropdown host button look prominently Red (Deletion)
+                    ui.style_mut().visuals.widgets.inactive.weak_bg_fill =
+                        crate::colors::DELETION_BORDER;
+                    ui.style_mut().visuals.widgets.hovered.weak_bg_fill =
+                        crate::colors::DELETION_WARNING;
+                    ui.style_mut().visuals.widgets.active.weak_bg_fill =
+                        crate::colors::DELETION_BORDER;
+                    ui.style_mut().visuals.widgets.inactive.bg_stroke = egui::Stroke::NONE;
+                    ui.style_mut().visuals.widgets.hovered.bg_stroke = egui::Stroke::NONE;
+                    ui.style_mut().visuals.widgets.active.bg_stroke = egui::Stroke::NONE;
 
-            if trash_btn.clicked() {
-                self.delete_duplicates_indices = self.selected_duplicates.iter().copied().collect();
-                self.delete_confirm_checked = false;
-                self.active_modal = Some(crate::gui::ActiveModal::TrashDuplicates);
-            }
+                    let button_text = if has_selection {
+                        format!(
+                            "🗑 Remove... ({} files, {})",
+                            self.selected_duplicates.len(),
+                            reclaim_str
+                        )
+                    } else {
+                        "🗑 Remove...".to_string()
+                    };
 
-            let delete_btn = ui.add_enabled(
-                has_selection,
-                egui::Button::new(
-                    egui::RichText::new(format!(
-                        "🗑 Delete Selected ({} files, {})",
-                        self.selected_duplicates.len(),
-                        reclaim_str
-                    ))
-                    .color(egui::Color32::WHITE)
-                    .strong(),
-                )
-                .fill(crate::colors::DELETION_BORDER),
-            );
+                    let remove_label = egui::RichText::new(button_text)
+                        .color(egui::Color32::WHITE)
+                        .strong();
+                    ui.menu_button(remove_label, |ui| {
+                        ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
 
-            if delete_btn.clicked() {
-                self.delete_duplicates_indices = self.selected_duplicates.iter().copied().collect();
-                self.delete_confirm_checked = false;
-                self.active_modal = Some(crate::gui::ActiveModal::DeleteDuplicates);
-            }
+                        if ui.button("♻ Move Selected to Trash").clicked() {
+                            self.delete_duplicates_indices =
+                                self.selected_duplicates.iter().copied().collect();
+                            self.delete_confirm_checked = false;
+                            self.active_modal = Some(crate::gui::ActiveModal::TrashDuplicates);
+                            ui.close_kind(egui::UiKind::Menu);
+                        }
+
+                        if ui.button("🗑 Delete Selected Permanently").clicked() {
+                            self.delete_duplicates_indices =
+                                self.selected_duplicates.iter().copied().collect();
+                            self.delete_confirm_checked = false;
+                            self.active_modal = Some(crate::gui::ActiveModal::DeleteDuplicates);
+                            ui.close_kind(egui::UiKind::Menu);
+                        }
+                    });
+                });
+            });
         });
 
         ui.add_space(6.0);
