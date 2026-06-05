@@ -80,8 +80,7 @@ impl QueryCoordinator {
                         if filter_case_sensitive {
                             name.contains(search_query)
                         } else {
-                            name.to_lowercase()
-                                .contains(&search_query.to_lowercase())
+                            name.to_lowercase().contains(&search_query.to_lowercase())
                         }
                     },
                     |re| re.is_match(name),

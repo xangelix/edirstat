@@ -183,5 +183,3 @@ impl super::StatComponent for TemporalTimelineChart {
         });
     }
 }
-
-

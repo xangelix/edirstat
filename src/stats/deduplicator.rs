@@ -121,14 +121,10 @@ impl DeduplicationResults {
                         .iter()
                         .any(|other| other.0 != node_idx && other.1 == file_id);
 
-                let size_str = ByteFormatter::new()
-                    .format(group.size)
-                    .to_string();
+                let size_str = ByteFormatter::new().format(group.size).to_string();
 
                 let reclaimable_str = if is_original {
-                    ByteFormatter::new()
-                        .format(total_reclaimable)
-                        .to_string()
+                    ByteFormatter::new().format(total_reclaimable).to_string()
                 } else {
                     let individual_reclaimable = if is_hardlink { 0 } else { group.size };
                     ByteFormatter::new()
@@ -136,8 +132,10 @@ impl DeduplicationResults {
                         .to_string()
                 };
 
-                let created_time_str = crate::model::time_utils::format_epoch(node.created_timestamp, true);
-                let modified_time_str = crate::model::time_utils::format_epoch(node.modified_timestamp, true);
+                let created_time_str =
+                    crate::model::time_utils::format_epoch(node.created_timestamp, true);
+                let modified_time_str =
+                    crate::model::time_utils::format_epoch(node.modified_timestamp, true);
 
                 flat_rows.push(DuplicateRow {
                     node_idx,

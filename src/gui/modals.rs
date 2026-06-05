@@ -279,7 +279,10 @@ impl GuiApp {
                 .retain(|idx| !successfully_deleted.contains(idx));
             self.remove_nodes_from_snapshot(&successfully_deleted);
 
-            if self.selected_node_idx.is_some_and(|selected| successfully_deleted.contains(&selected)) {
+            if self
+                .selected_node_idx
+                .is_some_and(|selected| successfully_deleted.contains(&selected))
+            {
                 self.selected_node_idx = None;
             }
         }
@@ -440,7 +443,10 @@ impl GuiApp {
                             ui.separator();
 
                             ui.label(if cfg.paths.len() > 1 {
-                                format!("You are about to delete/trash {} duplicate files:", cfg.paths.len())
+                                format!(
+                                    "You are about to delete/trash {} duplicate files:",
+                                    cfg.paths.len()
+                                )
                             } else {
                                 "You are about to delete/trash the following path:".to_string()
                             });

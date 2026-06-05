@@ -311,9 +311,15 @@ impl EntryMetadata {
         let is_symlink = metadata.is_symlink();
         let len = metadata.len();
 
-        let modified_timestamp = metadata.modified().map_or(0, crate::model::time_utils::system_time_to_unix_timestamp);
-        let created_timestamp = metadata.created().map_or(0, crate::model::time_utils::system_time_to_unix_timestamp);
-        let accessed_timestamp = metadata.accessed().map_or(0, crate::model::time_utils::system_time_to_unix_timestamp);
+        let modified_timestamp = metadata
+            .modified()
+            .map_or(0, crate::model::time_utils::system_time_to_unix_timestamp);
+        let created_timestamp = metadata
+            .created()
+            .map_or(0, crate::model::time_utils::system_time_to_unix_timestamp);
+        let accessed_timestamp = metadata
+            .accessed()
+            .map_or(0, crate::model::time_utils::system_time_to_unix_timestamp);
 
         #[cfg(unix)]
         let file_id = {
