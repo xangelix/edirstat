@@ -1,5 +1,6 @@
 pub mod deduplicator;
 pub mod dir_composition;
+pub mod duplicate_waste;
 pub mod extension_boxplot;
 pub mod scatter_plot;
 pub mod size_distribution;
@@ -18,6 +19,9 @@ pub struct StatContext<'a> {
     pub selected_node_idx: &'a mut Option<u32>,
     pub expanded_nodes: &'a mut std::collections::HashSet<u32>,
     pub scroll_to_selected: &'a mut bool,
+    pub deduplicator_results: Option<
+        &'a std::sync::Arc<parking_lot::RwLock<crate::stats::deduplicator::DeduplicationResults>>,
+    >,
 }
 
 pub trait StatComponent {

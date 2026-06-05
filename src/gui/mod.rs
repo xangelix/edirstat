@@ -39,6 +39,7 @@ pub enum PlotType {
     DirComposition,
     ExtensionBoxplot,
     TemporalTimeline,
+    DeduplicatorWaste,
 }
 
 #[allow(clippy::struct_excessive_bools)]
@@ -71,6 +72,7 @@ pub struct GuiApp {
     pub(crate) dir_comp_chart: stats::dir_composition::DirCompositionChart,
     pub(crate) boxplot_chart: stats::extension_boxplot::ExtensionBoxplotChart,
     pub(crate) timeline_chart: stats::temporal_timeline::TemporalTimelineChart,
+    pub(crate) duplicate_waste_chart: stats::duplicate_waste::DuplicateWasteChart,
 
     // Modal states
     pub(crate) delete_confirm_checked: bool,
@@ -125,6 +127,7 @@ impl GuiApp {
             dir_comp_chart: stats::dir_composition::DirCompositionChart::new(0),
             boxplot_chart: stats::extension_boxplot::ExtensionBoxplotChart::new(),
             timeline_chart: stats::temporal_timeline::TemporalTimelineChart::new(),
+            duplicate_waste_chart: stats::duplicate_waste::DuplicateWasteChart::new(),
             delete_confirm_checked: false,
             delete_node_idx: None,
             active_modal: None,
@@ -172,6 +175,7 @@ impl GuiApp {
         self.dir_comp_chart = stats::dir_composition::DirCompositionChart::default();
         self.boxplot_chart = stats::extension_boxplot::ExtensionBoxplotChart::default();
         self.timeline_chart = stats::temporal_timeline::TemporalTimelineChart::default();
+        self.duplicate_waste_chart = stats::duplicate_waste::DuplicateWasteChart::default();
 
         self.scroll_to_selected = false;
     }
@@ -671,6 +675,7 @@ impl eframe::App for GuiApp {
                                 selected_node_idx: &mut self.selected_node_idx,
                                 expanded_nodes: &mut self.expanded_nodes,
                                 scroll_to_selected: &mut self.scroll_to_selected,
+                                deduplicator_results: Some(&self.deduplicator_results),
                             };
                             self.treemap_chart.render(ui, &snapshot, &mut context);
                         }
@@ -686,6 +691,9 @@ impl eframe::App for GuiApp {
                                     PlotType::DirComposition => "🍰 Directory Composition",
                                     PlotType::ExtensionBoxplot => "📦 File Sizes by Extension",
                                     PlotType::TemporalTimeline => "⏱ Linked Temporal Timelines",
+                                    PlotType::DeduplicatorWaste => {
+                                        "👥 Duplicate Waste by Extension"
+                                    }
                                 })
                                 .show_ui(ui, |ui| {
                                     ui.selectable_value(
@@ -713,6 +721,11 @@ impl eframe::App for GuiApp {
                                         PlotType::TemporalTimeline,
                                         "⏱ Linked Temporal Timelines",
                                     );
+                                    ui.selectable_value(
+                                        &mut self.plot_type,
+                                        PlotType::DeduplicatorWaste,
+                                        "👥 Duplicate Waste by Extension",
+                                    );
                                 });
                         });
                         ui.separator();
@@ -726,6 +739,7 @@ impl eframe::App for GuiApp {
                                 selected_node_idx: &mut self.selected_node_idx,
                                 expanded_nodes: &mut self.expanded_nodes,
                                 scroll_to_selected: &mut self.scroll_to_selected,
+                                deduplicator_results: Some(&self.deduplicator_results),
                             };
                             match self.plot_type {
                                 PlotType::SizeDistribution => {
@@ -742,6 +756,10 @@ impl eframe::App for GuiApp {
                                 }
                                 PlotType::TemporalTimeline => {
                                     self.timeline_chart.render(ui, &snapshot, &mut context);
+                                }
+                                PlotType::DeduplicatorWaste => {
+                                    self.duplicate_waste_chart
+                                        .render(ui, &snapshot, &mut context);
                                 }
                             }
                         }
