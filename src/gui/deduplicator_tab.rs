@@ -271,23 +271,26 @@ impl super::GuiApp {
         let is_running = !progress_snap.finished && progress_snap.elapsed.is_some();
 
         let results_lock = Arc::clone(&self.deduplicator_results);
-        let results_guard = results_lock.read();
 
-        if results_guard.groups.is_empty() && results_guard.flat_rows.is_empty() {
-            ui.centered_and_justified(|ui| {
+        {
+            let results_guard = results_lock.read();
+
+            if results_guard.groups.is_empty() && results_guard.flat_rows.is_empty() {
+                ui.centered_and_justified(|ui| {
                 if is_running {
                     ui.label("Analyzing files...");
                 } else {
                     ui.label("No duplicate groups found. Try reducing the Minimum File Size or scanning a different folder.");
                 }
             });
-            return;
+                return;
+            }
         }
 
         ui.horizontal_wrapped(|ui| {
             if ui.button("🎯 Select All But Oldest").clicked() {
                 self.selected_duplicates.clear();
-                for group in &results_guard.groups {
+                for group in &results_lock.read().groups {
                     let mut oldest_node: Option<(u32, i64)> = None;
                     for &idx in &group.nodes {
                         let mod_time = snapshot.nodes[idx as usize].modified_timestamp;
@@ -312,7 +315,7 @@ impl super::GuiApp {
 
             if ui.button("🎯 Select All But Newest").clicked() {
                 self.selected_duplicates.clear();
-                for group in &results_guard.groups {
+                for group in &results_lock.read().groups {
                     let mut newest_node: Option<(u32, i64)> = None;
                     for &idx in &group.nodes {
                         let mod_time = snapshot.nodes[idx as usize].modified_timestamp;
@@ -337,7 +340,7 @@ impl super::GuiApp {
 
             if ui.button("🎯 Select All But Shortest Path").clicked() {
                 self.selected_duplicates.clear();
-                for group in &results_guard.groups {
+                for group in &results_lock.read().groups {
                     let mut best_node: Option<(u32, usize)> = None;
                     for &idx in &group.nodes {
                         let path_len = snapshot.get_full_path(idx).len();
@@ -362,7 +365,7 @@ impl super::GuiApp {
 
             if ui.button("🎯 Select All But Root-most").clicked() {
                 self.selected_duplicates.clear();
-                for group in &results_guard.groups {
+                for group in &results_lock.read().groups {
                     let mut best_node: Option<(u32, usize)> = None;
                     for &idx in &group.nodes {
                         let mut depth = 0;
@@ -396,7 +399,7 @@ impl super::GuiApp {
 
             if ui.button("🎯 Select All But Longest Path").clicked() {
                 self.selected_duplicates.clear();
-                for group in &results_guard.groups {
+                for group in &results_lock.read().groups {
                     let mut best_node: Option<(u32, usize)> = None;
                     for &idx in &group.nodes {
                         let path_len = snapshot.get_full_path(idx).len();
@@ -421,7 +424,7 @@ impl super::GuiApp {
 
             if ui.button("🎯 Select All But Preferred Directory").clicked() {
                 self.selected_duplicates.clear();
-                for group in &results_guard.groups {
+                for group in &results_lock.read().groups {
                     let mut preferred_idx: Option<u32> = None;
                     for &idx in &group.nodes {
                         let path_str = snapshot.get_full_path(idx);
@@ -520,6 +523,7 @@ impl super::GuiApp {
         let is_scan_running = is_running;
 
         let max_width = ui.available_width();
+        let row_len = results_lock.read().flat_rows.len();
         egui::ScrollArea::horizontal()
             .auto_shrink([false, false])
             .max_width(max_width)
@@ -563,9 +567,9 @@ impl super::GuiApp {
                         });
                     })
                     .body(|body| {
-                        body.rows(22.0, results_guard.flat_rows.len(), |mut row| {
+                        body.rows(22.0, row_len, |mut row| {
                             let r_idx = row.index();
-                            let row_data = &results_guard.flat_rows[r_idx];
+                            let row_data = &results_lock.read().flat_rows[r_idx];
 
                             row.col(|ui| {
                                 ui.add_enabled_ui(!is_scan_running, |ui| {
