@@ -9,8 +9,6 @@ use egui_extras::{Column, TableBuilder};
 use crate::arena::FileArenaSnapshot;
 use crate::stats::deduplicator::run_deduplication;
 
-
-
 impl super::GuiApp {
     pub(crate) fn render_deduplicator_tab(
         &mut self,
@@ -231,7 +229,8 @@ impl super::GuiApp {
                     .with_start_time_now()
                     .build();
 
-                    *self.deduplicator_results.write() = crate::stats::deduplicator::DeduplicationResults::default();
+                    *self.deduplicator_results.write() =
+                        crate::stats::deduplicator::DeduplicationResults::default();
 
                     let progress_clone = self.deduplicator_progress.clone();
                     let results_clone = self.deduplicator_results.clone();
@@ -266,8 +265,6 @@ impl super::GuiApp {
             }
         }
     }
-
-
 
     fn draw_deduplicator_results(&mut self, ui: &mut egui::Ui, snapshot: &FileArenaSnapshot) {
         let progress_snap = self.deduplicator_progress.snapshot();
@@ -397,9 +394,70 @@ impl super::GuiApp {
                 }
             }
 
+            if ui.button("🎯 Select All But Longest Path").clicked() {
+                self.selected_duplicates.clear();
+                for group in &results_guard.groups {
+                    let mut best_node: Option<(u32, usize)> = None;
+                    for &idx in &group.nodes {
+                        let path_len = snapshot.get_full_path(idx).len();
+                        match best_node {
+                            None => best_node = Some((idx, path_len)),
+                            Some((_, max_len)) => {
+                                if path_len > max_len {
+                                    best_node = Some((idx, path_len));
+                                }
+                            }
+                        }
+                    }
+                    if let Some((kept_idx, _)) = best_node {
+                        for &idx in &group.nodes {
+                            if idx != kept_idx {
+                                self.selected_duplicates.insert(idx);
+                            }
+                        }
+                    }
+                }
+            }
+
+            if ui.button("🎯 Select All But Preferred Directory").clicked() {
+                self.selected_duplicates.clear();
+                for group in &results_guard.groups {
+                    let mut preferred_idx: Option<u32> = None;
+                    for &idx in &group.nodes {
+                        let path_str = snapshot.get_full_path(idx);
+                        if !self.deduplicator_dir_filter.is_empty()
+                            && path_str.contains(&self.deduplicator_dir_filter)
+                        {
+                            preferred_idx = Some(idx);
+                            break;
+                        }
+                    }
+                    // Fallback securely to the baseline original element if no copies reside in the filtered track
+                    let kept_idx =
+                        preferred_idx.unwrap_or_else(|| group.nodes.first().copied().unwrap_or(0));
+                    for &idx in &group.nodes {
+                        if idx != kept_idx {
+                            self.selected_duplicates.insert(idx);
+                        }
+                    }
+                }
+            }
+
             if ui.button("❌ Clear Selection").clicked() {
                 self.selected_duplicates.clear();
             }
+
+            ui.separator();
+
+            // Text input lane layout for directory configuration rule targets
+            ui.horizontal(|ui| {
+                ui.label("Preferred Directory Pattern:");
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.deduplicator_dir_filter)
+                        .hint_text("e.g. /home/user/Archive")
+                        .desired_width(200.0),
+                );
+            });
 
             ui.separator();
 

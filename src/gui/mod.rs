@@ -97,6 +97,7 @@ pub struct GuiApp {
     pub(crate) deduplicator_cancel: Arc<std::sync::atomic::AtomicBool>,
     pub(crate) selected_duplicates: HashSet<u32>,
     pub(crate) delete_duplicates_indices: Vec<u32>,
+    pub(crate) deduplicator_dir_filter: String,
 
     pub(crate) highlight_duplicates: bool,
 }
@@ -141,6 +142,7 @@ impl GuiApp {
             deduplicator_cancel: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             selected_duplicates: HashSet::new(),
             delete_duplicates_indices: Vec::new(),
+            deduplicator_dir_filter: String::new(),
 
             highlight_duplicates: false,
         }
@@ -156,6 +158,7 @@ impl GuiApp {
         self.active_modal = None;
         self.selected_duplicates.clear();
         self.delete_duplicates_indices.clear();
+        self.deduplicator_dir_filter.clear();
         self.deduplicator_cancel
             .store(true, std::sync::atomic::Ordering::SeqCst);
         self.deduplicator_progress = atomic_progress::Progress::new_spinner("Deduplicator");
