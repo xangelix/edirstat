@@ -554,8 +554,11 @@ impl GuiApp {
                         ui.separator();
                         ui.label("By: Cody Wyatt Neiman (xangelix) <".to_owned() + "neiman" + "@" + "cody.to>");
                         ui.add_space(8.0);
-                        ui.label("A modern, zero-copy, highly performant disk usage analyzer written in Rust.");
-                        ui.label("Features dynamic work-stealing multithreaded directory walking, lazy explorer sibling sorting, zero-copy persistent memory mapping, HSL treemap gradients, and instant virtual rendering.");
+                        ui.label("A high-performance disk space analyzer and deduplication toolkit built in Rust.");
+                        ui.add_space(4.0);
+                        ui.label("Features parallel, work-stealing directory traversal, zero-copy memory-mapped file structures, and responsive, interactive treemaps.");
+                        ui.add_space(4.0);
+                        ui.label("The integrated deduplicator runs a multi-stage cryptographic hashing pipeline to safely isolate duplicate groups, calculate reclaimable space, and respect system-level hardlinks.");
                         ui.add_space(8.0);
                         if ui.button("Close").clicked() {
                             self.active_modal = None;
