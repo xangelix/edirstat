@@ -477,7 +477,7 @@ impl GuiApp {
 
                                 let confirm_btn = egui::Button::new(
                                     egui::RichText::new(cfg.confirm_button_text)
-                                        .color(egui::Color32::WHITE)
+                                        .color(theme::COLOR_WHITE)
                                         .strong(),
                                 )
                                 .fill(cfg.border_color);

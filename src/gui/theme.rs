@@ -42,6 +42,20 @@ pub const EXT_VIDEO: Color32 = Color32::from_rgb(20, 184, 166); // Video teal
 pub const EXT_IMAGE: Color32 = Color32::from_rgb(244, 63, 94); // Image rose
 pub const EXT_NONE: Color32 = Color32::from_rgb(75, 85, 99); // Muted dark gray
 
+// Bright blue button styling (for select items button)
+pub const BUTTON_BLUE: Color32 = Color32::from_rgb(59, 130, 246); // Toml blue / bright blue
+pub const BUTTON_BLUE_HOVER: Color32 = Color32::from_rgb(96, 165, 250); // Light blue for hover
+
+// General warnings & indicators
+pub const WARNING_RED: Color32 = Color32::from_rgb(239, 68, 68);
+pub const COLOR_WARNING_YELLOW: Color32 = Color32::YELLOW;
+pub const COLOR_DUPLICATE_ORANGE: Color32 = Color32::from_rgb(245, 158, 11);
+pub const COLOR_LIGHT_GREEN: Color32 = Color32::from_rgb(134, 239, 172);
+
+// Standard utility colors to avoid direct egui::Color32 references
+pub const COLOR_WHITE: Color32 = Color32::WHITE;
+pub const COLOR_TRANSPARENT: Color32 = Color32::TRANSPARENT;
+
 #[must_use]
 pub fn get_color_for_extension(ext: &str) -> egui::Color32 {
     match ext {
