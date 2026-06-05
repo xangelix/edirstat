@@ -26,20 +26,22 @@ impl super::GuiApp {
         }
 
         // Determine if any duplicate group is fully selected (meaning the original and all copies are selected)
-        let active_groups = self.deduplicator_results.read().groups.clone();
         let mut fully_selected_groups_info = Vec::new();
-        for group in &active_groups {
-            let all_selected = group
-                .nodes
-                .iter()
-                .all(|&idx| self.selected_duplicates.contains(&idx));
-            if all_selected && let Some(&first_idx) = group.nodes.first() {
-                let filename = snapshot
-                    .string_pool
-                    .get(snapshot.nodes[first_idx as usize].name_id)
-                    .unwrap_or("unknown")
-                    .to_string();
-                fully_selected_groups_info.push((filename, group.nodes.clone()));
+        {
+            let guard = self.deduplicator_results.read();
+            for group in &guard.groups {
+                let all_selected = group
+                    .nodes
+                    .iter()
+                    .all(|&idx| self.selected_duplicates.contains(&idx));
+                if all_selected && let Some(&first_idx) = group.nodes.first() {
+                    let filename = snapshot
+                        .string_pool
+                        .get(snapshot.nodes[first_idx as usize].name_id)
+                        .unwrap_or("unknown")
+                        .to_string();
+                    fully_selected_groups_info.push((filename, group.nodes.clone()));
+                }
             }
         }
 
@@ -271,12 +273,10 @@ impl super::GuiApp {
         let progress_snap = self.deduplicator_progress.snapshot();
         let is_running = !progress_snap.finished && progress_snap.elapsed.is_some();
 
-        let (active_groups, flat_rows) = {
-            let guard = self.deduplicator_results.read();
-            (guard.groups.clone(), guard.flat_rows.clone())
-        };
+        let results_lock = Arc::clone(&self.deduplicator_results);
+        let results_guard = results_lock.read();
 
-        if active_groups.is_empty() && flat_rows.is_empty() {
+        if results_guard.groups.is_empty() && results_guard.flat_rows.is_empty() {
             ui.centered_and_justified(|ui| {
                 if is_running {
                     ui.label("Analyzing files...");
@@ -290,7 +290,7 @@ impl super::GuiApp {
         ui.horizontal_wrapped(|ui| {
             if ui.button("🎯 Select All But Oldest").clicked() {
                 self.selected_duplicates.clear();
-                for group in &active_groups {
+                for group in &results_guard.groups {
                     let mut oldest_node: Option<(u32, i64)> = None;
                     for &idx in &group.nodes {
                         let mod_time = snapshot.nodes[idx as usize].modified_timestamp;
@@ -315,7 +315,7 @@ impl super::GuiApp {
 
             if ui.button("🎯 Select All But Newest").clicked() {
                 self.selected_duplicates.clear();
-                for group in &active_groups {
+                for group in &results_guard.groups {
                     let mut newest_node: Option<(u32, i64)> = None;
                     for &idx in &group.nodes {
                         let mod_time = snapshot.nodes[idx as usize].modified_timestamp;
@@ -340,7 +340,7 @@ impl super::GuiApp {
 
             if ui.button("🎯 Select All But Shortest Path").clicked() {
                 self.selected_duplicates.clear();
-                for group in &active_groups {
+                for group in &results_guard.groups {
                     let mut best_node: Option<(u32, usize)> = None;
                     for &idx in &group.nodes {
                         let path_len = snapshot.get_full_path(idx).len();
@@ -365,7 +365,7 @@ impl super::GuiApp {
 
             if ui.button("🎯 Select All But Root-most").clicked() {
                 self.selected_duplicates.clear();
-                for group in &active_groups {
+                for group in &results_guard.groups {
                     let mut best_node: Option<(u32, usize)> = None;
                     for &idx in &group.nodes {
                         let mut depth = 0;
@@ -466,6 +466,7 @@ impl super::GuiApp {
             .auto_shrink([false, false])
             .max_width(max_width)
             .show(ui, |ui| {
+                let available_height = ui.available_height();
                 TableBuilder::new(ui)
                     .id_salt("deduplicator_table")
                     .striped(true)
@@ -478,6 +479,8 @@ impl super::GuiApp {
                     .column(Column::initial(90.0)) // Reclaimable Space
                     .column(Column::initial(130.0)) // Created Time
                     .column(Column::initial(130.0)) // Modified Time
+                    .min_scrolled_height(0.0)
+                    .max_scroll_height(available_height)
                     .header(24.0, |mut header| {
                         header.col(|ui| {
                             ui.strong("[     ]");
@@ -502,9 +505,9 @@ impl super::GuiApp {
                         });
                     })
                     .body(|body| {
-                        body.rows(22.0, flat_rows.len(), |mut row| {
+                        body.rows(22.0, results_guard.flat_rows.len(), |mut row| {
                             let r_idx = row.index();
-                            let row_data = &flat_rows[r_idx];
+                            let row_data = &results_guard.flat_rows[r_idx];
 
                             row.col(|ui| {
                                 ui.add_enabled_ui(!is_scan_running, |ui| {
