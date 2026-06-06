@@ -9,6 +9,7 @@ All notable changes to **eDirStat** will be documented in this file.
 ### Added
 
 - **📄 Changelog:** Created a clean, practical, and exciting changelog documenting all previous releases.
+- **💖 GitHub Sponsors:** Added sponsor/funding configuration pointing to `xangelix` to support the project.
 - **🍏 macOS Sandboxing Entitlements:** Packaged the macOS app with proper sandboxing entitlements for improved security and smoother OS integration.
 
 ---
