@@ -1,6 +1,6 @@
 # eDirStat
 
-https://github.com/user-attachments/assets/cad3056f-1d2c-45da-9827-3d0a90b8066a
+![eDirStat Logo](assets/img/logo.svg)
 
 [![Crates.io](https://img.shields.io/crates/v/edirstat)](https://crates.io/crates/edirstat)
 [![Docs.rs](https://docs.rs/edirstat/badge.svg)](https://docs.rs/edirstat)
@@ -9,6 +9,12 @@ https://github.com/user-attachments/assets/cad3056f-1d2c-45da-9827-3d0a90b8066a
 **eDirStat** is a modern, high-performance, cross-platform disk usage analyzer written in Rust. Inspired by legacy utilities like [WinDirStat](https://windirstat.net/), it leverages an immediate-mode graphical interface [`egui`](https://egui.rs/) to provide a real-time, interactive treemap visualization of your filesystem.
 
 Unlike traditional analyzers that crawl sequentially, **eDirStat** is built from the ground up for modern multi-core systems. It couples a blazing-fast, work-stealing multithreaded directory walker with a zero-copy arena data structure. This allows you to scan millions of files seamlessly, visualize space hogs instantly via adaptive HSL gradients, and save/load system snapshots in milliseconds using memory-mapped files.
+
+---
+
+## 📽️ Demo Video
+
+<https://github.com/user-attachments/assets/cad3056f-1d2c-45da-9827-3d0a90b8066a>
 
 ---
 
