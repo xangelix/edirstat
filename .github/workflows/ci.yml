@@ -164,13 +164,13 @@ jobs:
 
           # 3. Automatically compile the .icns asset using standard Apple tooling
           mkdir -p eDirStat.iconset
-          sips -z 16 16     assets/img/icon-256x.png --out eDirStat.iconset/icon_16x16.png
-          sips -z 32 32     assets/img/icon-256x.png --out eDirStat.iconset/icon_16x16@2x.png
-          sips -z 32 32     assets/img/icon-256x.png --out eDirStat.iconset/icon_32x32.png
-          sips -z 64 64     assets/img/icon-256x.png --out eDirStat.iconset/icon_32x32@2x.png
-          sips -z 128 128   assets/img/icon-256x.png --out eDirStat.iconset/icon_128x128.png
-          sips -z 256 256   assets/img/icon-256x.png --out eDirStat.iconset/icon_128x128@2x.png
-          cp assets/img/icon-256x.png eDirStat.iconset/icon_256x256.png
+          sips -z 16 16     assets/img/icon_256x.png --out eDirStat.iconset/icon_16x16.png
+          sips -z 32 32     assets/img/icon_256x.png --out eDirStat.iconset/icon_16x16@2x.png
+          sips -z 32 32     assets/img/icon_256x.png --out eDirStat.iconset/icon_32x32.png
+          sips -z 64 64     assets/img/icon_256x.png --out eDirStat.iconset/icon_32x32@2x.png
+          sips -z 128 128   assets/img/icon_256x.png --out eDirStat.iconset/icon_128x128.png
+          sips -z 256 256   assets/img/icon_256x.png --out eDirStat.iconset/icon_128x128@2x.png
+          cp assets/img/icon_256x.png eDirStat.iconset/icon_256x256.png
 
           iconutil -c icns eDirStat.iconset --output "$APP_DIR/Contents/Resources/icon.icns"
 
