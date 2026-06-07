@@ -429,7 +429,7 @@ impl GuiApp {
             .striped(true)
             .resizable(true)
             .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
-            .column(egui_extras::Column::remainder().clip(true)) // Name
+            .column(egui_extras::Column::initial(320.0).clip(true)) // Name
             .column(egui_extras::Column::initial(140.0).range(80.0..=400.0)) // Percentage
             .column(egui_extras::Column::initial(90.0).range(60.0..=200.0)) // Size
             .column(egui_extras::Column::initial(70.0).range(40.0..=150.0)) // Items

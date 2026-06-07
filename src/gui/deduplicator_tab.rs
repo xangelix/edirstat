@@ -536,8 +536,8 @@ impl super::GuiApp {
                     .resizable(true)
                     .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
                     .column(Column::auto().at_least(30.0)) // Checkbox
-                    .column(Column::initial(180.0).range(100.0..=500.0).clip(true)) // Filename
-                    .column(Column::initial(300.0).range(100.0..=1000.0).clip(true)) // Folder Path
+                    .column(Column::initial(320.0).range(100.0..=500.0).clip(true)) // Filename
+                    .column(Column::initial(360.0).range(100.0..=1000.0).clip(true)) // Folder Path
                     .column(Column::initial(80.0)) // Size
                     .column(Column::initial(90.0)) // Reclaimable Space
                     .column(Column::initial(130.0)) // Created Time
@@ -552,7 +552,7 @@ impl super::GuiApp {
                             ui.strong("Filename");
                         });
                         header.col(|ui| {
-                            ui.strong("Folder");
+                            ui.strong("Parent Directory");
                         });
                         header.col(|ui| {
                             ui.strong("Size");
