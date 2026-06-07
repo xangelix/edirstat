@@ -349,6 +349,181 @@ impl GuiApp {
             ui.close_kind(egui::UiKind::Menu); // Closes the active menu/context-menu
         }
     }
+
+    /// Renders a unified top row controls bar inside visualizer panel viewports.
+    pub(crate) fn draw_central_panel_header(
+        &mut self,
+        ui: &mut egui::Ui,
+        snapshot: &FileArenaSnapshot,
+    ) {
+        ui.horizontal(|ui| {
+            // Left side: Active mode title or layout controls
+            match self.vis_mode {
+                VisMode::Treemap => {
+                    ui.heading(
+                        egui::RichText::new("📊 Treemap Visualization")
+                            .strong()
+                            .color(ui.visuals().strong_text_color()),
+                    );
+                }
+                VisMode::Plots => {
+                    ui.horizontal(|ui| {
+                        ui.heading(
+                            egui::RichText::new("📈 Plots")
+                                .strong()
+                                .color(ui.visuals().strong_text_color()),
+                        );
+                        ui.add_space(8.0);
+                        ui.separator();
+                        ui.add_space(8.0);
+                        ui.label("Select Plot:");
+
+                        let plot_combo_id = if self.layout_mode == LayoutMode::Classic {
+                            "plot_type_combo"
+                        } else {
+                            "plot_type_combo_windirstat"
+                        };
+
+                        egui::ComboBox::from_id_salt(plot_combo_id)
+                            .selected_text(match self.plot_type {
+                                PlotType::SizeDistribution => "📊 File Size Distribution",
+                                PlotType::AgeSizeScatter => "🌌 File Age vs. File Size",
+                                PlotType::DirComposition => "🍰 Directory Composition",
+                                PlotType::ExtensionBoxplot => "📦 File Sizes by Extension",
+                                PlotType::TemporalTimeline => "⏱ Linked Temporal Timelines",
+                                PlotType::DeduplicatorWaste => "👥 Duplicate Waste by Extension",
+                            })
+                            .show_ui(ui, |ui| {
+                                ui.selectable_value(
+                                    &mut self.plot_type,
+                                    PlotType::SizeDistribution,
+                                    "📊 File Size Distribution",
+                                );
+                                ui.selectable_value(
+                                    &mut self.plot_type,
+                                    PlotType::AgeSizeScatter,
+                                    "🌌 File Age vs. File Size",
+                                );
+                                ui.selectable_value(
+                                    &mut self.plot_type,
+                                    PlotType::DirComposition,
+                                    "🍰 Directory Composition",
+                                );
+                                ui.selectable_value(
+                                    &mut self.plot_type,
+                                    PlotType::ExtensionBoxplot,
+                                    "📦 File Sizes by Extension",
+                                );
+                                ui.selectable_value(
+                                    &mut self.plot_type,
+                                    PlotType::TemporalTimeline,
+                                    "⏱ Linked Temporal Timelines",
+                                );
+                                ui.selectable_value(
+                                    &mut self.plot_type,
+                                    PlotType::DeduplicatorWaste,
+                                    "👥 Duplicate Waste by Extension",
+                                );
+                            });
+                    });
+                }
+                VisMode::Deduplicator => {
+                    ui.heading(
+                        egui::RichText::new("👥 Duplicate File Finder")
+                            .strong()
+                            .color(ui.visuals().strong_text_color()),
+                    );
+
+                    // Determine if any duplicate group is fully selected (meaning the original and all copies are selected)
+                    let mut fully_selected_groups_info = Vec::new();
+                    {
+                        let guard = self.deduplicator_results.read();
+                        for group in &guard.groups {
+                            let all_selected = group
+                                .nodes
+                                .iter()
+                                .all(|&idx| self.selected_duplicates.contains(&idx));
+                            if all_selected && let Some(&first_idx) = group.nodes.first() {
+                                let filename = snapshot
+                                    .string_pool
+                                    .get(snapshot.nodes[first_idx as usize].name_id)
+                                    .unwrap_or("unknown")
+                                    .to_string();
+                                fully_selected_groups_info.push((filename, group.nodes.clone()));
+                            }
+                        }
+                    }
+
+                    if !fully_selected_groups_info.is_empty() {
+                        ui.ctx().request_repaint_after(std::time::Duration::from_millis(16));
+
+                        let time = ui.input(|i| i.time);
+                        #[allow(clippy::cast_possible_truncation)]
+                        let pulse = 0.5f64.mul_add((time * 6.0).sin(), 0.5) as f32;
+                        let alpha = 0.6f32.mul_add(pulse, 0.4);
+                        let warning_red = theme::WARNING_RED;
+                        let glow_color = warning_red.linear_multiply(alpha * 0.15);
+                        let text_color = warning_red.linear_multiply(0.4f32.mul_add(pulse, 0.6));
+
+                        let frame = egui::Frame::new()
+                            .fill(glow_color)
+                            .stroke(egui::Stroke::new(1.0, warning_red.linear_multiply(alpha * 0.4)))
+                            .inner_margin(egui::Margin::symmetric(8, 4))
+                            .corner_radius(4.0);
+
+                        let response = frame.show(ui, |ui| {
+                            ui.horizontal(|ui| {
+                                ui.label(egui::RichText::new("⚠ DATA LOSS WARNING").strong().color(text_color));
+                                ui.separator();
+                                ui.label(
+                                    egui::RichText::new(format!(
+                                        "Deleting all versions of {} file(s)",
+                                        fully_selected_groups_info.len()
+                                    ))
+                                    .color(ui.visuals().text_color())
+                                );
+                            });
+                        }).response;
+
+                        response.on_hover_ui(|ui| {
+                            ui.set_max_width(450.0);
+                            ui.heading(
+                                egui::RichText::new("No Original Copy Will Remain:")
+                                    .color(theme::WARNING_RED)
+                                    .strong()
+                            );
+                            ui.label("You have checked both the original and all duplicate copies for the files listed below. Deleting them will likely result in permanent data loss:");
+                            ui.separator();
+
+                            egui::ScrollArea::vertical().max_height(250.0).show(ui, |ui| {
+                                for (filename, nodes) in &fully_selected_groups_info {
+                                    ui.vertical(|ui| {
+                                        ui.horizontal(|ui| {
+                                            ui.colored_label(theme::WARNING_RED, "🔥");
+                                            ui.strong(filename);
+                                            ui.weak(format!("({} copies selected)", nodes.len()));
+                                        });
+                                        for &idx in nodes {
+                                            let path = snapshot.get_full_path(idx);
+                                            ui.small(format!("  - {path}"));
+                                        }
+                                        ui.add_space(4.0);
+                                    });
+                                }
+                            });
+                        });
+                    }
+                }
+            }
+
+            // Right side: Active Visualizer Modes
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.selectable_value(&mut self.vis_mode, VisMode::Deduplicator, "👥 Deduplicator");
+                ui.selectable_value(&mut self.vis_mode, VisMode::Plots, "📈 Plots");
+                ui.selectable_value(&mut self.vis_mode, VisMode::Treemap, "🗺 Treemap");
+            });
+        });
+    }
 }
 
 impl eframe::App for GuiApp {
@@ -374,7 +549,7 @@ impl eframe::App for GuiApp {
             ctx.request_repaint();
         }
 
-        // Apply dark, premium glassmorphism-inspired style
+        // Apply dark style
         theme::setup_custom_style(&ctx);
 
         // Top Control Panel
@@ -777,23 +952,12 @@ impl GuiApp {
 
     fn render_classic_central_panel(&mut self, ui: &mut egui::Ui, snapshot: &FileArenaSnapshot) {
         ui.vertical(|ui| {
-            ui.horizontal(|ui| {
-                ui.selectable_value(&mut self.vis_mode, VisMode::Treemap, "🗺 Treemap");
-                ui.selectable_value(&mut self.vis_mode, VisMode::Plots, "📈 Plots");
-                ui.selectable_value(&mut self.vis_mode, VisMode::Deduplicator, "👥 Deduplicator");
-            });
-
+            self.draw_central_panel_header(ui, snapshot);
+            ui.separator();
             ui.add_space(5.0);
 
             match self.vis_mode {
                 VisMode::Treemap => {
-                    ui.heading(
-                        egui::RichText::new("📊 Treemap Visualization")
-                            .strong()
-                            .color(ui.visuals().strong_text_color()),
-                    );
-                    ui.separator();
-
                     if snapshot.nodes.is_empty() {
                         ui.centered_and_justified(|ui| {
                             ui.label("Scanned filesystem will be visualized as a treemap here.");
@@ -816,53 +980,6 @@ impl GuiApp {
                     }
                 }
                 VisMode::Plots => {
-                    // Plots rendering block
-                    ui.horizontal(|ui| {
-                        ui.label("Select Plot:");
-                        egui::ComboBox::from_id_salt("plot_type_combo")
-                            .selected_text(match self.plot_type {
-                                PlotType::SizeDistribution => "📊 File Size Distribution",
-                                PlotType::AgeSizeScatter => "🌌 File Age vs. File Size",
-                                PlotType::DirComposition => "🍰 Directory Composition",
-                                PlotType::ExtensionBoxplot => "📦 File Sizes by Extension",
-                                PlotType::TemporalTimeline => "⏱ Linked Temporal Timelines",
-                                PlotType::DeduplicatorWaste => "👥 Duplicate Waste by Extension",
-                            })
-                            .show_ui(ui, |ui| {
-                                ui.selectable_value(
-                                    &mut self.plot_type,
-                                    PlotType::SizeDistribution,
-                                    "📊 File Size Distribution",
-                                );
-                                ui.selectable_value(
-                                    &mut self.plot_type,
-                                    PlotType::AgeSizeScatter,
-                                    "🌌 File Age vs. File Size",
-                                );
-                                ui.selectable_value(
-                                    &mut self.plot_type,
-                                    PlotType::DirComposition,
-                                    "🍰 Directory Composition",
-                                );
-                                ui.selectable_value(
-                                    &mut self.plot_type,
-                                    PlotType::ExtensionBoxplot,
-                                    "📦 File Sizes by Extension",
-                                );
-                                ui.selectable_value(
-                                    &mut self.plot_type,
-                                    PlotType::TemporalTimeline,
-                                    "⏱ Linked Temporal Timelines",
-                                );
-                                ui.selectable_value(
-                                    &mut self.plot_type,
-                                    PlotType::DeduplicatorWaste,
-                                    "👥 Duplicate Waste by Extension",
-                                );
-                            });
-                    });
-                    ui.separator();
-
                     if snapshot.nodes.is_empty() {
                         ui.centered_and_justified(|ui| {
                             ui.label("Scanned filesystem will be plotted here.");
@@ -1108,16 +1225,8 @@ impl GuiApp {
         // The remaining area becomes the bottom section
         egui::CentralPanel::default().show_inside(ui, |ui| {
             ui.vertical(|ui| {
-                // View selector tab bar
-                ui.horizontal(|ui| {
-                    ui.selectable_value(&mut self.vis_mode, VisMode::Treemap, "🗺 Treemap");
-                    ui.selectable_value(&mut self.vis_mode, VisMode::Plots, "📈 Plots");
-                    ui.selectable_value(
-                        &mut self.vis_mode,
-                        VisMode::Deduplicator,
-                        "👥 Deduplicator",
-                    );
-                });
+                self.draw_central_panel_header(ui, snapshot);
+                ui.separator();
                 ui.add_space(5.0);
 
                 // Right Extensions Panel inside the bottom section if not collapsed
@@ -1134,13 +1243,6 @@ impl GuiApp {
                 // Rest of the space for visualizers (rendered directly without nested CentralPanel to avoid vertical spacing gaps)
                 match self.vis_mode {
                     VisMode::Treemap => {
-                        ui.heading(
-                            egui::RichText::new("📊 Treemap Visualization")
-                                .strong()
-                                .color(ui.visuals().strong_text_color()),
-                        );
-                        ui.separator();
-
                         if snapshot.nodes.is_empty() {
                             ui.centered_and_justified(|ui| {
                                 ui.label(
@@ -1165,54 +1267,6 @@ impl GuiApp {
                         }
                     }
                     VisMode::Plots => {
-                        ui.horizontal(|ui| {
-                            ui.label("Select Plot:");
-                            egui::ComboBox::from_id_salt("plot_type_combo_windirstat")
-                                .selected_text(match self.plot_type {
-                                    PlotType::SizeDistribution => "📊 File Size Distribution",
-                                    PlotType::AgeSizeScatter => "🌌 File Age vs. File Size",
-                                    PlotType::DirComposition => "🍰 Directory Composition",
-                                    PlotType::ExtensionBoxplot => "📦 File Sizes by Extension",
-                                    PlotType::TemporalTimeline => "⏱ Linked Temporal Timelines",
-                                    PlotType::DeduplicatorWaste => {
-                                        "👥 Duplicate Waste by Extension"
-                                    }
-                                })
-                                .show_ui(ui, |ui| {
-                                    ui.selectable_value(
-                                        &mut self.plot_type,
-                                        PlotType::SizeDistribution,
-                                        "📊 File Size Distribution",
-                                    );
-                                    ui.selectable_value(
-                                        &mut self.plot_type,
-                                        PlotType::AgeSizeScatter,
-                                        "🌌 File Age vs. File Size",
-                                    );
-                                    ui.selectable_value(
-                                        &mut self.plot_type,
-                                        PlotType::DirComposition,
-                                        "🍰 Directory Composition",
-                                    );
-                                    ui.selectable_value(
-                                        &mut self.plot_type,
-                                        PlotType::ExtensionBoxplot,
-                                        "📦 File Sizes by Extension",
-                                    );
-                                    ui.selectable_value(
-                                        &mut self.plot_type,
-                                        PlotType::TemporalTimeline,
-                                        "⏱ Linked Temporal Timelines",
-                                    );
-                                    ui.selectable_value(
-                                        &mut self.plot_type,
-                                        PlotType::DeduplicatorWaste,
-                                        "👥 Duplicate Waste by Extension",
-                                    );
-                                });
-                        });
-                        ui.separator();
-
                         if snapshot.nodes.is_empty() {
                             ui.centered_and_justified(|ui| {
                                 ui.label("Scanned filesystem will be plotted here.");
