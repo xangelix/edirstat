@@ -57,6 +57,29 @@ impl StatsChart for TreemapChart {
     }
 }
 
+#[must_use]
+pub fn get_selection_roots<S: ::std::hash::BuildHasher + Default>(
+    nodes: &[FileNode],
+    selected_nodes: &std::collections::HashSet<u32, S>,
+) -> std::collections::HashSet<u32> {
+    let mut roots = std::collections::HashSet::new();
+    for &idx in selected_nodes {
+        let mut curr = nodes[idx as usize].parent;
+        let mut ancestor_selected = false;
+        while curr != crate::arena::NO_INDEX {
+            if selected_nodes.contains(&curr) {
+                ancestor_selected = true;
+                break;
+            }
+            curr = nodes[curr as usize].parent;
+        }
+        if !ancestor_selected {
+            roots.insert(idx);
+        }
+    }
+    roots
+}
+
 impl StatComponent for TreemapChart {
     fn render(
         &mut self,
@@ -153,48 +176,52 @@ impl StatComponent for TreemapChart {
             );
         }
 
-        if let Some(selected_idx) = *context.selected_node_idx {
-            // Reconstruct the bounding box union of all blocks belonging to the selection.
-            // For a file, this yields its individual rect. For a directory, it yields the
-            // exact unified rect of its visible children on-screen.
-            let mut target_rect: Option<eframe::egui::Rect> = None;
-            for block in &self.cached_blocks {
-                if is_descendant(&snapshot.nodes, block.node_idx, selected_idx) {
-                    match target_rect {
-                        None => target_rect = Some(block.rect),
-                        Some(ref mut r) => *r = r.union(block.rect),
+        if !context.selected_nodes.is_empty() {
+            let roots = get_selection_roots(&snapshot.nodes, context.selected_nodes);
+            for root_idx in roots {
+                // Reconstruct the bounding box union of all blocks belonging to the selection.
+                // For a file, this yields its individual rect. For a directory, it yields the
+                // exact unified rect of its visible children on-screen.
+                let mut target_rect: Option<eframe::egui::Rect> = None;
+                for block in &self.cached_blocks {
+                    if is_descendant(&snapshot.nodes, block.node_idx, root_idx) {
+                        match target_rect {
+                            None => target_rect = Some(block.rect),
+                            Some(ref mut r) => *r = r.union(block.rect),
+                        }
                     }
                 }
-            }
 
-            if let Some(rect) = target_rect {
-                let time = ui.input(|i| i.time);
+                if let Some(rect) = target_rect {
+                    let time = ui.input(|i| i.time);
 
-                // A wave factor oscillating smoothly between 0.0 and 1.0 (approx. 1Hz frequency)
-                let pulse = 0.5f64.mul_add((time * 6.0).sin(), 0.5);
+                    // A wave factor oscillating smoothly between 0.0 and 1.0 (approx. 1Hz frequency)
+                    let pulse = 0.5f64.mul_add((time * 6.0).sin(), 0.5);
 
-                // 1. Draw Outer Expanding Glow (grows and fades)
-                let glow_alpha = 0.20f64.mul_add(pulse, 0.1);
-                let glow_color = crate::colors::GLOW_OUTER_BASE.linear_multiply(glow_alpha as f32);
-                let glow_thickness = 6.0f32.mul_add(pulse as f32, 4.0); // Oscillates thickness
-                painter.rect(
-                    rect,
-                    0.0,
-                    crate::colors::COLOR_TRANSPARENT,
-                    eframe::egui::Stroke::new(glow_thickness, glow_color),
-                    eframe::egui::StrokeKind::Outside,
-                );
+                    // 1. Draw Outer Expanding Glow (grows and fades)
+                    let glow_alpha = 0.20f64.mul_add(pulse, 0.1);
+                    let glow_color =
+                        crate::colors::GLOW_OUTER_BASE.linear_multiply(glow_alpha as f32);
+                    let glow_thickness = 6.0f32.mul_add(pulse as f32, 4.0); // Oscillates thickness
+                    painter.rect(
+                        rect,
+                        0.0,
+                        crate::colors::COLOR_TRANSPARENT,
+                        eframe::egui::Stroke::new(glow_thickness, glow_color),
+                        eframe::egui::StrokeKind::Outside,
+                    );
 
-                // 2. Draw Inner Sharp Contrast Core (stays crisp)
-                let core_color = crate::colors::GLOW_INNER_CORE; // Soft pastel purple/violet
-                let core_thickness = 1.0f32.mul_add(pulse as f32, 1.5);
-                painter.rect(
-                    rect,
-                    0.0,
-                    crate::colors::COLOR_TRANSPARENT,
-                    eframe::egui::Stroke::new(core_thickness, core_color),
-                    eframe::egui::StrokeKind::Inside,
-                );
+                    // 2. Draw Inner Sharp Contrast Core (stays crisp)
+                    let core_color = crate::colors::GLOW_INNER_CORE; // Soft pastel purple/violet
+                    let core_thickness = 1.0f32.mul_add(pulse as f32, 1.5);
+                    painter.rect(
+                        rect,
+                        0.0,
+                        crate::colors::COLOR_TRANSPARENT,
+                        eframe::egui::Stroke::new(core_thickness, core_color),
+                        eframe::egui::StrokeKind::Inside,
+                    );
+                }
             }
         }
 
@@ -202,7 +229,17 @@ impl StatComponent for TreemapChart {
         if response.clicked()
             && let Some(block) = hovered_block
         {
-            *context.selected_node_idx = Some(block.node_idx);
+            let modifiers = ui.input(|i| i.modifiers);
+            if modifiers.command || modifiers.ctrl {
+                if context.selected_nodes.contains(&block.node_idx) {
+                    context.selected_nodes.remove(&block.node_idx);
+                } else {
+                    context.selected_nodes.insert(block.node_idx);
+                }
+            } else {
+                context.selected_nodes.clear();
+                context.selected_nodes.insert(block.node_idx);
+            }
             *context.scroll_to_selected = true; // Raise scroll trigger
 
             // Auto expand parents so it shows up in tree view

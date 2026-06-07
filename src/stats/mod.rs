@@ -16,7 +16,7 @@ pub trait StatsChart {
 }
 
 pub struct StatContext<'a> {
-    pub selected_node_idx: &'a mut Option<u32>,
+    pub selected_nodes: &'a mut std::collections::HashSet<u32>,
     pub expanded_nodes: &'a mut std::collections::HashSet<u32>,
     pub scroll_to_selected: &'a mut bool,
     pub deduplicator_results: Option<

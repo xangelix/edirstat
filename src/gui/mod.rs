@@ -55,6 +55,9 @@ pub struct GuiApp {
 
     // UI state
     pub(crate) selected_node_idx: Option<u32>,
+    pub(crate) selected_nodes: HashSet<u32>,
+    pub(crate) focus_node_idx: Option<u32>,
+    pub(crate) delete_node_indices: Vec<u32>,
     pub(crate) expanded_nodes: HashSet<u32>,
     pub(crate) search_query: String,
     pub(crate) monospace_paths: bool,
@@ -121,6 +124,9 @@ impl GuiApp {
             shared_state,
             traversal_engine,
             selected_node_idx: None,
+            selected_nodes: HashSet::new(),
+            focus_node_idx: None,
+            delete_node_indices: Vec::new(),
             expanded_nodes: HashSet::new(),
             search_query: String::new(),
             monospace_paths: false,
@@ -167,6 +173,9 @@ impl GuiApp {
 
     fn reset_state(&mut self) {
         self.selected_node_idx = None;
+        self.selected_nodes.clear();
+        self.focus_node_idx = None;
+        self.delete_node_indices.clear();
         self.expanded_nodes.clear();
         self.extension_stats.clear();
         self.last_extension_update = None;
@@ -228,15 +237,15 @@ impl GuiApp {
         ui: &mut egui::Ui,
         snapshot: &FileArenaSnapshot,
     ) {
-        let has_selection = self.selected_node_idx.is_some();
+        let has_selection = !self.selected_nodes.is_empty();
         let is_scanning = self.shared_state.is_scanning.load(Ordering::SeqCst);
 
-        let is_dir_selected = self.selected_node_idx.is_some_and(|idx| {
+        let is_any_dir_selected = self.selected_nodes.iter().any(|&idx| {
             idx < snapshot.nodes.len() as u32 && snapshot.nodes[idx as usize].is_directory()
         });
 
-        // 1. Up One Level
-        let up_enabled = self.selected_node_idx.is_some() && self.selected_node_idx != Some(0);
+        // 1. Up One Level (Enabled only for single selection)
+        let up_enabled = self.selected_nodes.len() == 1 && self.selected_node_idx != Some(0);
         let up_btn = ui.add_enabled(up_enabled, egui::Button::new("⏶ Up One Level"));
         if up_btn.clicked() {
             if let Some(idx) = self.selected_node_idx
@@ -245,30 +254,40 @@ impl GuiApp {
             {
                 let parent = snapshot.nodes[idx as usize].parent;
                 if parent != crate::arena::NO_INDEX {
+                    self.selected_nodes.clear();
+                    self.selected_nodes.insert(parent);
                     self.selected_node_idx = Some(parent);
+                    self.focus_node_idx = Some(parent);
                     self.scroll_to_selected = true;
                 }
             }
             ui.close_kind(egui::UiKind::Menu); // Closes the active menu/context-menu
         }
 
-        // 2. Refresh Directory
-        let is_dir_refresh_enabled = is_dir_selected && !is_scanning;
+        // 2. Refresh Directory (For all directories selected)
+        let is_dir_refresh_enabled = is_any_dir_selected && !is_scanning;
         let refresh_btn = ui.add_enabled(
             is_dir_refresh_enabled,
             egui::Button::new("🔄 Refresh Directory"),
         );
         if refresh_btn.clicked() {
-            if let Some(idx) = self.selected_node_idx {
-                self.refresh_directory_subtree(idx);
-            }
+            let dirs: Vec<u32> = self
+                .selected_nodes
+                .iter()
+                .copied()
+                .filter(|&idx| {
+                    idx < snapshot.nodes.len() as u32 && snapshot.nodes[idx as usize].is_directory()
+                })
+                .collect();
+            self.refresh_directory_subtrees(&dirs);
             ui.close_kind(egui::UiKind::Menu); // Closes the active menu/context-menu
         }
 
         ui.separator();
 
-        // 3. Open in File Manager
-        let open_btn = ui.add_enabled(has_selection, egui::Button::new("🗁 Open in File Manager"));
+        // 3. Open in File Manager (Enabled only for single selection)
+        let open_enabled = self.selected_nodes.len() == 1;
+        let open_btn = ui.add_enabled(open_enabled, egui::Button::new("🗁 Open in File Manager"));
         if open_btn.clicked() {
             let idx_opt = self.selected_node_idx;
             if let Some(idx) = idx_opt {
@@ -284,8 +303,15 @@ impl GuiApp {
             ui.close_kind(egui::UiKind::Menu); // Closes the active menu/context-menu
         }
 
-        // 4. Open Terminal Here
-        let term_btn = ui.add_enabled(is_dir_selected, egui::Button::new("💻 Open Terminal Here"));
+        // 4. Open Terminal Here (Enabled only for single selection directory)
+        let is_single_dir_selected = self.selected_nodes.len() == 1
+            && self.selected_node_idx.is_some_and(|idx| {
+                idx < snapshot.nodes.len() as u32 && snapshot.nodes[idx as usize].is_directory()
+            });
+        let term_btn = ui.add_enabled(
+            is_single_dir_selected,
+            egui::Button::new("💻 Open Terminal Here"),
+        );
         if term_btn.clicked() {
             if let Some(idx) = self.selected_node_idx {
                 let path_str = snapshot.get_full_path(idx);
@@ -305,7 +331,7 @@ impl GuiApp {
         if trash_btn.clicked() {
             self.active_modal = Some(ActiveModal::Trash);
             self.delete_confirm_checked = false;
-            self.delete_node_idx = self.selected_node_idx;
+            self.delete_node_indices = self.selected_nodes.iter().copied().collect();
             ui.close_kind(egui::UiKind::Menu); // Closes the active menu/context-menu
         }
 
@@ -317,7 +343,7 @@ impl GuiApp {
         if delete_btn.clicked() {
             self.active_modal = Some(ActiveModal::Delete);
             self.delete_confirm_checked = false;
-            self.delete_node_idx = self.selected_node_idx;
+            self.delete_node_indices = self.selected_nodes.iter().copied().collect();
             ui.close_kind(egui::UiKind::Menu); // Closes the active menu/context-menu
         }
     }
@@ -342,7 +368,7 @@ impl eframe::App for GuiApp {
         // Repaint during scan to show live progress, or continuously while selected to drive the glow animation
         if is_scanning {
             ctx.request_repaint_after(Duration::from_millis(50));
-        } else if self.selected_node_idx.is_some() {
+        } else if !self.selected_nodes.is_empty() {
             ctx.request_repaint();
         }
 
@@ -589,13 +615,28 @@ impl eframe::App for GuiApp {
                 }
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if let Some(idx) = self.selected_node_idx {
+                    if self.selected_nodes.len() == 1 {
+                        if let Some(&idx) = self.selected_nodes.iter().next()
+                            && (idx as usize) < snapshot.nodes.len()
+                        {
+                            let size_str = prettier_bytes::ByteFormatter::new()
+                                .format(snapshot.nodes[idx as usize].size)
+                                .to_string();
+                            ui.strong(size_str);
+                            let path_str = snapshot.get_full_path(idx);
+                            ui.label(format!("Selection: {path_str}"));
+                        }
+                    } else if !self.selected_nodes.is_empty() {
+                        let total_size: u64 = self
+                            .selected_nodes
+                            .iter()
+                            .map(|&idx| snapshot.nodes[idx as usize].size)
+                            .sum();
                         let size_str = prettier_bytes::ByteFormatter::new()
-                            .format(snapshot.nodes[idx as usize].size)
+                            .format(total_size)
                             .to_string();
                         ui.strong(size_str);
-                        let path_str = snapshot.get_full_path(idx);
-                        ui.label(format!("Selection: {path_str}"));
+                        ui.label(format!("Selection: {} items", self.selected_nodes.len()));
                     }
                 });
             });
@@ -718,7 +759,7 @@ impl GuiApp {
                 scroll_area.show_rows(ui, row_height, visible_nodes.len(), |ui, row_range| {
                     for idx in row_range {
                         let (node_idx, indent) = visible_nodes[idx];
-                        self.render_tree_node_row(ui, snapshot, node_idx, indent);
+                        self.render_tree_node_row(ui, snapshot, node_idx, indent, &visible_nodes);
                     }
                 });
             }
@@ -750,12 +791,19 @@ impl GuiApp {
                         });
                     } else {
                         let mut context = stats::StatContext {
-                            selected_node_idx: &mut self.selected_node_idx,
+                            selected_nodes: &mut self.selected_nodes,
                             expanded_nodes: &mut self.expanded_nodes,
                             scroll_to_selected: &mut self.scroll_to_selected,
                             deduplicator_results: Some(&self.deduplicator_results),
                         };
                         self.treemap_chart.render(ui, snapshot, &mut context);
+
+                        // Sync back selected_node_idx
+                        if self.selected_nodes.len() == 1 {
+                            self.selected_node_idx = self.selected_nodes.iter().next().copied();
+                        } else {
+                            self.selected_node_idx = None;
+                        }
                     }
                 }
                 VisMode::Plots => {
@@ -812,7 +860,7 @@ impl GuiApp {
                         });
                     } else {
                         let mut context = stats::StatContext {
-                            selected_node_idx: &mut self.selected_node_idx,
+                            selected_nodes: &mut self.selected_nodes,
                             expanded_nodes: &mut self.expanded_nodes,
                             scroll_to_selected: &mut self.scroll_to_selected,
                             deduplicator_results: Some(&self.deduplicator_results),
@@ -873,7 +921,10 @@ impl GuiApp {
                     {
                         let parent = snapshot.nodes[idx as usize].parent;
                         if parent != crate::arena::NO_INDEX {
+                            self.selected_nodes.clear();
+                            self.selected_nodes.insert(parent);
                             self.selected_node_idx = Some(parent);
+                            self.focus_node_idx = Some(parent);
                             self.scroll_to_selected = true;
                         }
                     }
@@ -894,17 +945,26 @@ impl GuiApp {
                     }
 
                     // 3. Refresh Selected
-                    let refresh_sel_enabled = self.selected_node_idx.is_some_and(|idx| {
+                    let any_dir_selected = self.selected_nodes.iter().any(|&idx| {
                         idx < snapshot.nodes.len() as u32
                             && snapshot.nodes[idx as usize].is_directory()
-                    }) && !is_scanning;
+                    });
+                    let refresh_sel_enabled = any_dir_selected && !is_scanning;
                     if ui
                         .add_enabled(refresh_sel_enabled, egui::Button::new("🔄"))
-                        .on_hover_text("Refresh Selected (Re-scan selected directory subtree)")
+                        .on_hover_text("Refresh Selected (Re-scan selected directory subtrees)")
                         .clicked()
-                        && let Some(idx) = self.selected_node_idx
                     {
-                        self.refresh_directory_subtree(idx);
+                        let dirs: Vec<u32> = self
+                            .selected_nodes
+                            .iter()
+                            .copied()
+                            .filter(|&idx| {
+                                idx < snapshot.nodes.len() as u32
+                                    && snapshot.nodes[idx as usize].is_directory()
+                            })
+                            .collect();
+                        self.refresh_directory_subtrees(&dirs);
                     }
 
                     // Separator between Nav/Refresh and Open Tools
@@ -948,16 +1008,15 @@ impl GuiApp {
                     ui.separator();
 
                     // 6. Move to Trash
-                    let ops_enabled = self.selected_node_idx.is_some() && !is_scanning;
+                    let ops_enabled = !self.selected_nodes.is_empty() && !is_scanning;
                     if ui
                         .add_enabled(ops_enabled, egui::Button::new("♻"))
                         .on_hover_text("Move Selected to Trash")
                         .clicked()
-                        && let Some(idx) = self.selected_node_idx
                     {
                         self.active_modal = Some(ActiveModal::Trash);
                         self.delete_confirm_checked = false;
-                        self.delete_node_idx = Some(idx);
+                        self.delete_node_indices = self.selected_nodes.iter().copied().collect();
                     }
 
                     // 7. Delete Permanently
@@ -965,11 +1024,10 @@ impl GuiApp {
                         .add_enabled(ops_enabled, egui::Button::new("🗑"))
                         .on_hover_text("Delete Selected Permanently")
                         .clicked()
-                        && let Some(idx) = self.selected_node_idx
                     {
                         self.active_modal = Some(ActiveModal::Delete);
                         self.delete_confirm_checked = false;
-                        self.delete_node_idx = Some(idx);
+                        self.delete_node_indices = self.selected_nodes.iter().copied().collect();
                     }
 
                     // Separator between toolbar buttons and the search box
@@ -1009,13 +1067,19 @@ impl GuiApp {
                 ui.separator();
 
                 // If selection exists, pop out detail panel on the right of the top section
-                if let Some(selected_idx) = self.selected_node_idx {
+                if !self.selected_nodes.is_empty() {
                     egui::Panel::right("windirstat_detail_panel")
                         .resizable(true)
                         .default_size(260.0)
                         .size_range(160.0..=450.0)
                         .show_inside(ui, |ui| {
-                            self.render_file_detail_list(ui, snapshot, selected_idx);
+                            if self.selected_nodes.len() == 1 {
+                                if let Some(&selected_idx) = self.selected_nodes.iter().next() {
+                                    self.render_file_detail_list(ui, snapshot, selected_idx);
+                                }
+                            } else {
+                                self.render_multi_file_detail_list(ui, snapshot);
+                            }
                         });
                 }
 
@@ -1073,12 +1137,19 @@ impl GuiApp {
                             });
                         } else {
                             let mut context = stats::StatContext {
-                                selected_node_idx: &mut self.selected_node_idx,
+                                selected_nodes: &mut self.selected_nodes,
                                 expanded_nodes: &mut self.expanded_nodes,
                                 scroll_to_selected: &mut self.scroll_to_selected,
                                 deduplicator_results: Some(&self.deduplicator_results),
                             };
                             self.treemap_chart.render(ui, snapshot, &mut context);
+
+                            // Sync back selected_node_idx
+                            if self.selected_nodes.len() == 1 {
+                                self.selected_node_idx = self.selected_nodes.iter().next().copied();
+                            } else {
+                                self.selected_node_idx = None;
+                            }
                         }
                     }
                     VisMode::Plots => {
@@ -1136,7 +1207,7 @@ impl GuiApp {
                             });
                         } else {
                             let mut context = stats::StatContext {
-                                selected_node_idx: &mut self.selected_node_idx,
+                                selected_nodes: &mut self.selected_nodes,
                                 expanded_nodes: &mut self.expanded_nodes,
                                 scroll_to_selected: &mut self.scroll_to_selected,
                                 deduplicator_results: Some(&self.deduplicator_results),

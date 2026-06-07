@@ -279,12 +279,13 @@ impl GuiApp {
 
             self.selected_duplicates
                 .retain(|idx| !successfully_deleted.contains(idx));
+            self.selected_nodes
+                .retain(|idx| !successfully_deleted.contains(idx));
             self.remove_nodes_from_snapshot(&successfully_deleted);
 
-            if self
-                .selected_node_idx
-                .is_some_and(|selected| successfully_deleted.contains(&selected))
-            {
+            if self.selected_nodes.len() == 1 {
+                self.selected_node_idx = self.selected_nodes.iter().next().copied();
+            } else {
                 self.selected_node_idx = None;
             }
         }
@@ -431,12 +432,13 @@ impl GuiApp {
 
             self.selected_duplicates
                 .retain(|idx| !successfully_linked.contains(idx));
+            self.selected_nodes
+                .retain(|idx| !successfully_linked.contains(idx));
             self.remove_nodes_from_snapshot(&successfully_linked);
 
-            if self
-                .selected_node_idx
-                .is_some_and(|selected| successfully_linked.contains(&selected))
-            {
+            if self.selected_nodes.len() == 1 {
+                self.selected_node_idx = self.selected_nodes.iter().next().copied();
+            } else {
                 self.selected_node_idx = None;
             }
         }
@@ -445,8 +447,8 @@ impl GuiApp {
     pub fn render_modals(&mut self, ctx: &egui::Context, snapshot: &FileArenaSnapshot) {
         #[derive(Debug, Clone, Copy, PartialEq, Eq)]
         enum DeletionAction {
-            DeleteSingle(u32),
-            TrashSingle(u32),
+            DeleteMultiple,
+            TrashMultiple,
             DeleteDuplicates,
             TrashDuplicates,
             HardlinkDuplicates,
@@ -468,44 +470,64 @@ impl GuiApp {
 
         let modal_config = match self.active_modal {
             Some(ActiveModal::Delete) => {
-                self.delete_node_idx.map(|idx| {
-                    let path_str = snapshot.get_full_path(idx);
+                let idxs = &self.delete_node_indices;
+                if idxs.is_empty() {
+                    None
+                } else {
+                    let total_size: u64 = idxs
+                        .iter()
+                        .map(|&idx| snapshot.nodes[idx as usize].size)
+                        .sum();
                     let size_str = prettier_bytes::ByteFormatter::new()
-                        .format(snapshot.nodes[idx as usize].size)
+                        .format(total_size)
                         .to_string();
-                    ModalConfig {
+                    let paths: Vec<String> = idxs
+                        .iter()
+                        .map(|&idx| snapshot.get_full_path(idx))
+                        .collect();
+                    Some(ModalConfig {
                         title: "⚠ PERMANENT DELETION WARNING",
                         border_color: theme::DELETION_BORDER,
                         warning_color: theme::DELETION_WARNING,
                         header: "⚠ Permanent Deletion Warning!".to_string(),
                         info_msg: format!("Total Size: {size_str}"),
-                        warning_msg: "This is a recursive deletion. All files, folders, and subdirectories under this path will be permanently deleted and cannot be recovered (bypassing the recycle/trash bin).",
+                        warning_msg: "This is a recursive deletion. All files, folders, and subdirectories under the selected path(s) will be permanently deleted and cannot be recovered (bypassing the recycle/trash bin).",
                         checkbox_label: "I understand that files will be permanently deleted and cannot be recovered.",
                         confirm_button_text: "🗑 Yes, Delete Permanently",
-                        paths: vec![path_str],
-                        action: DeletionAction::DeleteSingle(idx),
-                    }
-                })
+                        paths,
+                        action: DeletionAction::DeleteMultiple,
+                    })
+                }
             }
             Some(ActiveModal::Trash) => {
-                self.delete_node_idx.map(|idx| {
-                    let path_str = snapshot.get_full_path(idx);
+                let idxs = &self.delete_node_indices;
+                if idxs.is_empty() {
+                    None
+                } else {
+                    let total_size: u64 = idxs
+                        .iter()
+                        .map(|&idx| snapshot.nodes[idx as usize].size)
+                        .sum();
                     let size_str = prettier_bytes::ByteFormatter::new()
-                        .format(snapshot.nodes[idx as usize].size)
+                        .format(total_size)
                         .to_string();
-                    ModalConfig {
+                    let paths: Vec<String> = idxs
+                        .iter()
+                        .map(|&idx| snapshot.get_full_path(idx))
+                        .collect();
+                    Some(ModalConfig {
                         title: "♻ MOVE TO TRASH",
                         border_color: theme::TRASH_BORDER,
                         warning_color: theme::TRASH_WARNING,
                         header: "♻ Move to Trash".to_string(),
                         info_msg: format!("Total Size: {size_str}"),
-                        warning_msg: "This will move the selected path and all its contents to your system recycle bin/trash, where it can be recovered or permanently deleted later.",
+                        warning_msg: "This will move the selected path(s) and all their contents to your system recycle bin/trash, where they can be recovered or permanently deleted later.",
                         checkbox_label: "I confirm that I want to move this to the trash.",
                         confirm_button_text: "♻ Yes, Move to Trash",
-                        paths: vec![path_str],
-                        action: DeletionAction::TrashSingle(idx),
-                    }
-                })
+                        paths,
+                        action: DeletionAction::TrashMultiple,
+                    })
+                }
             }
             Some(ActiveModal::DeleteDuplicates) => {
                 let idxs = &self.delete_duplicates_indices;
@@ -588,7 +610,11 @@ impl GuiApp {
                         border_color: theme::BUTTON_ORANGE,
                         warning_color: theme::BUTTON_ORANGE_HOVER,
                         header: "🔗 Replace Duplicates with Hardlinks".to_string(),
-                        info_msg: format!("Total files to process: {}. Cumulative virtual size: {}", idxs.len(), size_str),
+                        info_msg: format!(
+                            "Total files to process: {}. Cumulative virtual size: {}",
+                            idxs.len(),
+                            size_str
+                        ),
                         warning_msg: "This will delete the selected duplicate files and replace them with filesystem-level hardlinks pointing to the remaining original file in each group. This retains files visually while freeing up actual physical storage.",
                         checkbox_label: "I confirm that I want to replace selected files with hardlinks.",
                         confirm_button_text: "🔗 Yes, Replace with Hardlinks",
@@ -618,7 +644,11 @@ impl GuiApp {
                         border_color: theme::BUTTON_ORANGE,
                         warning_color: theme::BUTTON_ORANGE_HOVER,
                         header: "🔗 Replace Duplicates with Softlinks".to_string(),
-                        info_msg: format!("Total files to process: {}. Cumulative virtual size: {}", idxs.len(), size_str),
+                        info_msg: format!(
+                            "Total files to process: {}. Cumulative virtual size: {}",
+                            idxs.len(),
+                            size_str
+                        ),
                         warning_msg: "This will delete the selected duplicate files and replace them with filesystem-level softlinks (symbolic links) pointing to the remaining original file in each group. This retains files visually while freeing up actual physical storage.",
                         checkbox_label: "I confirm that I want to replace selected files with softlinks.",
                         confirm_button_text: "🔗 Yes, Replace with Softlinks",
@@ -660,7 +690,7 @@ impl GuiApp {
 
                             ui.label(if cfg.paths.len() > 1 {
                                 format!(
-                                    "You are about to delete/trash {} duplicate files:",
+                                    "You are about to delete/trash {} duplicate files/items:",
                                     cfg.paths.len()
                                 )
                             } else {
@@ -702,11 +732,21 @@ impl GuiApp {
                                     ui.add_enabled(self.delete_confirm_checked, confirm_btn);
                                 if confirm_res.clicked() {
                                     match cfg.action {
-                                        DeletionAction::DeleteSingle(idx) => {
-                                            self.execute_deletion(&[idx], false, snapshot);
+                                        DeletionAction::DeleteMultiple => {
+                                            self.execute_deletion(
+                                                &self.delete_node_indices.clone(),
+                                                false,
+                                                snapshot,
+                                            );
+                                            self.delete_node_indices.clear();
                                         }
-                                        DeletionAction::TrashSingle(idx) => {
-                                            self.execute_deletion(&[idx], true, snapshot);
+                                        DeletionAction::TrashMultiple => {
+                                            self.execute_deletion(
+                                                &self.delete_node_indices.clone(),
+                                                true,
+                                                snapshot,
+                                            );
+                                            self.delete_node_indices.clear();
                                         }
                                         DeletionAction::DeleteDuplicates => {
                                             self.execute_deletion(
@@ -802,10 +842,23 @@ impl GuiApp {
     }
 
     pub(crate) fn refresh_directory_subtree(&self, dir_idx: u32) {
+        self.refresh_directory_subtrees(&[dir_idx]);
+    }
+
+    pub(crate) fn refresh_directory_subtrees(&self, dir_indices: &[u32]) {
+        if dir_indices.is_empty() {
+            return;
+        }
         let current_snap = self.shared_state.current_snapshot.load();
-        let path_str = current_snap.get_full_path(dir_idx);
-        let path = std::path::PathBuf::from(path_str);
-        if !path.exists() || !path.is_dir() {
+        let mut valid_indices = Vec::new();
+        for &idx in dir_indices {
+            let path_str = current_snap.get_full_path(idx);
+            let path = std::path::PathBuf::from(path_str);
+            if path.exists() && path.is_dir() {
+                valid_indices.push((idx, path));
+            }
+        }
+        if valid_indices.is_empty() {
             return;
         }
 
@@ -819,80 +872,82 @@ impl GuiApp {
             let mut cloned_nodes = (*current_snap.nodes).clone();
             let mut string_pool = (*current_snap.string_pool).clone();
 
-            // 1. Collect and delete old descendants of dir_idx
-            let mut descendants = Vec::new();
-            collect_descendants(&cloned_nodes, dir_idx, &mut descendants);
+            for (dir_idx, path) in valid_indices {
+                // 1. Collect and delete old descendants of dir_idx
+                let mut descendants = Vec::new();
+                collect_descendants(&cloned_nodes, dir_idx, &mut descendants);
 
-            let old_size = cloned_nodes[dir_idx as usize].size;
-            let old_file_count = cloned_nodes[dir_idx as usize].file_count;
+                let old_size = cloned_nodes[dir_idx as usize].size;
+                let old_file_count = cloned_nodes[dir_idx as usize].file_count;
 
-            // Roll back ancestors size/counts
-            let mut current_parent = cloned_nodes[dir_idx as usize].parent_opt();
-            while let Some(p_idx) = current_parent {
-                let p_node = &mut cloned_nodes[p_idx as usize];
-                p_node.size = p_node.size.saturating_sub(old_size);
-                p_node.file_count = p_node.file_count.saturating_sub(old_file_count);
-                current_parent = p_node.parent_opt();
-            }
-
-            let mut files_removed = 0;
-            let mut dirs_removed = 0;
-            for &idx in &descendants {
-                let node = &cloned_nodes[idx as usize];
-                if node.is_directory() {
-                    dirs_removed += 1;
-                } else {
-                    files_removed += 1;
+                // Roll back ancestors size/counts
+                let mut current_parent = cloned_nodes[dir_idx as usize].parent_opt();
+                while let Some(p_idx) = current_parent {
+                    let p_node = &mut cloned_nodes[p_idx as usize];
+                    p_node.size = p_node.size.saturating_sub(old_size);
+                    p_node.file_count = p_node.file_count.saturating_sub(old_file_count);
+                    current_parent = p_node.parent_opt();
                 }
-            }
 
-            traversal_stats
-                .files_scanned
-                .fetch_sub(files_removed, Ordering::SeqCst);
-            traversal_stats
-                .dirs_scanned
-                .fetch_sub(dirs_removed, Ordering::SeqCst);
-            traversal_stats
-                .bytes_scanned
-                .fetch_sub(old_size as usize, Ordering::SeqCst);
+                let mut files_removed = 0;
+                let mut dirs_removed = 0;
+                for &idx in &descendants {
+                    let node = &cloned_nodes[idx as usize];
+                    if node.is_directory() {
+                        dirs_removed += 1;
+                    } else {
+                        files_removed += 1;
+                    }
+                }
 
-            // Isolate old descendants
-            for &idx in &descendants {
-                let idx = idx as usize;
-                cloned_nodes[idx].size = 0;
-                cloned_nodes[idx].file_count = 0;
-                cloned_nodes[idx].first_child = crate::arena::NO_INDEX;
-                cloned_nodes[idx].next_sibling = crate::arena::NO_INDEX;
-                cloned_nodes[idx].parent = crate::arena::NO_INDEX;
-            }
+                traversal_stats
+                    .files_scanned
+                    .fetch_sub(files_removed, Ordering::SeqCst);
+                traversal_stats
+                    .dirs_scanned
+                    .fetch_sub(dirs_removed, Ordering::SeqCst);
+                traversal_stats
+                    .bytes_scanned
+                    .fetch_sub(old_size as usize, Ordering::SeqCst);
 
-            cloned_nodes[dir_idx as usize].first_child = crate::arena::NO_INDEX;
-            cloned_nodes[dir_idx as usize].size = 0;
-            cloned_nodes[dir_idx as usize].file_count = 0;
+                // Isolate old descendants
+                for &idx in &descendants {
+                    let idx = idx as usize;
+                    cloned_nodes[idx].size = 0;
+                    cloned_nodes[idx].file_count = 0;
+                    cloned_nodes[idx].first_child = crate::arena::NO_INDEX;
+                    cloned_nodes[idx].next_sibling = crate::arena::NO_INDEX;
+                    cloned_nodes[idx].parent = crate::arena::NO_INDEX;
+                }
 
-            // 2. Scan the directory recursively on disk and append new nodes
-            let mut last_child_map = vec![crate::arena::NO_INDEX; cloned_nodes.len()];
+                cloned_nodes[dir_idx as usize].first_child = crate::arena::NO_INDEX;
+                cloned_nodes[dir_idx as usize].size = 0;
+                cloned_nodes[dir_idx as usize].file_count = 0;
 
-            walk_dir(
-                &path,
-                dir_idx,
-                &mut cloned_nodes,
-                &mut string_pool,
-                &mut last_child_map,
-                &traversal_stats,
-                dir_idx,
-            );
+                // 2. Scan the directory recursively on disk and append new nodes
+                let mut last_child_map = vec![crate::arena::NO_INDEX; cloned_nodes.len()];
 
-            // 3. Now propagate the new size/counts of dir_idx to all its ancestors!
-            let new_size = cloned_nodes[dir_idx as usize].size;
-            let new_file_count = cloned_nodes[dir_idx as usize].file_count;
+                walk_dir(
+                    &path,
+                    dir_idx,
+                    &mut cloned_nodes,
+                    &mut string_pool,
+                    &mut last_child_map,
+                    &traversal_stats,
+                    dir_idx,
+                );
 
-            let mut current_parent = cloned_nodes[dir_idx as usize].parent_opt();
-            while let Some(p_idx) = current_parent {
-                let p_node = &mut cloned_nodes[p_idx as usize];
-                p_node.size += new_size;
-                p_node.file_count += new_file_count;
-                current_parent = p_node.parent_opt();
+                // 3. Now propagate the new size/counts of dir_idx to all its ancestors!
+                let new_size = cloned_nodes[dir_idx as usize].size;
+                let new_file_count = cloned_nodes[dir_idx as usize].file_count;
+
+                let mut current_parent = cloned_nodes[dir_idx as usize].parent_opt();
+                while let Some(p_idx) = current_parent {
+                    let p_node = &mut cloned_nodes[p_idx as usize];
+                    p_node.size += new_size;
+                    p_node.file_count += new_file_count;
+                    current_parent = p_node.parent_opt();
+                }
             }
 
             // 4. Swap snapshot

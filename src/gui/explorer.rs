@@ -1,3 +1,5 @@
+use std::sync::atomic::Ordering;
+
 use eframe::egui;
 use smallvec::SmallVec;
 
@@ -129,6 +131,50 @@ impl Default for QueryCoordinator {
 }
 
 impl GuiApp {
+    pub fn handle_node_click(
+        &mut self,
+        clicked_node_idx: u32,
+        modifiers: egui::Modifiers,
+        visible_nodes: &[(u32, usize)],
+    ) {
+        if modifiers.command || modifiers.ctrl {
+            // Toggle selection
+            if self.selected_nodes.contains(&clicked_node_idx) {
+                self.selected_nodes.remove(&clicked_node_idx);
+            } else {
+                self.selected_nodes.insert(clicked_node_idx);
+                self.focus_node_idx = Some(clicked_node_idx);
+            }
+        } else if modifiers.shift && self.focus_node_idx.is_some() {
+            if let Some(focus) = self.focus_node_idx {
+                // Range selection in visible_nodes
+                let pos_focus = visible_nodes.iter().position(|&(idx, _)| idx == focus);
+                let pos_clicked = visible_nodes
+                    .iter()
+                    .position(|&(idx, _)| idx == clicked_node_idx);
+                if let (Some(idx_a), Some(idx_b)) = (pos_focus, pos_clicked) {
+                    let start = idx_a.min(idx_b);
+                    let end = idx_a.max(idx_b);
+                    for &(idx, _) in visible_nodes.iter().take(end + 1).skip(start) {
+                        self.selected_nodes.insert(idx);
+                    }
+                }
+            }
+        } else {
+            // Normal click: select only this node
+            self.selected_nodes.clear();
+            self.selected_nodes.insert(clicked_node_idx);
+            self.focus_node_idx = Some(clicked_node_idx);
+        }
+
+        // Sync back selected_node_idx
+        if self.selected_nodes.len() == 1 {
+            self.selected_node_idx = self.selected_nodes.iter().next().copied();
+        } else {
+            self.selected_node_idx = None;
+        }
+    }
+
     pub fn flatten_visible_tree(
         &mut self,
         snapshot: &FileArenaSnapshot,
@@ -210,6 +256,7 @@ impl GuiApp {
         snapshot: &FileArenaSnapshot,
         node_idx: u32,
         indent_level: usize,
+        visible_nodes: &[(u32, usize)],
     ) {
         let is_duplicate =
             self.highlight_duplicates && self.selected_duplicates.contains(&node_idx);
@@ -219,7 +266,7 @@ impl GuiApp {
 
         let is_expanded = self.expanded_nodes.contains(&node_idx);
         let has_children = node.is_directory() && node.first_child != NO_INDEX;
-        let is_selected = self.selected_node_idx == Some(node_idx);
+        let is_selected = self.selected_nodes.contains(&node_idx);
 
         let horizontal_res = ui.horizontal(|ui| {
             // Indent padding
@@ -305,8 +352,14 @@ impl GuiApp {
         }
 
         // Handle selection on Left-Click or Right-Click (only outside of the expand button)
-        if response.clicked() || response.secondary_clicked() {
+        if response.clicked() {
+            let modifiers = ui.input(|i| i.modifiers);
+            self.handle_node_click(node_idx, modifiers, visible_nodes);
+        } else if response.secondary_clicked() && !self.selected_nodes.contains(&node_idx) {
+            self.selected_nodes.clear();
+            self.selected_nodes.insert(node_idx);
             self.selected_node_idx = Some(node_idx);
+            self.focus_node_idx = Some(node_idx);
         }
 
         // Render the context menu on Right-Click
@@ -346,6 +399,9 @@ impl GuiApp {
             });
             return;
         }
+
+        // Query modifier keys here before the outer `ui` is borrowed by TableBuilder
+        let modifiers = ui.input(|i| i.modifiers);
 
         // Auto-expand root
         if self.expanded_nodes.is_empty() {
@@ -423,7 +479,7 @@ impl GuiApp {
                     let (node_idx, indent) = visible_nodes[r_idx];
                     let node = &snapshot.nodes[node_idx as usize];
                     let name = snapshot.string_pool.get(node.name_id).unwrap_or("unknown");
-                    let is_selected = self.selected_node_idx == Some(node_idx);
+                    let is_selected = self.selected_nodes.contains(&node_idx);
                     let is_hovered = self.hovered_node_idx == Some(node_idx);
                     let is_expanded = self.expanded_nodes.contains(&node_idx);
                     let has_children = node.is_directory() && node.first_child != NO_INDEX;
@@ -835,13 +891,12 @@ impl GuiApp {
 
                     // Handle selection/hover updates at the end of the row columns loop
                     if row_clicked {
-                        if self.selected_node_idx == Some(node_idx) {
-                            self.selected_node_idx = None;
-                        } else {
-                            self.selected_node_idx = Some(node_idx);
-                        }
-                    } else if row_secondary_clicked {
+                        self.handle_node_click(node_idx, modifiers, &visible_nodes);
+                    } else if row_secondary_clicked && !self.selected_nodes.contains(&node_idx) {
+                        self.selected_nodes.clear();
+                        self.selected_nodes.insert(node_idx);
                         self.selected_node_idx = Some(node_idx);
+                        self.focus_node_idx = Some(node_idx);
                     }
 
                     if row_hovered_by_mouse {
@@ -851,6 +906,135 @@ impl GuiApp {
             });
 
         self.hovered_node_idx = next_hovered;
+    }
+
+    pub fn render_multi_file_detail_list(
+        &mut self,
+        ui: &mut egui::Ui,
+        snapshot: &FileArenaSnapshot,
+    ) {
+        let count = self.selected_nodes.len();
+
+        // Find selection roots to avoid double-counting nested folders
+        let roots =
+            crate::stats::treemap::get_selection_roots(&snapshot.nodes, &self.selected_nodes);
+
+        let mut total_size = 0u64;
+        for &root_idx in &roots {
+            if (root_idx as usize) < snapshot.nodes.len() {
+                total_size += snapshot.nodes[root_idx as usize].size;
+            }
+        }
+
+        let mut files = 0;
+        let mut directories = 0;
+        let mut stack = Vec::new();
+        for &root_idx in &roots {
+            stack.push(root_idx);
+        }
+
+        while let Some(idx) = stack.pop() {
+            if (idx as usize) < snapshot.nodes.len() {
+                let node = &snapshot.nodes[idx as usize];
+                if node.is_directory() {
+                    directories += 1;
+                    let mut curr = node.first_child;
+                    while curr != crate::arena::NO_INDEX {
+                        stack.push(curr);
+                        curr = snapshot.nodes[curr as usize].next_sibling;
+                    }
+                } else {
+                    files += 1;
+                }
+            }
+        }
+
+        let total_size_str = prettier_bytes::ByteFormatter::new()
+            .format(total_size)
+            .to_string();
+
+        ui.vertical(|ui| {
+            // Header with Close Button
+            ui.horizontal(|ui| {
+                ui.heading(
+                    egui::RichText::new("ℹ Details")
+                        .strong()
+                        .color(ui.visuals().strong_text_color()),
+                );
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.button("❌").on_hover_text("Deselect items").clicked() {
+                        self.selected_nodes.clear();
+                        self.selected_node_idx = None;
+                        self.focus_node_idx = None;
+                    }
+                });
+            });
+            ui.separator();
+
+            ui.vertical(|ui| {
+                ui.label(
+                    egui::RichText::new(format!("{count} Selected Items"))
+                        .strong()
+                        .size(16.0),
+                );
+                ui.add_space(8.0);
+
+                ui.label(format!("Total Size: {total_size_str}"));
+                ui.label(format!("Files: {files}"));
+                ui.label(format!("Directories: {directories}"));
+                ui.add_space(12.0);
+                ui.separator();
+                ui.add_space(8.0);
+
+                ui.strong("Actions");
+                ui.add_space(4.0);
+
+                // File operations
+                ui.weak("Operations:");
+                ui.add_space(4.0);
+                ui.vertical(|ui| {
+                    let is_scanning = self.shared_state.is_scanning.load(Ordering::SeqCst);
+                    let is_dir_selected = directories > 0 && !is_scanning;
+
+                    if ui
+                        .add_enabled(is_dir_selected, egui::Button::new("🔄 Refresh Directory"))
+                        .on_hover_text("Refresh all selected directory subtrees")
+                        .clicked()
+                    {
+                        let dirs: Vec<u32> = self
+                            .selected_nodes
+                            .iter()
+                            .copied()
+                            .filter(|&idx| {
+                                (idx as usize) < snapshot.nodes.len()
+                                    && snapshot.nodes[idx as usize].is_directory()
+                            })
+                            .collect();
+                        self.refresh_directory_subtrees(&dirs);
+                    }
+                    ui.add_space(4.0);
+
+                    if ui
+                        .add_enabled(!is_scanning, egui::Button::new("♻ Move to Trash"))
+                        .clicked()
+                    {
+                        self.active_modal = Some(ActiveModal::Trash);
+                        self.delete_confirm_checked = false;
+                        self.delete_node_indices = self.selected_nodes.iter().copied().collect();
+                    }
+                    ui.add_space(4.0);
+
+                    if ui
+                        .add_enabled(!is_scanning, egui::Button::new("🗑 Permanently delete"))
+                        .clicked()
+                    {
+                        self.active_modal = Some(ActiveModal::Delete);
+                        self.delete_confirm_checked = false;
+                        self.delete_node_indices = self.selected_nodes.iter().copied().collect();
+                    }
+                });
+            });
+        });
     }
 
     pub fn render_file_detail_list(
@@ -877,7 +1061,9 @@ impl GuiApp {
                 );
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui.button("❌").on_hover_text("Deselect item").clicked() {
+                        self.selected_nodes.clear();
                         self.selected_node_idx = None;
+                        self.focus_node_idx = None;
                     }
                 });
             });
@@ -1108,14 +1294,14 @@ impl GuiApp {
                         if ui.button("♻ Move to Trash").clicked() {
                             self.active_modal = Some(ActiveModal::Trash);
                             self.delete_confirm_checked = false;
-                            self.delete_node_idx = Some(node_idx);
+                            self.delete_node_indices = vec![node_idx];
                         }
                         ui.add_space(4.0);
 
                         if ui.button("🗑 Delete Permanently").clicked() {
                             self.active_modal = Some(ActiveModal::Delete);
                             self.delete_confirm_checked = false;
-                            self.delete_node_idx = Some(node_idx);
+                            self.delete_node_indices = vec![node_idx];
                         }
                     });
                 });

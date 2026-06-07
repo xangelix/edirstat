@@ -124,7 +124,14 @@ impl super::StatComponent for DirCompositionChart {
     ) {
         use super::StatsChart;
         // Bind composition to active tree folder, falling back to root (0)
-        let active_dir = context.selected_node_idx.unwrap_or(0);
+        let active_dir = context
+            .selected_nodes
+            .iter()
+            .copied()
+            .find(|&idx| {
+                idx < snapshot.nodes.len() as u32 && snapshot.nodes[idx as usize].is_directory()
+            })
+            .unwrap_or(0);
 
         let snapshot_ptr = std::sync::Arc::as_ptr(&snapshot.nodes) as usize;
         let needs_rebuild = self.last_snapshot_ptr != snapshot_ptr
