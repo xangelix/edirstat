@@ -11,6 +11,29 @@ All notable changes to **eDirStat** will be documented in this file.
 - **📄 Changelog:** Created a clean, practical, and exciting changelog documenting all previous releases.
 - **💖 GitHub Sponsors:** Added sponsor/funding configuration pointing to `xangelix` to support the project.
 - **🍏 macOS Sandboxing Entitlements:** Packaged the macOS app with proper sandboxing entitlements for improved security and smoother OS integration.
+- **🗂️ WinDirStat Layout Mode:** Added a brand new WinDirStat-style layout mode for a classic, familiar disk usage visualization.
+- **☑️ Multi-Select & Multi-Operations:** Added support for selecting multiple items and performing bulk operations in the GUI.
+- **❓ "How it Works" Modal:** Added an informative explanation modal to help users understand the deduplication process.
+- **🌳 Default Root Selection:** Automatically selects the root directory node upon loading, improving the initial navigation flow.
+- **⚙️ EditorConfig:** Added an `.editorconfig` file to establish and enforce consistent coding styles across different editors.
+
+### Changed
+
+- **🎨 Rebranded Visuals:** Replaced existing logos and icons across the GUI and documentation with modern, high-quality SVG/raster variants, and added a utility script for icon generation.
+- **⚡ Memory & Speed Optimizations:** Dramatically reduced allocations across the board by adopting `CompactString` in engine models, precalculating directory counts, and reducing deduplicator allocations.
+- **⚡ Zero-Allocation & Branchless Search:** Implemented allocation-free, branchless case-insensitive search algorithms in the directory explorer for faster filtering.
+- **⚡ Fast Traversal & SIMD:** Integrated SIMD loop optimizations and switched to stack-allocated `SmallVec` for tracking ancestors in deep directories.
+- **⚡ Alloc-Free Treemap Rendering:** Optimized the interactive treemap with allocation-free file extension mapping.
+- **🎨 UI & Layout Refinements:** Polished the user interface by organizing bottom panel controls, improving center panel padding, adjusting column spacing, and enhancing modal layouts with higher contrast.
+- **🧹 Deduplicator Cleanup:** Disabled the file extensions panel while viewing the Deduplicator tab to reduce visual clutter, and cleaned up tab headings.
+- **♻️ Recycle Icon:** Swapped the toolbar recycle icon with a larger, more visible version.
+- **📦 Dependency Updates:** Bumped project dependencies to their latest versions for improved security and stability.
+
+### Fixed
+
+- **🍏 macOS Packaging:** Fixed incorrect icon paths in the macOS CI/CD release configuration.
+- **🖱️ Selection Behavior:** Restored the ability to de-select nodes in both the directory explorer and the interactive treemap.
+- **🔘 Dropdown Interactivity:** Fixed the click hitbox for dropdown buttons in the directory explorer.
 
 ---
 
