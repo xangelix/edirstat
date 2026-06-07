@@ -24,7 +24,7 @@ impl super::GuiApp {
         }
 
         ui.vertical(|ui| {
-            ui.label("Find and safely remove byte-for-byte identical files using an optimized 7-stage hashing pipeline.");
+            ui.label("Find and safely remove byte-for-byte identical files using cryptographically secure BLAKE3 hashes.");
             ui.separator();
 
             self.draw_deduplicator_controls(ui, snapshot);

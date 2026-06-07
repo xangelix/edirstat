@@ -361,7 +361,7 @@ impl GuiApp {
             match self.vis_mode {
                 VisMode::Treemap => {
                     ui.heading(
-                        egui::RichText::new("📊 Treemap Visualization")
+                        egui::RichText::new("📊 Treemap")
                             .strong()
                             .color(ui.visuals().strong_text_color()),
                     );
