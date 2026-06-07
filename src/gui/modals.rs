@@ -668,139 +668,194 @@ impl GuiApp {
                 .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
                 .collapsible(false)
                 .resizable(!cfg.paths.is_empty())
-                .default_width(500.0)
+                .default_width(550.0)
                 .open(&mut open)
+                .title_bar(false) // Disable default system title bar for uniform styling
                 .frame(
                     egui::Frame::window(&ctx.global_style())
-                        .stroke(egui::Stroke::new(2.0, cfg.border_color)),
+                        .fill(theme::BG_WINDOW_SLATE)
+                        .stroke(egui::Stroke::new(1.2, egui::Color32::from_rgb(74, 85, 104))) // Bright, crisp slate border
+                        .inner_margin(egui::Margin::ZERO) // Fill header completely to the borders
+                        .corner_radius(8.0),
                 )
                 .show(ctx, |ui| {
-                    ui.vertical(|ui| {
-                        let path_exists = if cfg.paths.len() == 1 {
-                            std::path::Path::new(&cfg.paths[0]).exists()
-                        } else {
-                            true
-                        };
-
-                        if path_exists {
-                            ui.heading(
-                                egui::RichText::new(&cfg.header)
-                                    .color(cfg.warning_color)
-                                    .strong(),
-                            );
-                            ui.separator();
-
-                            ui.label(if cfg.paths.len() > 1 {
-                                format!(
-                                    "You are about to delete/trash {} duplicate files/items:",
-                                    cfg.paths.len()
-                                )
-                            } else {
-                                "You are about to delete/trash the following path:".to_string()
+                    // Custom Header Area
+                    egui::Frame::new()
+                        .inner_margin(egui::Margin::symmetric(16, 12))
+                        .show(ui, |ui| {
+                            ui.horizontal(|ui| {
+                                ui.heading(
+                                    egui::RichText::new(&cfg.header)
+                                        .color(ui.visuals().strong_text_color())
+                                        .strong(),
+                                );
+                                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                    let close_btn = ui.button("❌");
+                                    if close_btn.clicked() {
+                                        self.active_modal = None;
+                                    }
+                                });
                             });
+                        });
 
-                            ui.colored_label(ui.visuals().strong_text_color(), &cfg.paths[0]);
-                            if cfg.paths.len() > 1 {
-                                egui::ScrollArea::vertical()
-                                    .max_height(200.0)
-                                    .show(ui, |ui| {
-                                        for path in &cfg.paths[1..] {
-                                            ui.small(path);
+                    // Thin, subtle separator line matching normal panels
+                    let (rect, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 1.0), egui::Sense::hover());
+                    ui.painter().hline(rect.left()..=rect.right(), rect.center().y, egui::Stroke::new(1.0, theme::STROKE_BORDER_SLATE));
+
+                    // Modal Content Frame
+                    egui::Frame::new()
+                        .inner_margin(egui::Margin::same(16))
+                        .show(ui, |ui| {
+                            ui.vertical(|ui| {
+                                let path_exists = if cfg.paths.len() == 1 {
+                                    std::path::Path::new(&cfg.paths[0]).exists()
+                                } else {
+                                    true
+                                };
+
+                                if path_exists {
+                                    ui.label(if cfg.paths.len() > 1 {
+                                        format!(
+                                            "You are about to process {} duplicate files/items:",
+                                            cfg.paths.len()
+                                        )
+                                    } else {
+                                        "You are about to process the following path:".to_string()
+                                    });
+
+                                    ui.add_space(8.0);
+
+                                    // Display list of selected items inside a high-contrast container
+                                    let path_bg = theme::BG_PANEL_SLATE;
+                                    egui::Frame::new()
+                                        .fill(path_bg)
+                                        .stroke(egui::Stroke::new(1.0, theme::STROKE_BORDER_SLATE))
+                                        .inner_margin(egui::Margin::same(12))
+                                        .corner_radius(4.0)
+                                        .show(ui, |ui| {
+                                            ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
+                                            ui.colored_label(ui.visuals().strong_text_color(), &cfg.paths[0]);
+                                            if cfg.paths.len() > 1 {
+                                                ui.add_space(4.0);
+                                                egui::ScrollArea::vertical()
+                                                    .max_height(150.0)
+                                                    .show(ui, |ui| {
+                                                        for path in &cfg.paths[1..] {
+                                                            ui.small(path);
+                                                        }
+                                                    });
+                                            }
+                                        });
+
+                                    ui.add_space(8.0);
+
+                                    ui.horizontal(|ui| {
+                                        ui.weak("Details: ");
+                                        ui.label(egui::RichText::new(&cfg.info_msg).strong());
+                                    });
+
+                                    ui.add_space(8.0);
+                                    ui.separator();
+                                    ui.add_space(8.0);
+
+                                    // Warning explanation text area
+                                    ui.horizontal(|ui| {
+                                        ui.colored_label(cfg.warning_color, "⚠");
+                                        ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
+                                        ui.label(egui::RichText::new(cfg.warning_msg).weak());
+                                    });
+
+                                    ui.add_space(12.0);
+
+                                    // Checkbox alignment
+                                    ui.checkbox(&mut self.delete_confirm_checked, cfg.checkbox_label);
+                                    ui.add_space(16.0);
+
+                                    // Action Buttons
+                                    ui.horizontal(|ui| {
+                                        if ui.button("Cancel").clicked() {
+                                            self.active_modal = None;
+                                        }
+
+                                        let confirm_btn = egui::Button::new(
+                                            egui::RichText::new(cfg.confirm_button_text)
+                                                .color(theme::COLOR_WHITE)
+                                                .strong(),
+                                        )
+                                        .fill(cfg.border_color);
+
+                                        let confirm_res =
+                                            ui.add_enabled(self.delete_confirm_checked, confirm_btn);
+                                        if confirm_res.clicked() {
+                                            match cfg.action {
+                                                DeletionAction::DeleteMultiple => {
+                                                    self.execute_deletion(
+                                                        &self.delete_node_indices.clone(),
+                                                        false,
+                                                        snapshot,
+                                                    );
+                                                    self.delete_node_indices.clear();
+                                                }
+                                                DeletionAction::TrashMultiple => {
+                                                    self.execute_deletion(
+                                                        &self.delete_node_indices.clone(),
+                                                        true,
+                                                        snapshot,
+                                                    );
+                                                    self.delete_node_indices.clear();
+                                                }
+                                                DeletionAction::DeleteDuplicates => {
+                                                    self.execute_deletion(
+                                                        &self.delete_duplicates_indices.clone(),
+                                                        false,
+                                                        snapshot,
+                                                    );
+                                                    self.delete_duplicates_indices.clear();
+                                                }
+                                                DeletionAction::TrashDuplicates => {
+                                                    self.execute_deletion(
+                                                        &self.delete_duplicates_indices.clone(),
+                                                        true,
+                                                        snapshot,
+                                                    );
+                                                    self.delete_duplicates_indices.clear();
+                                                }
+                                                DeletionAction::HardlinkDuplicates => {
+                                                    self.execute_hardlinking(
+                                                        &self.delete_duplicates_indices.clone(),
+                                                        snapshot,
+                                                    );
+                                                    self.delete_duplicates_indices.clear();
+                                                }
+                                                DeletionAction::SoftlinkDuplicates => {
+                                                    self.execute_softlinking(
+                                                        &self.delete_duplicates_indices.clone(),
+                                                        snapshot,
+                                                    );
+                                                    self.delete_duplicates_indices.clear();
+                                                }
+                                            }
+                                            self.active_modal = None;
                                         }
                                     });
-                            }
-                            ui.label(&cfg.info_msg);
-                            ui.separator();
-
-                            ui.label(cfg.warning_msg);
-                            ui.add_space(8.0);
-
-                            ui.checkbox(&mut self.delete_confirm_checked, cfg.checkbox_label);
-                            ui.add_space(8.0);
-
-                            ui.horizontal(|ui| {
-                                if ui.button("Cancel").clicked() {
-                                    self.active_modal = None;
-                                }
-
-                                let confirm_btn = egui::Button::new(
-                                    egui::RichText::new(cfg.confirm_button_text)
-                                        .color(theme::COLOR_WHITE)
-                                        .strong(),
-                                )
-                                .fill(cfg.border_color);
-
-                                let confirm_res =
-                                    ui.add_enabled(self.delete_confirm_checked, confirm_btn);
-                                if confirm_res.clicked() {
-                                    match cfg.action {
-                                        DeletionAction::DeleteMultiple => {
-                                            self.execute_deletion(
-                                                &self.delete_node_indices.clone(),
-                                                false,
-                                                snapshot,
-                                            );
-                                            self.delete_node_indices.clear();
-                                        }
-                                        DeletionAction::TrashMultiple => {
-                                            self.execute_deletion(
-                                                &self.delete_node_indices.clone(),
-                                                true,
-                                                snapshot,
-                                            );
-                                            self.delete_node_indices.clear();
-                                        }
-                                        DeletionAction::DeleteDuplicates => {
-                                            self.execute_deletion(
-                                                &self.delete_duplicates_indices.clone(),
-                                                false,
-                                                snapshot,
-                                            );
-                                            self.delete_duplicates_indices.clear();
-                                        }
-                                        DeletionAction::TrashDuplicates => {
-                                            self.execute_deletion(
-                                                &self.delete_duplicates_indices.clone(),
-                                                true,
-                                                snapshot,
-                                            );
-                                            self.delete_duplicates_indices.clear();
-                                        }
-                                        DeletionAction::HardlinkDuplicates => {
-                                            self.execute_hardlinking(
-                                                &self.delete_duplicates_indices.clone(),
-                                                snapshot,
-                                            );
-                                            self.delete_duplicates_indices.clear();
-                                        }
-                                        DeletionAction::SoftlinkDuplicates => {
-                                            self.execute_softlinking(
-                                                &self.delete_duplicates_indices.clone(),
-                                                snapshot,
-                                            );
-                                            self.delete_duplicates_indices.clear();
-                                        }
+                                } else {
+                                    ui.heading(
+                                        egui::RichText::new("❌ Path Does Not Exist!")
+                                            .color(theme::DELETION_WARNING)
+                                            .strong(),
+                                    );
+                                    ui.separator();
+                                    ui.label(
+                                        "Error: The path you are trying to delete does not exist on disk.",
+                                    );
+                                    ui.colored_label(ui.visuals().strong_text_color(), &cfg.paths[0]);
+                                    ui.add_space(16.0);
+                                    if ui.button("Close").clicked() {
+                                        self.active_modal = None;
                                     }
-                                    self.active_modal = None;
                                 }
                             });
-                        } else {
-                            ui.heading(
-                                egui::RichText::new("❌ Path Does Not Exist!")
-                                    .color(theme::DELETION_WARNING)
-                                    .strong(),
-                            );
-                            ui.separator();
-                            ui.label(
-                                "Error: The path you are trying to delete does not exist on disk.",
-                            );
-                            ui.colored_label(ui.visuals().strong_text_color(), &cfg.paths[0]);
-                            ui.add_space(8.0);
-                            if ui.button("Close").clicked() {
-                                self.active_modal = None;
-                            }
-                        }
-                    });
+                        });
                 });
             if !open {
                 self.active_modal = None;
@@ -815,26 +870,78 @@ impl GuiApp {
                 .collapsible(false)
                 .resizable(false)
                 .open(&mut open)
+                .title_bar(false) // Disable default system title bar
+                .frame(
+                    egui::Frame::window(&ctx.global_style())
+                        .fill(theme::BG_WINDOW_SLATE)
+                        .stroke(egui::Stroke::new(1.2, egui::Color32::from_rgb(74, 85, 104))) // Matching bright slate border
+                        .inner_margin(egui::Margin::ZERO)
+                        .corner_radius(8.0),
+                )
                 .show(ctx, |ui| {
-                    ui.vertical_centered(|ui| {
-                        ui.add(
-                            egui::Image::new(egui::include_image!("../../assets/img/logo-nosubtext-transparent.svg"))
-                        );
+                    // Custom Header Area
+                    egui::Frame::new()
+                        .inner_margin(egui::Margin::symmetric(16, 12))
+                        .show(ui, |ui| {
+                            ui.horizontal(|ui| {
+                                ui.heading(
+                                    egui::RichText::new("ℹ About eDirStat")
+                                        .color(ui.visuals().strong_text_color())
+                                        .strong(),
+                                );
+                                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                    let close_btn = ui.button("❌");
+                                    if close_btn.clicked() {
+                                        self.active_modal = None;
+                                    }
+                                });
+                            });
+                        });
 
-                        ui.label(concat!("v", env!("CARGO_PKG_VERSION")));
-                        ui.separator();
-                        ui.label("By: Cody Wyatt Neiman (xangelix) <".to_owned() + "neiman" + "@" + "cody.to>");
-                        ui.add_space(8.0);
-                        ui.label("A high-performance disk space analyzer and deduplication toolkit built in Rust.");
-                        ui.add_space(4.0);
-                        ui.label("Features parallel, work-stealing directory traversal, zero-copy memory-mapped file structures, and responsive, interactive treemaps.");
-                        ui.add_space(4.0);
-                        ui.label("The integrated deduplicator runs a multi-stage cryptographic hashing pipeline to safely isolate duplicate groups, calculate reclaimable space, and respect system-level hardlinks.");
-                        ui.add_space(8.0);
-                        if ui.button("Close").clicked() {
-                            self.active_modal = None;
-                        }
-                    });
+                    // Thin, subtle separator line
+                    let (rect, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 1.0), egui::Sense::hover());
+                    ui.painter().hline(rect.left()..=rect.right(), rect.center().y, egui::Stroke::new(1.0, theme::STROKE_BORDER_SLATE));
+
+                    // Content Area
+                    egui::Frame::new()
+                        .inner_margin(egui::Margin::same(16))
+                        .show(ui, |ui| {
+                            ui.vertical_centered(|ui| {
+                                ui.add(
+                                    egui::Image::new(egui::include_image!("../../assets/img/logo-nosubtext-transparent.svg"))
+                                        .max_height(100.0)
+                                );
+                                ui.add_space(8.0);
+
+                                ui.label(egui::RichText::new(concat!("v", env!("CARGO_PKG_VERSION"))).strong().color(ui.visuals().strong_text_color()));
+                                ui.add_space(8.0);
+                                ui.separator();
+                                ui.add_space(8.0);
+
+                                ui.label(egui::RichText::new("By: Cody Wyatt Neiman (xangelix) <neiman@cody.to>"));
+                                ui.add_space(12.0);
+
+                                let info_bg = theme::BG_PANEL_SLATE;
+                                egui::Frame::new()
+                                    .fill(info_bg)
+                                    .stroke(egui::Stroke::new(1.0, theme::STROKE_BORDER_SLATE))
+                                    .inner_margin(egui::Margin::same(12))
+                                    .corner_radius(4.0)
+                                    .show(ui, |ui| {
+                                        ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
+                                        ui.label("A high-performance disk space analyzer and deduplication toolkit built in Rust.");
+                                        ui.add_space(6.0);
+                                        ui.label("Features parallel, work-stealing directory traversal, zero-copy memory-mapped file structures, and responsive, interactive treemaps.");
+                                        ui.add_space(6.0);
+                                        ui.label("The integrated deduplicator runs a multi-stage cryptographic hashing pipeline to safely isolate duplicate groups, calculate reclaimable space, and respect system-level hardlinks.");
+                                    });
+
+                                ui.add_space(16.0);
+                                if ui.button("Close").clicked() {
+                                    self.active_modal = None;
+                                }
+                            });
+                        });
                 });
             if !open {
                 self.active_modal = None;
