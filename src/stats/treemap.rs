@@ -233,8 +233,15 @@ impl StatComponent for TreemapChart {
                     context.selected_nodes.insert(block.node_idx);
                 }
             } else {
-                context.selected_nodes.clear();
-                context.selected_nodes.insert(block.node_idx);
+                // Normal click: toggle selection if already selected singly
+                if context.selected_nodes.len() == 1
+                    && context.selected_nodes.contains(&block.node_idx)
+                {
+                    context.selected_nodes.clear();
+                } else {
+                    context.selected_nodes.clear();
+                    context.selected_nodes.insert(block.node_idx);
+                }
             }
             *context.scroll_to_selected = true; // Raise scroll trigger
 

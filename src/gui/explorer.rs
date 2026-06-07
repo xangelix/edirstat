@@ -162,10 +162,15 @@ impl GuiApp {
                 }
             }
         } else {
-            // Normal click: select only this node
-            self.selected_nodes.clear();
-            self.selected_nodes.insert(clicked_node_idx);
-            self.focus_node_idx = Some(clicked_node_idx);
+            // Normal click: if already selected singly, deselect it. Otherwise, select only this node.
+            if self.selected_nodes.len() == 1 && self.selected_nodes.contains(&clicked_node_idx) {
+                self.selected_nodes.clear();
+                self.focus_node_idx = None;
+            } else {
+                self.selected_nodes.clear();
+                self.selected_nodes.insert(clicked_node_idx);
+                self.focus_node_idx = Some(clicked_node_idx);
+            }
         }
 
         // Sync back selected_node_idx
