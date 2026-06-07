@@ -1,12 +1,8 @@
-use std::path::Path;
-
 use eframe::egui::{Color32, Rect, pos2};
 use smallvec::SmallVec;
 
 use super::{StatComponent, StatContext, StatsChart};
 use crate::arena::{FileNode, NO_INDEX, StringPool};
-
-const NO_EXTENSION: &str = "(no extension)";
 
 pub struct TreemapBlock {
     pub rect: Rect,
@@ -330,11 +326,8 @@ fn recurse_child(
 
     if is_leaf_or_too_small {
         let name = config.string_pool.get(child.name_id).unwrap_or("");
-        let ext = Path::new(name).extension().map_or_else(
-            || NO_EXTENSION.to_string(),
-            |s| s.to_string_lossy().to_ascii_lowercase(),
-        );
-        let color = crate::colors::get_color_for_extension(&ext);
+        let ext = crate::arena::get_ext_slice(name);
+        let color = crate::colors::get_color_for_extension(ext);
         blocks.push(TreemapBlock {
             rect: child_rect,
             node_idx: child_idx,
@@ -379,11 +372,8 @@ fn build_treemap(
 
     if !node.is_directory() || depth >= config.max_depth {
         let name = config.string_pool.get(node.name_id).unwrap_or("");
-        let ext = Path::new(name).extension().map_or_else(
-            || NO_EXTENSION.to_string(),
-            |s| s.to_string_lossy().to_ascii_lowercase(),
-        );
-        let color = crate::colors::get_color_for_extension(&ext);
+        let ext = crate::arena::get_ext_slice(name);
+        let color = crate::colors::get_color_for_extension(ext);
 
         blocks.push(TreemapBlock {
             rect,
@@ -417,11 +407,8 @@ fn build_treemap(
 
     if avg_area_per_child < MIN_AVG_CHILD_AREA {
         let name = config.string_pool.get(node.name_id).unwrap_or("");
-        let ext = Path::new(name).extension().map_or_else(
-            || NO_EXTENSION.to_string(),
-            |s| s.to_string_lossy().to_ascii_lowercase(),
-        );
-        let color = crate::colors::get_color_for_extension(&ext);
+        let ext = crate::arena::get_ext_slice(name);
+        let color = crate::colors::get_color_for_extension(ext);
         blocks.push(TreemapBlock {
             rect,
             node_idx,

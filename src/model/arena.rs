@@ -351,3 +351,36 @@ impl EntryMetadata {
         })
     }
 }
+
+/// Performs a zero-allocation operation on a lowercase slice representation of the extension.
+/// Uses a stack array for extensions up to 32 bytes, falling back to dynamic allocation only
+///
+/// for rare, exceptionally long extensions.
+#[inline]
+pub fn with_lowercase_ext<R, F: FnOnce(&str) -> R>(ext: &str, f: F) -> R {
+    let mut buf = [0u8; 32];
+    if ext.len() <= 32 {
+        let mut len = 0;
+        for (b, dest) in ext.bytes().zip(buf.iter_mut()) {
+            *dest = b.to_ascii_lowercase();
+            len += 1;
+        }
+        if let Ok(s) = std::str::from_utf8(&buf[..len]) {
+            return f(s);
+        }
+    }
+    f(&ext.to_ascii_lowercase())
+}
+
+/// Zero-allocation raw extension slicer
+#[inline]
+#[must_use]
+pub fn get_ext_slice(name: &str) -> &str {
+    name.rfind('.').map_or(NO_EXTENSION, |dot_idx| {
+        if dot_idx > 0 && dot_idx < name.len() - 1 {
+            &name[dot_idx + 1..]
+        } else {
+            NO_EXTENSION
+        }
+    })
+}

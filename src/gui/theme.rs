@@ -62,7 +62,19 @@ pub const COLOR_TRANSPARENT: Color32 = Color32::TRANSPARENT;
 
 #[must_use]
 pub fn get_color_for_extension(ext: &str) -> egui::Color32 {
-    match ext {
+    let mut buf = [0u8; 16];
+    let ext_lower = if ext.len() <= 16 && ext.bytes().any(|b| b.is_ascii_uppercase()) {
+        let mut len = 0;
+        for (b, dest) in ext.bytes().zip(buf.iter_mut()) {
+            *dest = b.to_ascii_lowercase();
+            len += 1;
+        }
+        std::str::from_utf8(&buf[..len]).unwrap_or(ext)
+    } else {
+        ext
+    };
+
+    match ext_lower {
         "rs" => EXT_RUST,
         "toml" => EXT_TOML,
         "git" | "gitignore" => EXT_GIT,
@@ -74,13 +86,12 @@ pub fn get_color_for_extension(ext: &str) -> egui::Color32 {
         "zip" | "tar" | "gz" => EXT_COMPRESSED,
         "mp3" | "wav" | "flac" => EXT_AUDIO,
         "mp4" | "mkv" | "avi" => EXT_VIDEO,
-        "png" | "jpg" | "jpeg" | "gif" => EXT_IMAGE,
         crate::arena::NO_EXTENSION => EXT_NONE,
         _ => {
             // Hash the extension to generate a stable, beautiful pseudo-random color
             let mut hash: u32 = 5381;
-            for c in ext.bytes() {
-                hash = ((hash << 5).wrapping_add(hash)).wrapping_add(c as u32);
+            for b in ext_lower.bytes() {
+                hash = ((hash << 5).wrapping_add(hash)).wrapping_add(b as u32);
             }
             // Hue from hash, Saturation ~75%, Lightness ~55%
             #[allow(clippy::cast_precision_loss)]
