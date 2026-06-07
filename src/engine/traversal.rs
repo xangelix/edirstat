@@ -22,7 +22,7 @@ pub struct ScanTask {
     pub path: PathBuf,
     pub parent_id: LocalId,
     pub worker_id: u8,
-    pub ancestors: Vec<(u64, u64)>,
+    pub ancestors: smallvec::SmallVec<[(u64, u64); 16]>,
 }
 
 pub enum ScanEvent {
@@ -119,7 +119,7 @@ impl TraversalEngine {
                 path: root_path.clone(),
                 parent_id: LocalId(0),
                 worker_id: 0,
-                ancestors: vec![root_file_id],
+                ancestors: smallvec::smallvec![root_file_id],
             };
             injector.push(initial_task);
 
