@@ -612,9 +612,15 @@ impl GuiApp {
                             }
                         }
 
-                        // Interact with the entire cell
+                        // Interact with the cell strictly to the right of the expand arrow
+                        let mut interact_rect = ui.max_rect();
+                        #[allow(clippy::cast_precision_loss)]
+                        let offset_width = (indent as f32).mul_add(16.0, 16.0);
+                        interact_rect.min.x =
+                            (interact_rect.min.x + offset_width).min(interact_rect.max.x);
+
                         let cell_resp = ui.interact(
-                            ui.max_rect(),
+                            interact_rect,
                             ui.id().with(("cell_interact", 0)),
                             egui::Sense::click(),
                         );
