@@ -24,7 +24,15 @@ impl super::GuiApp {
         }
 
         ui.vertical(|ui| {
-            ui.label("Find and safely remove byte-for-byte identical files using cryptographically secure BLAKE3 hashes.");
+            ui.horizontal(|ui| {
+                ui.label("Find and safely remove byte-for-byte identical files using cryptographically secure BLAKE3 hashes.");
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.add_space(5.0);
+                    if ui.button("ℹ How it Works").clicked() {
+                        self.active_modal = Some(crate::gui::ActiveModal::HowItWorks);
+                    }
+                });
+            });
             ui.separator();
 
             self.draw_deduplicator_controls(ui, snapshot);

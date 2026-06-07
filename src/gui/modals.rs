@@ -14,6 +14,7 @@ pub enum ActiveModal {
     TrashDuplicates,
     HardlinkDuplicates,
     SoftlinkDuplicates,
+    HowItWorks,
 }
 
 fn count_nested_stats(
@@ -940,6 +941,123 @@ impl GuiApp {
                                 if ui.button("Close").clicked() {
                                     self.active_modal = None;
                                 }
+                            });
+                        });
+                });
+            if !open {
+                self.active_modal = None;
+            }
+        }
+
+        // Render "How Deduplication Works" Modal
+        if self.active_modal == Some(ActiveModal::HowItWorks) {
+            let mut open = true;
+            egui::Window::new("ℹ How Deduplication Works")
+                .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+                .collapsible(false)
+                .resizable(false)
+                .open(&mut open)
+                .title_bar(false) // Disable default system title bar
+                .frame(
+                    egui::Frame::window(&ctx.global_style())
+                        .fill(theme::BG_WINDOW_SLATE)
+                        .stroke(egui::Stroke::new(1.2, egui::Color32::from_rgb(74, 85, 104)))
+                        .inner_margin(egui::Margin::ZERO)
+                        .corner_radius(8.0),
+                )
+                .show(ctx, |ui| {
+                    // Custom Header Area
+                    egui::Frame::new()
+                        .inner_margin(egui::Margin::symmetric(16, 12))
+                        .show(ui, |ui| {
+                            ui.horizontal(|ui| {
+                                ui.heading(
+                                    egui::RichText::new("ℹ How Deduplication Works")
+                                        .color(ui.visuals().strong_text_color())
+                                        .strong(),
+                                );
+                                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                    let close_btn = ui.button("❌");
+                                    if close_btn.clicked() {
+                                        self.active_modal = None;
+                                    }
+                                });
+                            });
+                        });
+
+                    // Thin, subtle separator line
+                    let (rect, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 1.0), egui::Sense::hover());
+                    ui.painter().hline(rect.left()..=rect.right(), rect.center().y, egui::Stroke::new(1.0, theme::STROKE_BORDER_SLATE));
+
+                    // Content Area
+                    egui::Frame::new()
+                        .inner_margin(egui::Margin::same(16))
+                        .show(ui, |ui| {
+                            ui.vertical(|ui| {
+                                egui::ScrollArea::vertical()
+                                    .max_height(450.0)
+                                    .auto_shrink([false, true]) // Lock scrollbar against the right edge
+                                    .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysVisible)
+                                    .content_margin(egui::Margin {
+                                        left: 0,
+                                        right: 14, // Clean separation padding before the scrollbar
+                                        top: 0,
+                                        bottom: 0,
+                                    })
+                                    .show(ui, |ui| {
+                                        ui.vertical(|ui| {
+                                            ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
+
+                                            ui.label(
+                                                "Rather than comparing every file's bytes directly (which requires slow, pairwise O(N²) scans), this system utilizes a highly optimized 7-stage pipeline to identify identical content safely and efficiently."
+                                            );
+                                            ui.add_space(10.0);
+
+                                            ui.strong("The 7-Stage Pipeline:");
+                                            ui.add_space(6.0);
+
+                                            let steps = [
+                                                ("1. Size Partitioning", "Files are grouped by their exact size in bytes. Any file with a unique size is discarded immediately, bypassing disk I/O entirely."),
+                                                ("2. Prefix Hashing", "The first 4KB of remaining candidates are hashed. This quickly filters out files with different headers or metadata formats."),
+                                                ("3. Midpoint Hashing", "A 4KB block from the center of the remaining files is hashed, catching internal structural differences."),
+                                                ("4. Suffix Hashing", "The last 4KB of data is hashed. This is highly effective at identifying differences in trailing contents or metadata."),
+                                                ("5. Multi-Range Hashing", "Large files (over 100MB) undergo periodic block sampling across their entire length to verify content consistency without reading the entire file."),
+                                                ("6. Full BLAKE3 Hashing", "For remaining candidates, a full BLAKE3 cryptographic hash is computed. Due to the high collision resistance of a 256-bit space, matching hashes indicate an astronomical unlikeliness that the files differ, providing a highly reliable proof of identity without requiring pairwise comparisons."),
+                                                ("7. Timestamp Validation", "Right before displaying or executing any deduplication action, the application verifies the files' timestamps on disk to protect against changes that occurred since snapshot generation.")
+                                            ];
+
+                                            for (title, desc) in steps {
+                                                egui::Frame::new()
+                                                    .fill(theme::BG_PANEL_SLATE)
+                                                    .stroke(egui::Stroke::new(1.0, theme::STROKE_BORDER_SLATE))
+                                                    .inner_margin(egui::Margin::same(10))
+                                                    .corner_radius(4.0)
+                                                    .show(ui, |ui| {
+                                                        // Stretch step frame to align perfectly with content bounds
+                                                        ui.set_min_width(ui.available_width());
+                                                        ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
+                                                        ui.strong(title);
+                                                        ui.add_space(2.0);
+                                                        ui.small(desc);
+                                                    });
+                                                ui.add_space(6.0);
+                                            }
+
+                                            ui.add_space(10.0);
+                                            ui.strong("Why is this sufficient?");
+                                            ui.add_space(4.0);
+                                            ui.label(
+                                                "This multi-stage filter ensures that only files with identical size, prefix, midpoint, suffix, and distributed block samples are read in full. Finally, comparing a 256-bit BLAKE3 cryptographic hash offers a safety profile on par with industry-grade secure transfer protocols, eliminating the need for slow, pairwise byte-by-byte comparisons."
+                                            );
+                                        });
+                                    });
+
+                                ui.add_space(16.0);
+                                ui.vertical_centered(|ui| {
+                                    if ui.button("Close").clicked() {
+                                        self.active_modal = None;
+                                    }
+                                });
                             });
                         });
                 });
