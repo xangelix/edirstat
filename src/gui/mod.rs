@@ -1238,7 +1238,7 @@ impl GuiApp {
                 ui.add_space(5.0);
 
                 // Right Extensions Panel inside the bottom section if not collapsed
-                if !self.right_panel_collapsed {
+                if !self.right_panel_collapsed && self.vis_mode != VisMode::Deduplicator {
                     egui::Panel::right("windirstat_extensions_panel")
                         .resizable(true)
                         .default_size(210.0)
