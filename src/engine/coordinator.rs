@@ -259,7 +259,9 @@ fn register_id(id_map: &mut Vec<Vec<u32>>, worker_id: u8, local_id: LocalId, glo
     }
     let l_idx = local_id.0 as usize;
     if l_idx >= id_map[w_idx].len() {
-        id_map[w_idx].resize(l_idx + 1, NO_INDEX);
+        let needed_len = l_idx + 1;
+        let new_len = needed_len.next_power_of_two().max(128);
+        id_map[w_idx].resize(new_len, NO_INDEX);
     }
     id_map[w_idx][l_idx] = global_id;
 }
