@@ -320,8 +320,8 @@ fn recurse_child(
 ) {
     const MIN_PIXEL_DIM: f32 = 12.0;
 
-    if child_rect.width() <= 0.0 || child_rect.height() <= 0.0 {
-        return;
+    if child_rect.width() < 1.0 || child_rect.height() < 1.0 {
+        return; // Discard sub-pixel visual artifacts early
     }
 
     let child = &config.nodes[child_idx as usize];
@@ -373,7 +373,7 @@ fn build_treemap(
     const MIN_AVG_CHILD_AREA: f64 = 16.0;
 
     let node = &config.nodes[node_idx as usize];
-    if node.size == 0 || rect.width() < 2.0 || rect.height() < 2.0 {
+    if node.size == 0 || rect.width() < 1.0 || rect.height() < 1.0 {
         return;
     }
 
