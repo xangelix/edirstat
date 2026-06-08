@@ -216,58 +216,54 @@ fn extract_all_links_from_record(record_buffer: &[u8]) -> Vec<ExtractedLink> {
 
     for attr in &attrs {
         match attr.ty {
-            0x30 => {
+            0x30 if !attr.is_non_resident && attr.payload.len() >= 24 => {
                 // Resident FileName Attribute
-                if !attr.is_non_resident && attr.payload.len() >= 24 {
-                    let val_offset =
-                        u16::from_le_bytes(attr.payload[20..22].try_into().unwrap_or([0; 2]))
-                            as usize;
-                    let val_len =
-                        u32::from_le_bytes(attr.payload[16..20].try_into().unwrap_or([0; 4]))
-                            as usize;
-                    if val_offset + val_len <= attr.payload.len() && val_len >= 66 {
-                        let val = &attr.payload[val_offset..val_offset + val_len];
-                        let parent_ref = u64::from_le_bytes(val[0..8].try_into().unwrap_or([0; 8]))
-                            & 0x0000_ffff_ffff_ffff;
-                        let namespace = val[65];
-                        let prio = match namespace {
-                            1 => 3, // Win32
-                            3 => 2, // Win32AndDos
-                            2 => 1, // Dos
-                            _ => 0, // Posix
-                        };
+                let val_offset =
+                    u16::from_le_bytes(attr.payload[20..22].try_into().unwrap_or([0; 2]))
+                        as usize;
+                let val_len =
+                    u32::from_le_bytes(attr.payload[16..20].try_into().unwrap_or([0; 4]))
+                        as usize;
+                if val_offset + val_len <= attr.payload.len() && val_len >= 66 {
+                    let val = &attr.payload[val_offset..val_offset + val_len];
+                    let parent_ref = u64::from_le_bytes(val[0..8].try_into().unwrap_or([0; 8]))
+                        & 0x0000_ffff_ffff_ffff;
+                    let namespace = val[65];
+                    let prio = match namespace {
+                        1 => 3, // Win32
+                        3 => 2, // Win32AndDos
+                        2 => 1, // Dos
+                        _ => 0, // Posix
+                    };
 
-                        let name_len = val[64] as usize;
-                        if 66 + name_len * 2 <= val.len() {
-                            let name_raw = &val[66..66 + name_len * 2];
-                            let u16_chars: Vec<u16> = name_raw
-                                .chunks_exact(2)
-                                .map(|c| u16::from_le_bytes([c[0], c[1]]))
-                                .collect();
+                    let name_len = val[64] as usize;
+                    if 66 + name_len * 2 <= val.len() {
+                        let name_raw = &val[66..66 + name_len * 2];
+                        let u16_chars: Vec<u16> = name_raw
+                            .chunks_exact(2)
+                            .map(|c| u16::from_le_bytes([c[0], c[1]]))
+                            .collect();
 
-                            if let Ok(decoded_name) = String::from_utf16(&u16_chars) {
-                                let compact_name = CompactString::new(&decoded_name);
-                                let entry = links
-                                    .entry(parent_ref)
-                                    .or_insert_with(|| (CompactString::new(""), -1));
-                                if prio > entry.1 {
-                                    *entry = (compact_name, prio);
-                                }
+                        if let Ok(decoded_name) = String::from_utf16(&u16_chars) {
+                            let compact_name = CompactString::new(&decoded_name);
+                            let entry = links
+                                .entry(parent_ref)
+                                .or_insert_with(|| (CompactString::new(""), -1));
+                            if prio > entry.1 {
+                                *entry = (compact_name, prio);
                             }
                         }
+                    }
 
-                        if fallback_size == 0 {
-                            fallback_size =
-                                u64::from_le_bytes(val[48..56].try_into().unwrap_or([0; 8]));
-                        }
+                    if fallback_size == 0 {
+                        fallback_size =
+                            u64::from_le_bytes(val[48..56].try_into().unwrap_or([0; 8]));
                     }
                 }
             }
-            0x80 => {
+            0x80 if attr.name_length == 0 => {
                 // $DATA Attribute
-                if attr.name_length == 0 {
-                    unnamed_data_size = Some(attr.value_length);
-                }
+                unnamed_data_size = Some(attr.value_length);
             }
             0x20 => {
                 // $ATTRIBUTE_LIST Attribute
@@ -340,12 +336,13 @@ fn find_target_record_in_memory(
         let mut found = false;
         if let Some(children) = children_map.get(&current_record) {
             for &child_id in children {
-                if let Some(Some(entry)) = mft_entries.get(child_id as usize) {
-                    if entry.is_dir && entry.name.to_ascii_lowercase() == segment {
-                        current_record = child_id;
-                        found = true;
-                        break;
-                    }
+                if let Some(Some(entry)) = mft_entries.get(child_id as usize)
+                    && entry.is_dir
+                    && entry.name.to_ascii_lowercase() == segment
+                {
+                    current_record = child_id;
+                    found = true;
+                    break;
                 }
             }
         }
@@ -509,12 +506,9 @@ pub fn try_scan_mft(
                                     modified = nt_time_to_unix(u64::from_le_bytes(
                                         std_info[8..16].try_into().unwrap_or([0; 8]),
                                     ));
-                                    accessed = std_info[24..32]
-                                        .try_into()
-                                        .ok()
-                                        .map_or(0, u64::from_le_bytes)
-                                        .try_into()
-                                        .map_or(0, nt_time_to_unix);
+                                    accessed = nt_time_to_unix(u64::from_le_bytes(
+                                        std_info[24..32].try_into().unwrap_or([0; 8]),
+                                    ));
                                     break;
                                 }
                             }
@@ -555,7 +549,7 @@ pub fn try_scan_mft(
                 bytes_left -= to_read as u64;
 
                 // Update ingestion progress bar telemetry smoothly during sequential ingestion phase (Pass 1)
-                if current_record_id % 10000 == 0 {
+                if current_record_id.is_multiple_of(10000) {
                     stats
                         .files_scanned
                         .store(current_record_id as usize, Ordering::Relaxed);
