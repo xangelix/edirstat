@@ -205,12 +205,15 @@ Key Highlights:
 - Achieves a **3.60x speedup** on mechanical HDDs even when processing massive, deeply nested directory paths.
 - Smoothly scales directory traversal workload across all available CPU threads.
 
-#### `/home/tux/Documents/git`
+#### System Details
 
 AMD Ryzen 9 9950X3D (32)
-Samsung 990 Pro NVMe SSD (Gen 4)
+
 Linux 6.18.34-1-cachyos-lts
-BTRFS
+
+#### `/home/tux/Documents/git`
+
+Samsung 990 Pro NVMe SSD (Gen 4) [btrfs]
 
 Dense, an enormous amount of small files and directories.
 
@@ -247,10 +250,7 @@ Speedup (QDirStat / eDirStat): 5.00x
 
 #### `/run/media/tux/F1/Games/PC/SteamLibrary/steamapps/common`
 
-AMD Ryzen 9 9950X3D (32)
-Samsung SSD 870 QVO 8TB
-Linux 6.18.34-1-cachyos-lts
-BTRFS
+Samsung SSD 870 QVO 8TB [btrfs]
 
 Game files, a mix of large and small files on a SATA SSD.
 
@@ -287,10 +287,7 @@ Speedup (QDirStat / eDirStat): 7.20x
 
 #### `/run/media/tux/D1`
 
-AMD Ryzen 9 9950X3D (32)
-Seagate Exos X18 18TB HDD
-Linux 6.18.34-1-cachyos-lts
-BTRFS
+Seagate Exos X18 18TB HDD [btrfs]
 
 Large files, but fewer, on an HDD. Less directory nesting.
 
@@ -327,10 +324,7 @@ Speedup (QDirStat / eDirStat): 7.54x
 
 #### `/run/media/tux/B4`
 
-AMD Ryzen 9 9950X3D (32)
-Toshiba MG09SACA16EA 16TB HDD
-Linux 6.18.34-1-cachyos-lts
-BTRFS
+Toshiba MG09SACA16EA 16TB HDD [btrfs]
 
 An enormous amount of tiny files with deep directory nesting, on an HDD.
 
