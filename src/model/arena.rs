@@ -241,7 +241,7 @@ impl FileArenaSnapshot {
         if first.starts_with('/') || first.contains(':') {
             let mut path = first.to_string();
             for part in &parts[1..] {
-                if !path.ends_with('/') {
+                if !path.ends_with('/') && !path.ends_with('\\') {
                     path.push('/');
                 }
                 path.push_str(part);
@@ -315,6 +315,31 @@ mod tests {
         assert_eq!(snapshot.get_full_path(0), "/home/tux");
         assert_eq!(snapshot.get_full_path(1), "/home/tux/Documents");
         assert_eq!(snapshot.get_full_path(2), "/home/tux/Documents/test.rs");
+    }
+
+    #[test]
+    fn test_path_reconstruction_windows_drive() {
+        let mut pool = StringPool::new();
+        let root_id = pool.get_or_insert(b"C:\\");
+        let dir_id = pool.get_or_insert(b"Program Files");
+        let file_id = pool.get_or_insert(b"test.exe");
+
+        let nodes = vec![
+            FileNode::new(root_id, None, true, false, 0, 0, 0),
+            FileNode::new(dir_id, Some(0), true, false, 0, 0, 0),
+            FileNode::new(file_id, Some(1), false, false, 0, 0, 0),
+        ];
+
+        let dir_counts = precompute_dir_counts(&nodes);
+        let snapshot = FileArenaSnapshot {
+            nodes: Arc::new(nodes),
+            string_pool: Arc::new(pool),
+            dir_counts: Arc::new(dir_counts),
+        };
+
+        assert_eq!(snapshot.get_full_path(0), "C:\\");
+        assert_eq!(snapshot.get_full_path(1), "C:\\Program Files");
+        assert_eq!(snapshot.get_full_path(2), "C:\\Program Files/test.exe");
     }
 }
 
