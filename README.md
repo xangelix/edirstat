@@ -10,7 +10,7 @@
 
 Unlike traditional analyzers that crawl sequentially, **eDirStat** is built from the ground up for modern multi-core systems. It couples a blazing-fast, work-stealing multithreaded directory walker with a zero-copy arena data structure. This allows you to scan millions of files seamlessly, visualize space hogs instantly via adaptive HSL gradients, and save/load system snapshots in milliseconds using memory-mapped files.
 
-[**3.6x to 7.5x speedup** vs QDirStat](#benchmarks)
+[**3.6x to 7.5x speedup** vs `QDirStat`](#benchmarks)
 
 ---
 
@@ -185,23 +185,23 @@ The engine remains hardlink-aware, allowing it to accurately differentiate betwe
 
 ## Benchmarks
 
-To evaluate traversal performance, `edirstat` includes a custom comparison benchmark target comparing it against `qdirstat-cache-writer` (the official headless command-line crawler shipped with QDirStat for background scanning).
+To evaluate traversal performance, `edirstat` includes a custom comparison benchmark target comparing it against `qdirstat-cache-writer` (the official headless command-line crawler shipped with `QDirStat` for background scanning).
 
 ### How It Works & Why It's Fair
 
-1. **End-to-End Subprocess Spawning:** Both tools are launched as independent external subprocesses (running the optimized release binary for `edirstat` and the `perl` script execution for QDirStat). This captures full end-to-end CLI execution time, including binary loading, runtime initialization (Perl interpreter boot vs. Rust startup), option parsing, and traversal startup.
+1. **End-to-End Subprocess Spawning:** Both tools are launched as independent external subprocesses (running the optimized release binary for `edirstat` and the `perl` script execution for `QDirStat`). This captures full end-to-end CLI execution time, including binary loading, runtime initialization (Perl interpreter boot vs. Rust startup), option parsing, and traversal startup.
 2. **Warm Cache Inode Priming:** The benchmark performs 2 warm-up runs for each target directory to prime the OS directory entry page caches. This eliminates disk I/O bottlenecks and isolates CPU/algorithm execution efficiency (multi-threaded, work-stealing Rust vs. single-threaded Perl).
 3. **Statistical Averaging:** Measurements are collected across 5 consecutive sample runs to compute a robust median and average traversal duration.
 
-### Vs QDirStat
+### Vs `QDirStat`
 
-Across a diverse suite of storage devices and directory layouts, **eDirStat** consistently exceeds the performance of QDirStat in duplicate, delivering a consistent **3.6x to 7.5x speedup** in scan time!
+Across a diverse suite of storage devices and directory layouts, **eDirStat** consistently exceeds the performance of `QDirStat` in duplicate, delivering a consistent **3.6x to 7.5x speedup** in scan time!
 
-Whether crawling highly nested code repositories on high-speed NVMe drives, game installations on SATA SSDs, or deep directory trees on enterprise HDDs, `edirstat`'s parallel, work-stealing multithreading model, allows it to remain the fastest disk usage analyzer available.
+Whether crawling highly nested code repositories on high-speed `NVMe` drives, game installations on SATA SSDs, or deep directory trees on enterprise HDDs, `edirstat`'s parallel, work-stealing multithreading model, allows it to remain the fastest disk usage analyzer available.
 
 Key Highlights:
 
-- Up to **7.54x faster** than the QDirStat backend writer, especially on SSDs.
+- Up to **7.54x faster** than the `QDirStat` backend writer, especially on SSDs.
 - Achieves a **3.60x speedup** on mechanical HDDs even when processing massive, deeply nested directory paths.
 - Smoothly scales directory traversal workload across all available CPU threads.
 
@@ -213,7 +213,7 @@ Linux 6.18.34-1-cachyos-lts
 
 #### `/home/tux/Documents/git`
 
-Samsung 990 Pro NVMe SSD (Gen 4) [btrfs]
+`Samsung 990 Pro NVMe SSD (Gen 4) [btrfs]`
 
 Dense, an enormous amount of small files and directories.
 
@@ -250,7 +250,7 @@ Speedup (QDirStat / eDirStat): 5.00x
 
 #### `/run/media/tux/F1/Games/PC/SteamLibrary/steamapps/common`
 
-Samsung SSD 870 QVO 8TB [btrfs]
+`Samsung SSD 870 QVO 8TB [btrfs]`
 
 Game files, a mix of large and small files on a SATA SSD.
 
@@ -287,7 +287,7 @@ Speedup (QDirStat / eDirStat): 7.20x
 
 #### `/run/media/tux/D1`
 
-Seagate Exos X18 18TB HDD [btrfs]
+`Seagate Exos X18 18TB HDD [btrfs]`
 
 Large files, but fewer, on an HDD. Less directory nesting.
 
@@ -324,7 +324,7 @@ Speedup (QDirStat / eDirStat): 7.54x
 
 #### `/run/media/tux/B4`
 
-Toshiba MG09SACA16EA 16TB HDD [btrfs]
+`Toshiba MG09SACA16EA 16TB HDD [btrfs]`
 
 An enormous amount of tiny files with deep directory nesting, on an HDD.
 
