@@ -630,6 +630,9 @@ impl eframe::App for GuiApp {
             ctx.request_repaint_after(Duration::from_millis(50));
         } else if !self.selected_nodes.is_empty() {
             ctx.request_repaint();
+        } else if snapshot.nodes.is_empty() {
+            // Animating the Scan Directory button when no scan is active and no snapshot is open
+            ctx.request_repaint_after(Duration::from_millis(50));
         }
 
         // Apply dark style
@@ -725,7 +728,42 @@ impl eframe::App for GuiApp {
 
                 ui.separator();
 
-                if ui.button("📁 Scan Directory").clicked() {
+                let should_pulse = !is_scanning && snapshot.nodes.is_empty();
+                let scan_btn = if should_pulse {
+                    let time = ui.input(|i| i.time);
+                    #[allow(clippy::cast_possible_truncation)]
+                    let pulse = 0.5f64.mul_add((time * 3.0).sin(), 0.5) as f32; // gentle pulsing between 0.0 and 1.0
+
+                    // Pulsing background and border with theme's scanning color
+                    let fill_color = theme::COLOR_SCANNING.linear_multiply(pulse * 0.12 + 0.04);
+                    let border_color = theme::COLOR_SCANNING.linear_multiply(pulse * 0.35 + 0.15);
+                    let text_color = theme::COLOR_WHITE.linear_multiply(pulse * 0.15 + 0.85);
+
+                    ui.scope(|ui| {
+                        ui.style_mut().visuals.button_frame = true;
+
+                        // Inactive state (pulsing)
+                        ui.style_mut().visuals.widgets.inactive.weak_bg_fill = fill_color;
+                        ui.style_mut().visuals.widgets.inactive.bg_stroke = egui::Stroke::new(1.0, border_color);
+                        ui.style_mut().visuals.widgets.inactive.fg_stroke = egui::Stroke::new(1.0, text_color);
+
+                        // Hovered state (bright purple highlight)
+                        ui.style_mut().visuals.widgets.hovered.weak_bg_fill = theme::COLOR_SCANNING.linear_multiply(0.25);
+                        ui.style_mut().visuals.widgets.hovered.bg_stroke = egui::Stroke::new(1.0, theme::COLOR_SCANNING);
+                        ui.style_mut().visuals.widgets.hovered.fg_stroke = egui::Stroke::new(1.0, theme::COLOR_WHITE);
+
+                        // Active state (clicked)
+                        ui.style_mut().visuals.widgets.active.weak_bg_fill = theme::COLOR_SCANNING.linear_multiply(0.35);
+                        ui.style_mut().visuals.widgets.active.bg_stroke = egui::Stroke::new(1.0, theme::COLOR_SCANNING);
+                        ui.style_mut().visuals.widgets.active.fg_stroke = egui::Stroke::new(1.0, theme::COLOR_WHITE);
+
+                        ui.button(egui::RichText::new("📁 Scan Directory").strong())
+                    }).inner
+                } else {
+                    ui.button("📁 Scan Directory")
+                };
+
+                if scan_btn.clicked() {
                     let folder_opt = FileDialog::new().pick_folder();
                     if let Some(path) = folder_opt {
                         self.start_scan(path);
