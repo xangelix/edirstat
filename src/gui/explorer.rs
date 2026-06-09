@@ -31,7 +31,7 @@ impl<'a> TableProviderWrapper<'a> {
                 "Files",
                 "Subdirs",
                 "Created",
-                "Last Modified",
+                "Modified",
             ],
         }
     }
