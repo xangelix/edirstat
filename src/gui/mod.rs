@@ -55,12 +55,13 @@ pub struct GuiApp {
     pub(crate) shared_state: Arc<SharedState>,
     pub(crate) traversal_engine: Arc<TraversalEngine>,
 
+    // Unified egui-table-kit State
+    pub(crate) table_state: egui_table_kit::state::TableState,
+
     // UI state
     pub(crate) selected_node_idx: Option<u32>,
-    pub(crate) selected_nodes: HashSet<u32>,
     pub(crate) focus_node_idx: Option<u32>,
     pub(crate) delete_node_indices: Vec<u32>,
-    pub(crate) expanded_nodes: HashSet<u32>,
     pub(crate) search_query: String,
     pub(crate) monospace_paths: bool,
     pub(crate) left_panel_collapsed: bool,
@@ -127,11 +128,10 @@ impl GuiApp {
         let mut app = Self {
             shared_state,
             traversal_engine,
+            table_state: egui_table_kit::state::TableState::new("edirstat_hierarchical_table", 0),
             selected_node_idx: None,
-            selected_nodes: HashSet::new(),
             focus_node_idx: None,
             delete_node_indices: Vec::new(),
-            expanded_nodes: HashSet::new(),
             search_query: String::new(),
             monospace_paths: false,
             left_panel_collapsed: false,
@@ -191,10 +191,12 @@ impl GuiApp {
 
     fn reset_state(&mut self) {
         self.selected_node_idx = None;
-        self.selected_nodes.clear();
+        self.table_state.selected_rows.clear();
+        self.table_state.expanded_rows.clear();
+        self.table_state.active_rows.clear();
+        self.table_state.sorted_children_cache.clear();
         self.focus_node_idx = None;
         self.delete_node_indices.clear();
-        self.expanded_nodes.clear();
         self.extension_stats.clear();
         self.last_extension_update = None;
         self.delete_confirm_checked = false;
@@ -227,7 +229,7 @@ impl GuiApp {
         self.reset_state();
 
         // Select the root row by default
-        self.selected_nodes.insert(0);
+        self.table_state.selected_rows.insert(0);
         self.selected_node_idx = Some(0);
         self.focus_node_idx = Some(0);
 
@@ -260,7 +262,7 @@ impl GuiApp {
         self.reset_state();
 
         // Select the root row by default
-        self.selected_nodes.insert(0);
+        self.table_state.selected_rows.insert(0);
         self.selected_node_idx = Some(0);
         self.focus_node_idx = Some(0);
 
@@ -313,25 +315,26 @@ impl GuiApp {
         ui: &mut egui::Ui,
         snapshot: &FileArenaSnapshot,
     ) {
-        let has_selection = !self.selected_nodes.is_empty();
+        let has_selection = !self.table_state.selected_rows.is_empty();
         let is_scanning = self.shared_state.is_scanning.load(Ordering::SeqCst);
 
-        let is_any_dir_selected = self.selected_nodes.iter().any(|&idx| {
-            idx < snapshot.nodes.len() as u32 && snapshot.nodes[idx as usize].is_directory()
+        let is_any_dir_selected = self.table_state.selected_rows.iter().any(|idx| {
+            (idx as usize) < snapshot.nodes.len() && snapshot.nodes[idx as usize].is_directory()
         });
 
         // 1. Up One Level (Enabled only for single selection)
-        let up_enabled = self.selected_nodes.len() == 1 && self.selected_node_idx != Some(0);
+        let up_enabled =
+            self.table_state.selected_rows.len() == 1 && self.selected_node_idx != Some(0);
         let up_btn = ui.add_enabled(up_enabled, egui::Button::new("⏶ Up One Level"));
         if up_btn.clicked() {
             if let Some(idx) = self.selected_node_idx
                 && idx != 0
-                && idx < snapshot.nodes.len() as u32
+                && (idx as usize) < snapshot.nodes.len()
             {
                 let parent = snapshot.nodes[idx as usize].parent;
                 if parent != crate::arena::NO_INDEX {
-                    self.selected_nodes.clear();
-                    self.selected_nodes.insert(parent);
+                    self.table_state.selected_rows.clear();
+                    self.table_state.selected_rows.insert(parent);
                     self.selected_node_idx = Some(parent);
                     self.focus_node_idx = Some(parent);
                     self.scroll_to_selected = true;
@@ -348,11 +351,12 @@ impl GuiApp {
         );
         if refresh_btn.clicked() {
             let dirs: Vec<u32> = self
-                .selected_nodes
+                .table_state
+                .selected_rows
                 .iter()
-                .copied()
                 .filter(|&idx| {
-                    idx < snapshot.nodes.len() as u32 && snapshot.nodes[idx as usize].is_directory()
+                    (idx as usize) < snapshot.nodes.len()
+                        && snapshot.nodes[idx as usize].is_directory()
                 })
                 .collect();
             self.refresh_directory_subtrees(&dirs);
@@ -362,7 +366,7 @@ impl GuiApp {
         ui.separator();
 
         // 3. Open in File Manager (Enabled only for single selection)
-        let open_enabled = self.selected_nodes.len() == 1;
+        let open_enabled = self.table_state.selected_rows.len() == 1;
         let open_btn = ui.add_enabled(open_enabled, egui::Button::new("🗁 Open in File Manager"));
         if open_btn.clicked() {
             let idx_opt = self.selected_node_idx;
@@ -380,9 +384,9 @@ impl GuiApp {
         }
 
         // 4. Open Terminal Here (Enabled only for single selection directory)
-        let is_single_dir_selected = self.selected_nodes.len() == 1
+        let is_single_dir_selected = self.table_state.selected_rows.len() == 1
             && self.selected_node_idx.is_some_and(|idx| {
-                idx < snapshot.nodes.len() as u32 && snapshot.nodes[idx as usize].is_directory()
+                (idx as usize) < snapshot.nodes.len() && snapshot.nodes[idx as usize].is_directory()
             });
         let term_btn = ui.add_enabled(
             is_single_dir_selected,
@@ -400,14 +404,14 @@ impl GuiApp {
         ui.separator();
 
         // 5. Copy Name
-        let copy_enabled = !self.selected_nodes.is_empty();
+        let copy_enabled = !self.table_state.selected_rows.is_empty();
         let copy_name_btn = ui.add_enabled(copy_enabled, egui::Button::new("📋 Copy Name"));
         if copy_name_btn.clicked() {
             let mut names = Vec::new();
-            let mut selected: Vec<u32> = self.selected_nodes.iter().copied().collect();
+            let mut selected: Vec<u32> = self.table_state.selected_rows.iter().collect();
             selected.sort_unstable();
             for idx in selected {
-                if idx < snapshot.nodes.len() as u32 {
+                if (idx as usize) < snapshot.nodes.len() {
                     let node = &snapshot.nodes[idx as usize];
                     let name = snapshot.string_pool.get(node.name_id).unwrap_or("unknown");
                     names.push(name.to_string());
@@ -421,7 +425,7 @@ impl GuiApp {
         let copy_path_btn = ui.add_enabled(copy_enabled, egui::Button::new("📎 Copy Path"));
         if copy_path_btn.clicked() {
             let mut paths = Vec::new();
-            let mut selected: Vec<u32> = self.selected_nodes.iter().copied().collect();
+            let mut selected: Vec<u32> = self.table_state.selected_rows.iter().collect();
             selected.sort_unstable();
             for idx in selected {
                 paths.push(snapshot.get_full_path(idx));
@@ -440,7 +444,7 @@ impl GuiApp {
         if trash_btn.clicked() {
             self.active_modal = Some(ActiveModal::Trash);
             self.delete_confirm_checked = false;
-            self.delete_node_indices = self.selected_nodes.iter().copied().collect();
+            self.delete_node_indices = self.table_state.selected_rows.iter().collect();
             ui.close_kind(egui::UiKind::Menu); // Closes the active menu/context-menu
         }
 
@@ -452,7 +456,7 @@ impl GuiApp {
         if delete_btn.clicked() {
             self.active_modal = Some(ActiveModal::Delete);
             self.delete_confirm_checked = false;
-            self.delete_node_indices = self.selected_nodes.iter().copied().collect();
+            self.delete_node_indices = self.table_state.selected_rows.iter().collect();
             ui.close_kind(egui::UiKind::Menu); // Closes the active menu/context-menu
         }
     }
@@ -661,7 +665,7 @@ impl eframe::App for GuiApp {
         // Repaint during scan to show live progress, or continuously while selected to drive the glow animation
         if is_scanning {
             ctx.request_repaint_after(Duration::from_millis(50));
-        } else if !self.selected_nodes.is_empty() {
+        } else if !self.table_state.selected_rows.is_empty() {
             ctx.request_repaint();
         } else if snapshot.nodes.is_empty() {
             // Animating the Scan Directory button when no scan is active and no snapshot is open
@@ -748,7 +752,7 @@ impl eframe::App for GuiApp {
 
                     ui.separator();
                     if ui.button("⏏ Collapse All").clicked() {
-                        self.expanded_nodes.clear();
+                        self.table_state.expanded_rows.clear();
                         ui.close_kind(egui::UiKind::Menu);
                     }
                 });
@@ -917,8 +921,8 @@ impl eframe::App for GuiApp {
                 }
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if self.selected_nodes.len() == 1 {
-                        if let Some(&idx) = self.selected_nodes.iter().next()
+                    if self.table_state.selected_rows.len() == 1 {
+                        if let Some(idx) = self.table_state.selected_rows.iter().next()
                             && (idx as usize) < snapshot.nodes.len()
                         {
                             let size_str = prettier_bytes::ByteFormatter::new()
@@ -928,17 +932,21 @@ impl eframe::App for GuiApp {
                             let path_str = snapshot.get_full_path(idx);
                             ui.label(format!("Selection: {path_str}"));
                         }
-                    } else if !self.selected_nodes.is_empty() {
+                    } else if !self.table_state.selected_rows.is_empty() {
                         let total_size: u64 = self
-                            .selected_nodes
+                            .table_state
+                            .selected_rows
                             .iter()
-                            .map(|&idx| snapshot.nodes[idx as usize].size)
+                            .map(|idx| snapshot.nodes[idx as usize].size)
                             .sum();
                         let size_str = prettier_bytes::ByteFormatter::new()
                             .format(total_size)
                             .to_string();
                         ui.strong(size_str);
-                        ui.label(format!("Selection: {} items", self.selected_nodes.len()));
+                        ui.label(format!(
+                            "Selection: {} items",
+                            self.table_state.selected_rows.len()
+                        ));
                     }
                 });
             });
@@ -1022,9 +1030,9 @@ impl GuiApp {
                     ui.label("Click 'Scan Directory' to explore disk usage.");
                 });
             } else {
-                // Auto-expand the root node (0) if expanded_nodes is empty
-                if self.expanded_nodes.is_empty() {
-                    self.expanded_nodes.insert(0);
+                // Auto-expand the root node (0) if expanded_rows is empty
+                if self.table_state.expanded_rows.is_empty() {
+                    self.table_state.expanded_rows.insert(0);
                 }
 
                 let mut visible_nodes = Vec::new();
@@ -1061,7 +1069,7 @@ impl GuiApp {
                 scroll_area.show_rows(ui, row_height, visible_nodes.len(), |ui, row_range| {
                     for idx in row_range {
                         let (node_idx, indent) = visible_nodes[idx];
-                        self.render_tree_node_row(ui, snapshot, node_idx, indent, &visible_nodes);
+                        self.render_tree_node_row(ui, snapshot, node_idx, indent);
                     }
                 });
             }
@@ -1080,19 +1088,41 @@ impl GuiApp {
                             ui.label("Scanned filesystem will be visualized as a treemap here.");
                         });
                     } else {
+                        // Gather temporary HashSets compatible with the treemap API
+                        let mut selected_nodes_set: HashSet<u32> =
+                            self.table_state.selected_rows.iter().collect();
+                        let mut expanded_nodes_set: HashSet<u32> =
+                            self.table_state.expanded_rows.iter().collect();
+
                         let mut context = stats::StatContext {
-                            selected_nodes: &mut self.selected_nodes,
-                            expanded_nodes: &mut self.expanded_nodes,
+                            selected_nodes: &mut selected_nodes_set,
+                            expanded_nodes: &mut expanded_nodes_set,
                             scroll_to_selected: &mut self.scroll_to_selected,
                             deduplicator_results: Some(&self.deduplicator_results),
                         };
                         self.treemap_chart.render(ui, snapshot, &mut context);
 
-                        // Sync back selected_node_idx
-                        if self.selected_nodes.len() == 1 {
-                            self.selected_node_idx = self.selected_nodes.iter().next().copied();
-                        } else {
-                            self.selected_node_idx = None;
+                        // Sync selections
+                        if selected_nodes_set.len() != self.table_state.selected_rows.len() as usize
+                        {
+                            self.table_state.selected_rows.clear();
+                            self.table_state
+                                .selected_rows
+                                .extend(selected_nodes_set.iter());
+                            if self.table_state.selected_rows.len() == 1 {
+                                self.selected_node_idx =
+                                    self.table_state.selected_rows.iter().next();
+                            } else {
+                                self.selected_node_idx = None;
+                            }
+                        }
+                        // Sync expansions
+                        if expanded_nodes_set.len() != self.table_state.expanded_rows.len() as usize
+                        {
+                            self.table_state.expanded_rows.clear();
+                            self.table_state
+                                .expanded_rows
+                                .extend(expanded_nodes_set.iter());
                         }
                     }
                 }
@@ -1103,9 +1133,14 @@ impl GuiApp {
                             ui.label("Scanned filesystem will be plotted here.");
                         });
                     } else {
+                        let mut selected_nodes_set: HashSet<u32> =
+                            self.table_state.selected_rows.iter().collect();
+                        let mut expanded_nodes_set: HashSet<u32> =
+                            self.table_state.expanded_rows.iter().collect();
+
                         let mut context = stats::StatContext {
-                            selected_nodes: &mut self.selected_nodes,
-                            expanded_nodes: &mut self.expanded_nodes,
+                            selected_nodes: &mut selected_nodes_set,
+                            expanded_nodes: &mut expanded_nodes_set,
                             scroll_to_selected: &mut self.scroll_to_selected,
                             deduplicator_results: Some(&self.deduplicator_results),
                         };
@@ -1129,6 +1164,29 @@ impl GuiApp {
                                 self.duplicate_waste_chart
                                     .render(ui, snapshot, &mut context);
                             }
+                        }
+
+                        // Sync selections
+                        if selected_nodes_set.len() != self.table_state.selected_rows.len() as usize
+                        {
+                            self.table_state.selected_rows.clear();
+                            self.table_state
+                                .selected_rows
+                                .extend(selected_nodes_set.iter());
+                            if self.table_state.selected_rows.len() == 1 {
+                                self.selected_node_idx =
+                                    self.table_state.selected_rows.iter().next();
+                            } else {
+                                self.selected_node_idx = None;
+                            }
+                        }
+                        // Sync expansions
+                        if expanded_nodes_set.len() != self.table_state.expanded_rows.len() as usize
+                        {
+                            self.table_state.expanded_rows.clear();
+                            self.table_state
+                                .expanded_rows
+                                .extend(expanded_nodes_set.iter());
                         }
                     }
                 }
@@ -1161,12 +1219,12 @@ impl GuiApp {
                         .clicked()
                         && let Some(idx) = self.selected_node_idx
                         && idx != 0
-                        && idx < snapshot.nodes.len() as u32
+                        && (idx as usize) < snapshot.nodes.len()
                     {
                         let parent = snapshot.nodes[idx as usize].parent;
                         if parent != crate::arena::NO_INDEX {
-                            self.selected_nodes.clear();
-                            self.selected_nodes.insert(parent);
+                            self.table_state.selected_rows.clear();
+                            self.table_state.selected_rows.insert(parent);
                             self.selected_node_idx = Some(parent);
                             self.focus_node_idx = Some(parent);
                             self.scroll_to_selected = true;
@@ -1189,8 +1247,8 @@ impl GuiApp {
                     }
 
                     // 3. Refresh Selected
-                    let any_dir_selected = self.selected_nodes.iter().any(|&idx| {
-                        idx < snapshot.nodes.len() as u32
+                    let any_dir_selected = self.table_state.selected_rows.iter().any(|idx| {
+                        (idx as usize) < snapshot.nodes.len()
                             && snapshot.nodes[idx as usize].is_directory()
                     });
                     let refresh_sel_enabled = any_dir_selected && !is_scanning;
@@ -1200,11 +1258,11 @@ impl GuiApp {
                         .clicked()
                     {
                         let dirs: Vec<u32> = self
-                            .selected_nodes
+                            .table_state
+                            .selected_rows
                             .iter()
-                            .copied()
                             .filter(|&idx| {
-                                idx < snapshot.nodes.len() as u32
+                                (idx as usize) < snapshot.nodes.len()
                                     && snapshot.nodes[idx as usize].is_directory()
                             })
                             .collect();
@@ -1216,7 +1274,7 @@ impl GuiApp {
 
                     // 4. Open Terminal
                     let term_enabled = self.selected_node_idx.is_some_and(|idx| {
-                        idx < snapshot.nodes.len() as u32
+                        (idx as usize) < snapshot.nodes.len()
                             && snapshot.nodes[idx as usize].is_directory()
                     });
                     if ui
@@ -1252,17 +1310,18 @@ impl GuiApp {
                     ui.separator();
 
                     // Copy Name
-                    let copy_enabled = !self.selected_nodes.is_empty();
+                    let copy_enabled = !self.table_state.selected_rows.is_empty();
                     if ui
                         .add_enabled(copy_enabled, egui::Button::new("📋"))
                         .on_hover_text("Copy Name")
                         .clicked()
                     {
                         let mut names = Vec::new();
-                        let mut selected: Vec<u32> = self.selected_nodes.iter().copied().collect();
+                        let mut selected: Vec<u32> =
+                            self.table_state.selected_rows.iter().collect();
                         selected.sort_unstable();
                         for idx in selected {
-                            if idx < snapshot.nodes.len() as u32 {
+                            if (idx as usize) < snapshot.nodes.len() {
                                 let node = &snapshot.nodes[idx as usize];
                                 let name =
                                     snapshot.string_pool.get(node.name_id).unwrap_or("unknown");
@@ -1279,7 +1338,8 @@ impl GuiApp {
                         .clicked()
                     {
                         let mut paths = Vec::new();
-                        let mut selected: Vec<u32> = self.selected_nodes.iter().copied().collect();
+                        let mut selected: Vec<u32> =
+                            self.table_state.selected_rows.iter().collect();
                         selected.sort_unstable();
                         for idx in selected {
                             paths.push(snapshot.get_full_path(idx));
@@ -1291,7 +1351,7 @@ impl GuiApp {
                     ui.separator();
 
                     // 8. Move to Trash
-                    let ops_enabled = !self.selected_nodes.is_empty() && !is_scanning;
+                    let ops_enabled = !self.table_state.selected_rows.is_empty() && !is_scanning;
                     if ui
                         .add_enabled(
                             ops_enabled,
@@ -1302,7 +1362,7 @@ impl GuiApp {
                     {
                         self.active_modal = Some(ActiveModal::Trash);
                         self.delete_confirm_checked = false;
-                        self.delete_node_indices = self.selected_nodes.iter().copied().collect();
+                        self.delete_node_indices = self.table_state.selected_rows.iter().collect();
                     }
 
                     // 9. Delete Permanently
@@ -1313,7 +1373,7 @@ impl GuiApp {
                     {
                         self.active_modal = Some(ActiveModal::Delete);
                         self.delete_confirm_checked = false;
-                        self.delete_node_indices = self.selected_nodes.iter().copied().collect();
+                        self.delete_node_indices = self.table_state.selected_rows.iter().collect();
                     }
 
                     // Separator between toolbar buttons and the search box
@@ -1353,14 +1413,16 @@ impl GuiApp {
                 ui.separator();
 
                 // If selection exists, pop out detail panel on the right of the top section
-                if !self.selected_nodes.is_empty() {
+                if !self.table_state.selected_rows.is_empty() {
                     egui::Panel::right("windirstat_detail_panel")
                         .resizable(true)
                         .default_size(260.0)
                         .size_range(160.0..=450.0)
                         .show_inside(ui, |ui| {
-                            if self.selected_nodes.len() == 1 {
-                                if let Some(&selected_idx) = self.selected_nodes.iter().next() {
+                            if self.table_state.selected_rows.len() == 1 {
+                                if let Some(selected_idx) =
+                                    self.table_state.selected_rows.iter().next()
+                                {
                                     self.render_file_detail_list(ui, snapshot, selected_idx);
                                 }
                             } else {
@@ -1406,19 +1468,43 @@ impl GuiApp {
                                 );
                             });
                         } else {
+                            // Gather temporary HashSets compatible with the treemap API
+                            let mut selected_nodes_set: HashSet<u32> =
+                                self.table_state.selected_rows.iter().collect();
+                            let mut expanded_nodes_set: HashSet<u32> =
+                                self.table_state.expanded_rows.iter().collect();
+
                             let mut context = stats::StatContext {
-                                selected_nodes: &mut self.selected_nodes,
-                                expanded_nodes: &mut self.expanded_nodes,
+                                selected_nodes: &mut selected_nodes_set,
+                                expanded_nodes: &mut expanded_nodes_set,
                                 scroll_to_selected: &mut self.scroll_to_selected,
                                 deduplicator_results: Some(&self.deduplicator_results),
                             };
                             self.treemap_chart.render(ui, snapshot, &mut context);
 
-                            // Sync back selected_node_idx
-                            if self.selected_nodes.len() == 1 {
-                                self.selected_node_idx = self.selected_nodes.iter().next().copied();
-                            } else {
-                                self.selected_node_idx = None;
+                            // Sync selections
+                            if selected_nodes_set.len()
+                                != self.table_state.selected_rows.len() as usize
+                            {
+                                self.table_state.selected_rows.clear();
+                                self.table_state
+                                    .selected_rows
+                                    .extend(selected_nodes_set.iter());
+                                if self.table_state.selected_rows.len() == 1 {
+                                    self.selected_node_idx =
+                                        self.table_state.selected_rows.iter().next();
+                                } else {
+                                    self.selected_node_idx = None;
+                                }
+                            }
+                            // Sync expansions
+                            if expanded_nodes_set.len()
+                                != self.table_state.expanded_rows.len() as usize
+                            {
+                                self.table_state.expanded_rows.clear();
+                                self.table_state
+                                    .expanded_rows
+                                    .extend(expanded_nodes_set.iter());
                             }
                         }
                     }
@@ -1436,9 +1522,14 @@ impl GuiApp {
                                         ui.label("Scanned filesystem will be plotted here.");
                                     });
                                 } else {
+                                    let mut selected_nodes_set: HashSet<u32> =
+                                        self.table_state.selected_rows.iter().collect();
+                                    let mut expanded_nodes_set: HashSet<u32> =
+                                        self.table_state.expanded_rows.iter().collect();
+
                                     let mut context = stats::StatContext {
-                                        selected_nodes: &mut self.selected_nodes,
-                                        expanded_nodes: &mut self.expanded_nodes,
+                                        selected_nodes: &mut selected_nodes_set,
+                                        expanded_nodes: &mut expanded_nodes_set,
                                         scroll_to_selected: &mut self.scroll_to_selected,
                                         deduplicator_results: Some(&self.deduplicator_results),
                                     };
@@ -1465,6 +1556,31 @@ impl GuiApp {
                                                 &mut context,
                                             );
                                         }
+                                    }
+
+                                    // Sync selections
+                                    if selected_nodes_set.len()
+                                        != self.table_state.selected_rows.len() as usize
+                                    {
+                                        self.table_state.selected_rows.clear();
+                                        self.table_state
+                                            .selected_rows
+                                            .extend(selected_nodes_set.iter());
+                                        if self.table_state.selected_rows.len() == 1 {
+                                            self.selected_node_idx =
+                                                self.table_state.selected_rows.iter().next();
+                                        } else {
+                                            self.selected_node_idx = None;
+                                        }
+                                    }
+                                    // Sync expansions
+                                    if expanded_nodes_set.len()
+                                        != self.table_state.expanded_rows.len() as usize
+                                    {
+                                        self.table_state.expanded_rows.clear();
+                                        self.table_state
+                                            .expanded_rows
+                                            .extend(expanded_nodes_set.iter());
                                     }
                                 }
                             });

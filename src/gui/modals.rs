@@ -282,12 +282,16 @@ impl GuiApp {
 
             self.selected_duplicates
                 .retain(|idx| !successfully_deleted.contains(idx));
-            self.selected_nodes
-                .retain(|idx| !successfully_deleted.contains(idx));
+
+            // Clean up selections inside RoaringBitmap
+            for &idx in &successfully_deleted {
+                self.table_state.selected_rows.remove(idx);
+            }
+
             self.remove_nodes_from_snapshot(&successfully_deleted);
 
-            if self.selected_nodes.len() == 1 {
-                self.selected_node_idx = self.selected_nodes.iter().next().copied();
+            if self.table_state.selected_rows.len() == 1 {
+                self.selected_node_idx = self.table_state.selected_rows.iter().next();
             } else {
                 self.selected_node_idx = None;
             }
@@ -435,12 +439,16 @@ impl GuiApp {
 
             self.selected_duplicates
                 .retain(|idx| !successfully_linked.contains(idx));
-            self.selected_nodes
-                .retain(|idx| !successfully_linked.contains(idx));
+
+            // Clean up selections inside RoaringBitmap
+            for &idx in &successfully_linked {
+                self.table_state.selected_rows.remove(idx);
+            }
+
             self.remove_nodes_from_snapshot(&successfully_linked);
 
-            if self.selected_nodes.len() == 1 {
-                self.selected_node_idx = self.selected_nodes.iter().next().copied();
+            if self.table_state.selected_rows.len() == 1 {
+                self.selected_node_idx = self.table_state.selected_rows.iter().next();
             } else {
                 self.selected_node_idx = None;
             }
