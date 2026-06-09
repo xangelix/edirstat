@@ -976,6 +976,10 @@ impl GuiApp {
                 });
             });
             ui.add_space(4.0);
+            if !snapshot.nodes.is_empty() {
+                self.draw_custom_operations_toolbar(ui, snapshot);
+                ui.add_space(4.0);
+            }
             ui.separator();
 
             if snapshot.nodes.is_empty() {
@@ -1162,10 +1166,7 @@ impl GuiApp {
                     // Render operations directly as a flat row of toolbar buttons
                     ui.spacing_mut().item_spacing.x = 8.0;
 
-                    let provider = crate::gui::explorer::TableProviderWrapper::new(snapshot);
-                    let _ = self
-                        .operations
-                        .gui(ui, &provider, &mut self.table_state, false);
+                    self.draw_custom_operations_toolbar(ui, snapshot);
 
                     // Separator between operations and the search/filter box
                     ui.separator();
@@ -1383,6 +1384,97 @@ impl GuiApp {
             });
         });
     }
+
+    pub(crate) fn draw_custom_operations_toolbar(
+        &mut self,
+        ui: &mut egui::Ui,
+        snapshot: &FileArenaSnapshot,
+    ) {
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 4.0;
+            let provider = crate::gui::explorer::TableProviderWrapper::new(snapshot);
+
+            let _ = self.operations.gui_custom(
+                ui,
+                &provider,
+                &mut self.table_state,
+                false,
+                |ui, op, enabled, reason, _| {
+                    render_custom_op_button(ui, op.icon(), op.name().as_ref(), enabled, reason)
+                },
+            );
+        });
+    }
+}
+
+fn get_op_hover_color(op_name: &str) -> egui::Color32 {
+    match op_name {
+        "Up One Level" => egui::Color32::from_rgb(59, 130, 246), // Blue
+        "Refresh Entire Scan" => egui::Color32::from_rgb(16, 185, 129), // Emerald Green
+        "Refresh Directory" => egui::Color32::from_rgb(34, 197, 94), // Green
+        "Open in File Manager" => egui::Color32::from_rgb(245, 158, 11), // Orange/Amber
+        "Open Terminal Here" => egui::Color32::from_rgb(6, 182, 212), // Cyan/Teal
+        "Copy Path" | "Copy Name" => egui::Color32::from_rgb(139, 92, 246), // Purple
+        "Move to Trash" => egui::Color32::from_rgb(234, 179, 8), // Yellow/Orange
+        "Permanently Delete" => egui::Color32::from_rgb(239, 68, 68), // Red
+        _ => egui::Color32::from_rgb(96, 165, 250),              // Default light blue
+    }
+}
+
+fn render_custom_op_button(
+    ui: &mut egui::Ui,
+    icon: &str,
+    name: &str,
+    enabled: bool,
+    reason: &str,
+) -> egui::Response {
+    let hover_color = get_op_hover_color(name);
+
+    ui.add_enabled_ui(enabled, |ui| {
+        let mut response = ui
+            .scope(|ui| {
+                ui.style_mut().visuals.button_frame = true;
+
+                // Inactive (subtle tint, extremely faded border)
+                ui.style_mut().visuals.widgets.inactive.weak_bg_fill =
+                    hover_color.linear_multiply(0.04);
+                ui.style_mut().visuals.widgets.inactive.bg_stroke =
+                    egui::Stroke::new(1.0, hover_color.linear_multiply(0.12));
+                ui.style_mut().visuals.widgets.inactive.fg_stroke =
+                    egui::Stroke::new(1.0, ui.visuals().widgets.inactive.text_color());
+
+                // Hovered (soft fill, subtle stroke, full hover color for icon)
+                ui.style_mut().visuals.widgets.hovered.weak_bg_fill =
+                    hover_color.linear_multiply(0.12);
+                ui.style_mut().visuals.widgets.hovered.bg_stroke =
+                    egui::Stroke::new(1.0, hover_color.linear_multiply(0.4));
+                ui.style_mut().visuals.widgets.hovered.fg_stroke =
+                    egui::Stroke::new(1.0, hover_color);
+
+                // Active (pressed)
+                ui.style_mut().visuals.widgets.active.weak_bg_fill =
+                    hover_color.linear_multiply(0.24);
+                ui.style_mut().visuals.widgets.active.bg_stroke =
+                    egui::Stroke::new(1.0, hover_color.linear_multiply(0.6));
+                ui.style_mut().visuals.widgets.active.fg_stroke =
+                    egui::Stroke::new(1.0, hover_color);
+
+                // Set button padding to make it a nice square
+                ui.spacing_mut().button_padding = egui::vec2(6.0, 4.0);
+
+                ui.button(egui::RichText::new(icon).size(15.0))
+            })
+            .inner;
+
+        if enabled {
+            response = response.on_hover_text(name);
+        } else {
+            response = response.on_disabled_hover_text(format!("{name}\n({reason})"));
+        }
+
+        response
+    })
+    .inner
 }
 
 fn open_terminal_at(path: &Path) -> std::io::Result<()> {

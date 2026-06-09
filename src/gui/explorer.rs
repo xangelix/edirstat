@@ -1262,7 +1262,12 @@ impl GuiApp {
                         .color(ui.visuals().strong_text_color()),
                 );
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.button("❌").on_hover_text("Deselect items").clicked() {
+                    let deselect_btn = ui.scope(|ui| {
+                        ui.style_mut().visuals.button_frame = false;
+                        ui.style_mut().visuals.widgets.hovered.fg_stroke = egui::Stroke::new(1.0, egui::Color32::from_rgb(239, 68, 68));
+                        ui.button("❌")
+                    }).inner.on_hover_text("Deselect items");
+                    if deselect_btn.clicked() {
                         self.table_state.selected_rows.clear();
                         self.selected_node_idx = None;
                         self.focus_node_idx = None;
@@ -1295,11 +1300,13 @@ impl GuiApp {
                     let is_scanning = self.shared_state.is_scanning.load(Ordering::SeqCst);
                     let is_dir_selected = directories > 0 && !is_scanning;
 
-                    if ui
-                        .add_enabled(is_dir_selected, egui::Button::new("🔄 Refresh Directory"))
-                        .on_hover_text("Refresh all selected directory subtrees")
-                        .clicked()
-                    {
+                    let refresh_btn = draw_action_button(
+                        ui,
+                        "🔄 Refresh Directory",
+                        egui::Color32::from_rgb(34, 197, 94), // Green
+                        is_dir_selected,
+                    ).on_hover_text("Refresh all selected directory subtrees");
+                    if refresh_btn.clicked() {
                         let dirs: Vec<u32> = self
                             .table_state
                             .selected_rows
@@ -1313,20 +1320,26 @@ impl GuiApp {
                     }
                     ui.add_space(4.0);
 
-                    if ui
-                        .add_enabled(!is_scanning, egui::Button::new("♻ Move to Trash"))
-                        .clicked()
-                    {
+                    let trash_btn = draw_action_button(
+                        ui,
+                        "♻ Move to Trash",
+                        egui::Color32::from_rgb(234, 179, 8), // Yellow/Orange
+                        !is_scanning,
+                    );
+                    if trash_btn.clicked() {
                         self.active_modal = Some(ActiveModal::Trash);
                         self.delete_confirm_checked = false;
                         self.delete_node_indices = self.table_state.selected_rows.iter().collect();
                     }
                     ui.add_space(4.0);
 
-                    if ui
-                        .add_enabled(!is_scanning, egui::Button::new("🗑 Permanently delete"))
-                        .clicked()
-                    {
+                    let delete_btn = draw_action_button(
+                        ui,
+                        "🗑 Permanently delete",
+                        egui::Color32::from_rgb(239, 68, 68), // Red
+                        !is_scanning,
+                    );
+                    if delete_btn.clicked() {
                         self.active_modal = Some(ActiveModal::Delete);
                         self.delete_confirm_checked = false;
                         self.delete_node_indices = self.table_state.selected_rows.iter().collect();
@@ -1359,7 +1372,12 @@ impl GuiApp {
                         .color(ui.visuals().strong_text_color()),
                 );
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.button("❌").on_hover_text("Deselect item").clicked() {
+                    let deselect_btn = ui.scope(|ui| {
+                        ui.style_mut().visuals.button_frame = false;
+                        ui.style_mut().visuals.widgets.hovered.fg_stroke = egui::Stroke::new(1.0, egui::Color32::from_rgb(239, 68, 68));
+                        ui.button("❌")
+                    }).inner.on_hover_text("Deselect item");
+                    if deselect_btn.clicked() {
                         self.table_state.selected_rows.clear();
                         self.selected_node_idx = None;
                         self.focus_node_idx = None;
@@ -1557,10 +1575,23 @@ impl GuiApp {
                     ui.add_space(4.0);
 
                     ui.horizontal(|ui| {
-                        if ui.button("📋 Copy Path").clicked() {
+                        let copy_btn = draw_action_button(
+                            ui,
+                            "📋 Copy Path",
+                            egui::Color32::from_rgb(139, 92, 246), // Violet/Purple
+                            true,
+                        );
+                        if copy_btn.clicked() {
                             ui.ctx().copy_text(full_path.clone());
                         }
-                        if ui.button("🗁 Open Manager").clicked() {
+
+                        let open_btn = draw_action_button(
+                            ui,
+                            "🗁 Open Manager",
+                            egui::Color32::from_rgb(245, 158, 11), // Amber/Orange
+                            true,
+                        );
+                        if open_btn.clicked() {
                             let path = std::path::Path::new(&full_path);
                             let dir_to_open = if path.is_dir() {
                                 path
@@ -1582,22 +1613,37 @@ impl GuiApp {
                                 .shared_state
                                 .is_scanning
                                 .load(std::sync::atomic::Ordering::SeqCst);
-                        if ui
-                            .add_enabled(is_dir_selected, egui::Button::new("🔄 Refresh Subtree"))
-                            .clicked()
-                        {
+                        let refresh_btn = draw_action_button(
+                            ui,
+                            "🔄 Refresh Subtree",
+                            egui::Color32::from_rgb(34, 197, 94), // Green
+                            is_dir_selected,
+                        );
+                        if refresh_btn.clicked() {
                             self.refresh_directory_subtree(node_idx);
                         }
                         ui.add_space(4.0);
 
-                        if ui.button("♻ Move to Trash").clicked() {
+                        let trash_btn = draw_action_button(
+                            ui,
+                            "♻ Move to Trash",
+                            egui::Color32::from_rgb(234, 179, 8), // Yellow/Orange
+                            true,
+                        );
+                        if trash_btn.clicked() {
                             self.active_modal = Some(ActiveModal::Trash);
                             self.delete_confirm_checked = false;
                             self.delete_node_indices = vec![node_idx];
                         }
                         ui.add_space(4.0);
 
-                        if ui.button("🗑 Delete Permanently").clicked() {
+                        let delete_btn = draw_action_button(
+                            ui,
+                            "🗑 Delete Permanently",
+                            egui::Color32::from_rgb(239, 68, 68), // Red
+                            true,
+                        );
+                        if delete_btn.clicked() {
                             self.active_modal = Some(ActiveModal::Delete);
                             self.delete_confirm_checked = false;
                             self.delete_node_indices = vec![node_idx];
@@ -1712,4 +1758,36 @@ fn paint_gradient_rect(
     mesh.add_triangle(0, 1, 2);
     mesh.add_triangle(0, 2, 3);
     painter.add(mesh);
+}
+
+fn draw_action_button(
+    ui: &mut egui::Ui,
+    label: &str,
+    color: egui::Color32,
+    enabled: bool,
+) -> egui::Response {
+    ui.add_enabled_ui(enabled, |ui| {
+        ui.scope(|ui| {
+            ui.style_mut().visuals.button_frame = true;
+
+            // Inactive (transparent/very subtle background border)
+            ui.style_mut().visuals.widgets.inactive.weak_bg_fill = color.linear_multiply(0.04);
+            ui.style_mut().visuals.widgets.inactive.bg_stroke = egui::Stroke::new(1.0, color.linear_multiply(0.2));
+            ui.style_mut().visuals.widgets.inactive.fg_stroke = egui::Stroke::new(1.0, ui.visuals().widgets.inactive.text_color());
+
+            // Hovered (soft fill, solid border)
+            ui.style_mut().visuals.widgets.hovered.weak_bg_fill = color.linear_multiply(0.12);
+            ui.style_mut().visuals.widgets.hovered.bg_stroke = egui::Stroke::new(1.0, color.linear_multiply(0.45));
+            ui.style_mut().visuals.widgets.hovered.fg_stroke = egui::Stroke::new(1.0, color);
+
+            // Active (pressed)
+            ui.style_mut().visuals.widgets.active.weak_bg_fill = color.linear_multiply(0.22);
+            ui.style_mut().visuals.widgets.active.bg_stroke = egui::Stroke::new(1.0, color.linear_multiply(0.65));
+            ui.style_mut().visuals.widgets.active.fg_stroke = egui::Stroke::new(1.0, color);
+
+            ui.button(label)
+        })
+        .inner
+    })
+    .inner
 }
