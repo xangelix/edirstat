@@ -201,6 +201,7 @@ impl StringPool {
     }
 }
 
+#[derive(Debug)]
 pub struct FileArenaSnapshot {
     /// Read-only snapshot of the nodes
     pub nodes: Arc<Vec<FileNode>>,

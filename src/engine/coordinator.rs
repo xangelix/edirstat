@@ -12,6 +12,7 @@ use crossbeam::channel::Receiver;
 use super::traversal::{LocalId, ScanEvent};
 use crate::arena::{FileArenaSnapshot, FileNode, NO_INDEX, StringPool, precompute_dir_counts};
 
+#[derive(Debug)]
 pub struct SharedState {
     /// Atomic pointer to the latest immutable snapshot of the tree
     pub current_snapshot: ArcSwap<FileArenaSnapshot>,

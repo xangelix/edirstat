@@ -22,6 +22,7 @@ pub mod deduplicator_tab;
 pub mod explorer;
 pub mod extensions;
 pub mod modals;
+pub mod operations;
 pub mod theme;
 
 pub use extensions::ExtensionStat;
@@ -57,6 +58,12 @@ pub struct GuiApp {
 
     // Unified egui-table-kit State
     pub(crate) table_state: egui_table_kit::state::TableState,
+
+    // Command listener channels for decoupled operations
+    pub(crate) command_rx: std::sync::mpsc::Receiver<crate::gui::operations::AppCommand>,
+
+    // Unified TableOperations set
+    pub(crate) operations: egui_table_kit::operations::TableOperations,
 
     // UI state
     pub(crate) selected_node_idx: Option<u32>,
@@ -125,10 +132,50 @@ impl GuiApp {
         traversal_engine: Arc<TraversalEngine>,
         initial_path: Option<PathBuf>,
     ) -> Self {
+        // Initialize the command queue channels
+        let (command_tx, command_rx) = std::sync::mpsc::channel();
+
+        // Assemble our consolidated TableOperations collection
+        let operations = egui_table_kit::operations::TableOperations::new()
+            .with_group(vec![
+                Box::new(crate::gui::operations::UpOneLevelOp::new(
+                    shared_state.clone(),
+                    command_tx.clone(),
+                )),
+                Box::new(crate::gui::operations::RefreshDirectoryOp::new(
+                    shared_state.clone(),
+                    command_tx.clone(),
+                )),
+            ])
+            .with_group(vec![
+                Box::new(crate::gui::operations::OpenFileManagerOp::new(
+                    shared_state.clone(),
+                )),
+                Box::new(crate::gui::operations::OpenTerminalOp::new(
+                    shared_state.clone(),
+                )),
+            ])
+            .with_group(vec![
+                Box::new(crate::gui::operations::CopyNameOp::new(
+                    shared_state.clone(),
+                )),
+                Box::new(crate::gui::operations::CopyPathOp::new(
+                    shared_state.clone(),
+                )),
+            ])
+            .with_group(vec![
+                Box::new(crate::gui::operations::TrashSelectedOp::new(
+                    command_tx.clone(),
+                )),
+                Box::new(crate::gui::operations::DeleteSelectedOp::new(command_tx)),
+            ]);
+
         let mut app = Self {
             shared_state,
             traversal_engine,
             table_state: egui_table_kit::state::TableState::new("edirstat_hierarchical_table", 0),
+            command_rx,
+            operations,
             selected_node_idx: None,
             focus_node_idx: None,
             delete_node_indices: Vec::new(),
@@ -309,156 +356,16 @@ impl GuiApp {
         Ok(())
     }
 
-    /// Renders the shared "File" actions used in both the top toolbar and node context menus.
+    /// Delegates render operations entirely to our registered `TableOperations` suite.
     pub(crate) fn draw_file_menu_contents(
         &mut self,
         ui: &mut egui::Ui,
         snapshot: &FileArenaSnapshot,
     ) {
-        let has_selection = !self.table_state.selected_rows.is_empty();
-        let is_scanning = self.shared_state.is_scanning.load(Ordering::SeqCst);
-
-        let is_any_dir_selected = self.table_state.selected_rows.iter().any(|idx| {
-            (idx as usize) < snapshot.nodes.len() && snapshot.nodes[idx as usize].is_directory()
-        });
-
-        // 1. Up One Level (Enabled only for single selection)
-        let up_enabled =
-            self.table_state.selected_rows.len() == 1 && self.selected_node_idx != Some(0);
-        let up_btn = ui.add_enabled(up_enabled, egui::Button::new("⏶ Up One Level"));
-        if up_btn.clicked() {
-            if let Some(idx) = self.selected_node_idx
-                && idx != 0
-                && (idx as usize) < snapshot.nodes.len()
-            {
-                let parent = snapshot.nodes[idx as usize].parent;
-                if parent != crate::arena::NO_INDEX {
-                    self.table_state.selected_rows.clear();
-                    self.table_state.selected_rows.insert(parent);
-                    self.selected_node_idx = Some(parent);
-                    self.focus_node_idx = Some(parent);
-                    self.scroll_to_selected = true;
-                }
-            }
-            ui.close_kind(egui::UiKind::Menu); // Closes the active menu/context-menu
-        }
-
-        // 2. Refresh Directory (For all directories selected)
-        let is_dir_refresh_enabled = is_any_dir_selected && !is_scanning;
-        let refresh_btn = ui.add_enabled(
-            is_dir_refresh_enabled,
-            egui::Button::new("🔄 Refresh Directory"),
-        );
-        if refresh_btn.clicked() {
-            let dirs: Vec<u32> = self
-                .table_state
-                .selected_rows
-                .iter()
-                .filter(|&idx| {
-                    (idx as usize) < snapshot.nodes.len()
-                        && snapshot.nodes[idx as usize].is_directory()
-                })
-                .collect();
-            self.refresh_directory_subtrees(&dirs);
-            ui.close_kind(egui::UiKind::Menu); // Closes the active menu/context-menu
-        }
-
-        ui.separator();
-
-        // 3. Open in File Manager (Enabled only for single selection)
-        let open_enabled = self.table_state.selected_rows.len() == 1;
-        let open_btn = ui.add_enabled(open_enabled, egui::Button::new("🗁 Open in File Manager"));
-        if open_btn.clicked() {
-            let idx_opt = self.selected_node_idx;
-            if let Some(idx) = idx_opt {
-                let path_str = snapshot.get_full_path(idx);
-                let path = std::path::Path::new(&path_str);
-                let dir_to_open = if path.is_dir() {
-                    path
-                } else {
-                    path.parent().map_or(path, |p| p)
-                };
-                let _ = open::that(dir_to_open);
-            }
-            ui.close_kind(egui::UiKind::Menu); // Closes the active menu/context-menu
-        }
-
-        // 4. Open Terminal Here (Enabled only for single selection directory)
-        let is_single_dir_selected = self.table_state.selected_rows.len() == 1
-            && self.selected_node_idx.is_some_and(|idx| {
-                (idx as usize) < snapshot.nodes.len() && snapshot.nodes[idx as usize].is_directory()
-            });
-        let term_btn = ui.add_enabled(
-            is_single_dir_selected,
-            egui::Button::new("💻 Open Terminal Here"),
-        );
-        if term_btn.clicked() {
-            if let Some(idx) = self.selected_node_idx {
-                let path_str = snapshot.get_full_path(idx);
-                let path = std::path::Path::new(&path_str);
-                let _ = open_terminal_at(path);
-            }
-            ui.close_kind(egui::UiKind::Menu); // Closes the active menu/context-menu
-        }
-
-        ui.separator();
-
-        // 5. Copy Name
-        let copy_enabled = !self.table_state.selected_rows.is_empty();
-        let copy_name_btn = ui.add_enabled(copy_enabled, egui::Button::new("📋 Copy Name"));
-        if copy_name_btn.clicked() {
-            let mut names = Vec::new();
-            let mut selected: Vec<u32> = self.table_state.selected_rows.iter().collect();
-            selected.sort_unstable();
-            for idx in selected {
-                if (idx as usize) < snapshot.nodes.len() {
-                    let node = &snapshot.nodes[idx as usize];
-                    let name = snapshot.string_pool.get(node.name_id).unwrap_or("unknown");
-                    names.push(name.to_string());
-                }
-            }
-            ui.ctx().copy_text(names.join("\n"));
-            ui.close_kind(egui::UiKind::Menu);
-        }
-
-        // 6. Copy Path
-        let copy_path_btn = ui.add_enabled(copy_enabled, egui::Button::new("📎 Copy Path"));
-        if copy_path_btn.clicked() {
-            let mut paths = Vec::new();
-            let mut selected: Vec<u32> = self.table_state.selected_rows.iter().collect();
-            selected.sort_unstable();
-            for idx in selected {
-                paths.push(snapshot.get_full_path(idx));
-            }
-            ui.ctx().copy_text(paths.join("\n"));
-            ui.close_kind(egui::UiKind::Menu);
-        }
-
-        ui.separator();
-
-        // 7. Move to Trash
-        let trash_btn = ui.add_enabled(
-            has_selection && !is_scanning,
-            egui::Button::new("♻ Move to Trash"),
-        );
-        if trash_btn.clicked() {
-            self.active_modal = Some(ActiveModal::Trash);
-            self.delete_confirm_checked = false;
-            self.delete_node_indices = self.table_state.selected_rows.iter().collect();
-            ui.close_kind(egui::UiKind::Menu); // Closes the active menu/context-menu
-        }
-
-        // 8. Permanently Delete
-        let delete_btn = ui.add_enabled(
-            has_selection && !is_scanning,
-            egui::Button::new("🗑 Permanently Delete"),
-        );
-        if delete_btn.clicked() {
-            self.active_modal = Some(ActiveModal::Delete);
-            self.delete_confirm_checked = false;
-            self.delete_node_indices = self.table_state.selected_rows.iter().collect();
-            ui.close_kind(egui::UiKind::Menu); // Closes the active menu/context-menu
-        }
+        let provider = crate::gui::explorer::TableProviderWrapper::new(snapshot);
+        let _ = self
+            .operations
+            .gui(ui, &provider, &mut self.table_state, true);
     }
 
     /// Renders a unified top row controls bar inside visualizer panel viewports.
@@ -656,6 +563,39 @@ impl eframe::App for GuiApp {
         // Fetch current snapshot
         let snapshot = self.shared_state.current_snapshot.load();
         let is_scanning = self.shared_state.is_scanning.load(Ordering::SeqCst);
+
+        // --- Handle Table commands sent from standard and context-menu operations ---
+        while let Ok(command) = self.command_rx.try_recv() {
+            match command {
+                crate::gui::operations::AppCommand::ScrollToSelected => {
+                    self.scroll_to_selected = true;
+                }
+                crate::gui::operations::AppCommand::RefreshSubtrees(dirs) => {
+                    self.refresh_directory_subtrees(&dirs);
+                }
+                crate::gui::operations::AppCommand::ShowTrashModal(nodes) => {
+                    // Corrected variant
+                    self.delete_node_indices = nodes;
+                    self.active_modal = Some(ActiveModal::Trash);
+                    self.delete_confirm_checked = false; // Renders custom confirmation checkbox in your dialog!
+                }
+                crate::gui::operations::AppCommand::ShowDeleteModal(nodes) => {
+                    // Corrected variant
+                    self.delete_node_indices = nodes;
+                    self.active_modal = Some(ActiveModal::Delete);
+                    self.delete_confirm_checked = false; // Renders custom confirmation checkbox in your dialog!
+                }
+            }
+        }
+
+        // Background Modal polling processing for custom TableOperations
+        for op_group in &mut self.operations.0 {
+            for op in op_group {
+                if op.is_modal_open() {
+                    let _ = op.poll(ui, &mut self.table_state);
+                }
+            }
+        }
 
         if !is_scanning && let Some(start) = self.scan_start_time {
             self.total_scan_duration = Some(start.elapsed());
@@ -1206,177 +1146,15 @@ impl GuiApp {
             .show_inside(ui, |ui| {
                 ui.add_space(4.0);
                 ui.horizontal(|ui| {
-                    // Make buttons in this toolbar flat/frameless and space them out nicely
-                    ui.style_mut().visuals.button_frame = false;
-                    ui.spacing_mut().item_spacing.x = 10.0;
+                    // Render operations directly as a flat row of toolbar buttons
+                    ui.spacing_mut().item_spacing.x = 8.0;
 
-                    // 1. Up One Level
-                    let up_enabled =
-                        self.selected_node_idx.is_some() && self.selected_node_idx != Some(0);
-                    if ui
-                        .add_enabled(up_enabled, egui::Button::new("⏶"))
-                        .on_hover_text("Up One Level")
-                        .clicked()
-                        && let Some(idx) = self.selected_node_idx
-                        && idx != 0
-                        && (idx as usize) < snapshot.nodes.len()
-                    {
-                        let parent = snapshot.nodes[idx as usize].parent;
-                        if parent != crate::arena::NO_INDEX {
-                            self.table_state.selected_rows.clear();
-                            self.table_state.selected_rows.insert(parent);
-                            self.selected_node_idx = Some(parent);
-                            self.focus_node_idx = Some(parent);
-                            self.scroll_to_selected = true;
-                        }
-                    }
+                    let provider = crate::gui::explorer::TableProviderWrapper::new(snapshot);
+                    let _ = self
+                        .operations
+                        .gui(ui, &provider, &mut self.table_state, false);
 
-                    // 2. Refresh
-                    let is_scanning = self.shared_state.is_scanning.load(Ordering::SeqCst);
-                    let refresh_enabled = self.current_scan_path.is_some() && !is_scanning;
-                    if ui
-                        .add_enabled(
-                            refresh_enabled,
-                            egui::Button::new(egui::RichText::new("↻").size(12.0)),
-                        )
-                        .on_hover_text("Refresh (Re-scan from root)")
-                        .clicked()
-                        && let Some(ref path) = self.current_scan_path.clone()
-                    {
-                        self.start_scan(path.clone());
-                    }
-
-                    // 3. Refresh Selected
-                    let any_dir_selected = self.table_state.selected_rows.iter().any(|idx| {
-                        (idx as usize) < snapshot.nodes.len()
-                            && snapshot.nodes[idx as usize].is_directory()
-                    });
-                    let refresh_sel_enabled = any_dir_selected && !is_scanning;
-                    if ui
-                        .add_enabled(refresh_sel_enabled, egui::Button::new("🔄"))
-                        .on_hover_text("Refresh Selected (Re-scan selected directory subtrees)")
-                        .clicked()
-                    {
-                        let dirs: Vec<u32> = self
-                            .table_state
-                            .selected_rows
-                            .iter()
-                            .filter(|&idx| {
-                                (idx as usize) < snapshot.nodes.len()
-                                    && snapshot.nodes[idx as usize].is_directory()
-                            })
-                            .collect();
-                        self.refresh_directory_subtrees(&dirs);
-                    }
-
-                    // Separator between Nav/Refresh and Open Tools
-                    ui.separator();
-
-                    // 4. Open Terminal
-                    let term_enabled = self.selected_node_idx.is_some_and(|idx| {
-                        (idx as usize) < snapshot.nodes.len()
-                            && snapshot.nodes[idx as usize].is_directory()
-                    });
-                    if ui
-                        .add_enabled(term_enabled, egui::Button::new("💻"))
-                        .on_hover_text("Open Terminal Here")
-                        .clicked()
-                        && let Some(idx) = self.selected_node_idx
-                    {
-                        let path_str = snapshot.get_full_path(idx);
-                        let path = std::path::Path::new(&path_str);
-                        let _ = open_terminal_at(path);
-                    }
-
-                    // 5. Open File Manager
-                    let manager_enabled = self.selected_node_idx.is_some();
-                    if ui
-                        .add_enabled(manager_enabled, egui::Button::new("🗁"))
-                        .on_hover_text("Open File Manager Here")
-                        .clicked()
-                        && let Some(idx) = self.selected_node_idx
-                    {
-                        let path_str = snapshot.get_full_path(idx);
-                        let path = std::path::Path::new(&path_str);
-                        let dir_to_open = if path.is_dir() {
-                            path
-                        } else {
-                            path.parent().map_or(path, |p| p)
-                        };
-                        let _ = open::that(dir_to_open);
-                    }
-
-                    // Separator between Open Tools and Copy Tools
-                    ui.separator();
-
-                    // Copy Name
-                    let copy_enabled = !self.table_state.selected_rows.is_empty();
-                    if ui
-                        .add_enabled(copy_enabled, egui::Button::new("📋"))
-                        .on_hover_text("Copy Name")
-                        .clicked()
-                    {
-                        let mut names = Vec::new();
-                        let mut selected: Vec<u32> =
-                            self.table_state.selected_rows.iter().collect();
-                        selected.sort_unstable();
-                        for idx in selected {
-                            if (idx as usize) < snapshot.nodes.len() {
-                                let node = &snapshot.nodes[idx as usize];
-                                let name =
-                                    snapshot.string_pool.get(node.name_id).unwrap_or("unknown");
-                                names.push(name.to_string());
-                            }
-                        }
-                        ui.ctx().copy_text(names.join("\n"));
-                    }
-
-                    // Copy Path
-                    if ui
-                        .add_enabled(copy_enabled, egui::Button::new("📎"))
-                        .on_hover_text("Copy Path")
-                        .clicked()
-                    {
-                        let mut paths = Vec::new();
-                        let mut selected: Vec<u32> =
-                            self.table_state.selected_rows.iter().collect();
-                        selected.sort_unstable();
-                        for idx in selected {
-                            paths.push(snapshot.get_full_path(idx));
-                        }
-                        ui.ctx().copy_text(paths.join("\n"));
-                    }
-
-                    // Separator between Copy Tools and Deletion Tools
-                    ui.separator();
-
-                    // 8. Move to Trash
-                    let ops_enabled = !self.table_state.selected_rows.is_empty() && !is_scanning;
-                    if ui
-                        .add_enabled(
-                            ops_enabled,
-                            egui::Button::new(egui::RichText::new("♻").size(18.0)),
-                        )
-                        .on_hover_text("Move Selected to Trash")
-                        .clicked()
-                    {
-                        self.active_modal = Some(ActiveModal::Trash);
-                        self.delete_confirm_checked = false;
-                        self.delete_node_indices = self.table_state.selected_rows.iter().collect();
-                    }
-
-                    // 9. Delete Permanently
-                    if ui
-                        .add_enabled(ops_enabled, egui::Button::new("🗑"))
-                        .on_hover_text("Delete Selected Permanently")
-                        .clicked()
-                    {
-                        self.active_modal = Some(ActiveModal::Delete);
-                        self.delete_confirm_checked = false;
-                        self.delete_node_indices = self.table_state.selected_rows.iter().collect();
-                    }
-
-                    // Separator between toolbar buttons and the search box
+                    // Separator between operations and the search/filter box
                     ui.separator();
 
                     // Filter search input
