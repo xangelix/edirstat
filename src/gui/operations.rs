@@ -71,6 +71,49 @@ impl TableOperation for UpOneLevelOp {
     }
 }
 
+// --- Refresh Entire Scan (Root) ---
+#[derive(Debug)]
+pub struct RefreshRootOp {
+    shared_state: Arc<SharedState>,
+    command_tx: Sender<AppCommand>,
+}
+
+impl RefreshRootOp {
+    pub const fn new(shared_state: Arc<SharedState>, command_tx: Sender<AppCommand>) -> Self {
+        Self {
+            shared_state,
+            command_tx,
+        }
+    }
+}
+
+impl TableOperation for RefreshRootOp {
+    fn name(&self) -> Cow<'_, str> {
+        Cow::Borrowed("Refresh Entire Scan")
+    }
+
+    fn icon(&self) -> &'static str {
+        "🔁"
+    }
+
+    // Always enabled, regardless of whether a row is selected
+    fn enabled(&self) -> TableOperationEnablement {
+        TableOperationEnablement::Always
+    }
+
+    fn exec(&mut self, _ctx: &mut OperationContext<'_, '_>) -> Result<(), TableError> {
+        let snapshot = get_snapshot(&self.shared_state);
+
+        // Safety check to ensure we only refresh if a tree is actually loaded
+        if !snapshot.nodes.is_empty() {
+            // The root node is always strictly at index 0 in the arena
+            let _ = self.command_tx.send(AppCommand::RefreshSubtrees(vec![0]));
+        }
+
+        Ok(())
+    }
+}
+
 // --- Refresh Directory ---
 #[derive(Debug)]
 pub struct RefreshDirectoryOp {

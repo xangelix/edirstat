@@ -143,6 +143,10 @@ impl GuiApp {
                     shared_state.clone(),
                     command_tx.clone(),
                 )),
+                Box::new(crate::gui::operations::RefreshRootOp::new(
+                    shared_state.clone(),
+                    command_tx.clone(),
+                )),
                 Box::new(crate::gui::operations::RefreshDirectoryOp::new(
                     shared_state.clone(),
                     command_tx.clone(),
