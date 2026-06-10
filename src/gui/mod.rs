@@ -620,16 +620,14 @@ impl eframe::App for GuiApp {
                     self.refresh_directory_subtrees(&dirs);
                 }
                 crate::gui::operations::AppCommand::ShowTrashModal(nodes) => {
-                    // Corrected variant
                     self.delete_node_indices = nodes;
                     self.active_modal = Some(ActiveModal::Trash);
-                    self.delete_confirm_checked = false; // Renders custom confirmation checkbox in your dialog!
+                    self.delete_confirm_checked = false;
                 }
                 crate::gui::operations::AppCommand::ShowDeleteModal(nodes) => {
-                    // Corrected variant
                     self.delete_node_indices = nodes;
                     self.active_modal = Some(ActiveModal::Delete);
-                    self.delete_confirm_checked = false; // Renders custom confirmation checkbox in your dialog!
+                    self.delete_confirm_checked = false;
                 }
             }
         }
@@ -1092,9 +1090,14 @@ impl GuiApp {
                         };
                         self.treemap_chart.render(ui, snapshot, &mut context);
 
-                        // Sync selections
-                        if selected_nodes_set.len() != self.table_state.selected_rows.len() as usize
-                        {
+                        // Content-Aware Sync (Selections)
+                        let selection_changed = selected_nodes_set.len()
+                            != self.table_state.selected_rows.len() as usize
+                            || selected_nodes_set
+                                .iter()
+                                .any(|&idx| !self.table_state.selected_rows.contains(idx));
+
+                        if selection_changed {
                             self.table_state.selected_rows.clear();
                             self.table_state
                                 .selected_rows
@@ -1106,9 +1109,15 @@ impl GuiApp {
                                 self.selected_node_idx = None;
                             }
                         }
-                        // Sync expansions
-                        if expanded_nodes_set.len() != self.table_state.expanded_rows.len() as usize
-                        {
+
+                        // Content-Aware Sync (Expansions)
+                        let expansion_changed = expanded_nodes_set.len()
+                            != self.table_state.expanded_rows.len() as usize
+                            || expanded_nodes_set
+                                .iter()
+                                .any(|&idx| !self.table_state.expanded_rows.contains(idx));
+
+                        if expansion_changed {
                             self.table_state.expanded_rows.clear();
                             self.table_state
                                 .expanded_rows
@@ -1156,9 +1165,14 @@ impl GuiApp {
                             }
                         }
 
-                        // Sync selections
-                        if selected_nodes_set.len() != self.table_state.selected_rows.len() as usize
-                        {
+                        // Content-Aware Sync (Selections)
+                        let selection_changed = selected_nodes_set.len()
+                            != self.table_state.selected_rows.len() as usize
+                            || selected_nodes_set
+                                .iter()
+                                .any(|&idx| !self.table_state.selected_rows.contains(idx));
+
+                        if selection_changed {
                             self.table_state.selected_rows.clear();
                             self.table_state
                                 .selected_rows
@@ -1170,9 +1184,15 @@ impl GuiApp {
                                 self.selected_node_idx = None;
                             }
                         }
-                        // Sync expansions
-                        if expanded_nodes_set.len() != self.table_state.expanded_rows.len() as usize
-                        {
+
+                        // Content-Aware Sync (Expansions)
+                        let expansion_changed = expanded_nodes_set.len()
+                            != self.table_state.expanded_rows.len() as usize
+                            || expanded_nodes_set
+                                .iter()
+                                .any(|&idx| !self.table_state.expanded_rows.contains(idx));
+
+                        if expansion_changed {
                             self.table_state.expanded_rows.clear();
                             self.table_state
                                 .expanded_rows
@@ -1307,10 +1327,14 @@ impl GuiApp {
                             };
                             self.treemap_chart.render(ui, snapshot, &mut context);
 
-                            // Sync selections
-                            if selected_nodes_set.len()
+                            // Content-Aware Sync (Selections)
+                            let selection_changed = selected_nodes_set.len()
                                 != self.table_state.selected_rows.len() as usize
-                            {
+                                || selected_nodes_set
+                                    .iter()
+                                    .any(|&idx| !self.table_state.selected_rows.contains(idx));
+
+                            if selection_changed {
                                 self.table_state.selected_rows.clear();
                                 self.table_state
                                     .selected_rows
@@ -1322,10 +1346,15 @@ impl GuiApp {
                                     self.selected_node_idx = None;
                                 }
                             }
-                            // Sync expansions
-                            if expanded_nodes_set.len()
+
+                            // Content-Aware Sync (Expansions)
+                            let expansion_changed = expanded_nodes_set.len()
                                 != self.table_state.expanded_rows.len() as usize
-                            {
+                                || expanded_nodes_set
+                                    .iter()
+                                    .any(|&idx| !self.table_state.expanded_rows.contains(idx));
+
+                            if expansion_changed {
                                 self.table_state.expanded_rows.clear();
                                 self.table_state
                                     .expanded_rows
@@ -1383,10 +1412,14 @@ impl GuiApp {
                                         }
                                     }
 
-                                    // Sync selections
-                                    if selected_nodes_set.len()
+                                    // Content-Aware Sync (Selections)
+                                    let selection_changed = selected_nodes_set.len()
                                         != self.table_state.selected_rows.len() as usize
-                                    {
+                                        || selected_nodes_set.iter().any(|&idx| {
+                                            !self.table_state.selected_rows.contains(idx)
+                                        });
+
+                                    if selection_changed {
                                         self.table_state.selected_rows.clear();
                                         self.table_state
                                             .selected_rows
@@ -1398,10 +1431,15 @@ impl GuiApp {
                                             self.selected_node_idx = None;
                                         }
                                     }
-                                    // Sync expansions
-                                    if expanded_nodes_set.len()
+
+                                    // Content-Aware Sync (Expansions)
+                                    let expansion_changed = expanded_nodes_set.len()
                                         != self.table_state.expanded_rows.len() as usize
-                                    {
+                                        || expanded_nodes_set.iter().any(|&idx| {
+                                            !self.table_state.expanded_rows.contains(idx)
+                                        });
+
+                                    if expansion_changed {
                                         self.table_state.expanded_rows.clear();
                                         self.table_state
                                             .expanded_rows
