@@ -350,18 +350,13 @@ impl GuiApp {
         self.scan_start_time = None;
 
         // Rebuild extension stats exactly once in the background upon load
+        let snapshot = self.shared_state.current_snapshot.load();
         let mut ext_map: HashMap<String, (u64, u32)> = HashMap::new();
-        for node in self.shared_state.current_snapshot.load().nodes.iter() {
+        for node in snapshot.nodes.iter() {
             if node.is_directory() {
                 continue;
             }
-            if let Some(name) = self
-                .shared_state
-                .current_snapshot
-                .load()
-                .string_pool
-                .get(node.name_id)
-            {
+            if let Some(name) = snapshot.string_pool.get(node.name_id) {
                 let ext = Path::new(name).extension().map_or_else(
                     || NO_EXTENSION.to_string(),
                     |s| s.to_string_lossy().to_ascii_lowercase(),
