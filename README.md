@@ -16,6 +16,12 @@ Unlike traditional analyzers that crawl sequentially, **eDirStat** is built from
 
 ---
 
+## 🏁 Drag Race vs WinDirStat 🏁 (`ntfs`, NVMe PCIe Gen3)
+
+<https://github.com/user-attachments/assets/aab8ea46-4bf7-4ac5-8d09-cdbf73d8a607>
+
+---
+
 ## 📽️ Demo Video
 
 <https://github.com/user-attachments/assets/de96a247-1066-4ddd-8a0c-e38053c6ebe9>
