@@ -84,7 +84,6 @@ jobs:
     name: Build & Package Windows (Inno Setup)
     runs-on: windows-latest
     needs: [test-linux, test-macos]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     steps:
       - name: Checkout Source Code
