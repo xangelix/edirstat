@@ -1,7 +1,7 @@
 [Setup]
 AppId={{019EB36D-2D44-7A10-A0D3-1DA29AA7865C}}
 AppName=eDirStat
-AppVersion=1.1.0
+AppVersion={#AppVersion}
 AppPublisher=Cody Wyatt Neiman (xangelix)
 AppPublisherURL=https://github.com/xangelix/edirstat
 AppSupportURL=https://github.com/xangelix/edirstat/issues

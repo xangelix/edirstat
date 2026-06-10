@@ -69,8 +69,14 @@ jobs:
           cp -Force target\x86_64-pc-windows-msvc\release\edirstat.exe target\release\edirstat.exe
 
       - name: Compile Inno Setup Installer
+        shell: powershell
         run: |
-          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
+          # 1. Extract the version string from Cargo.toml
+          $version = (Select-String -Path Cargo.toml -Pattern '^version\s*=\s*"(.*?)"').Matches.Groups[1].Value
+          echo "Detected Cargo Version: $version"
+
+          # 2. Compile passing the version dynamically
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DAppVersion=$version installer.iss
 
       - name: Prepare Portable ZIP
         run: |
