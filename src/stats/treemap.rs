@@ -187,50 +187,53 @@ impl StatComponent for TreemapChart {
         }
 
         if !context.selected_nodes.is_empty() {
-            let roots = get_selection_roots(&snapshot.nodes, context.selected_nodes);
-            for root_idx in roots {
-                // Reconstruct the bounding box union of all blocks belonging to the selection.
-                // For a file, this yields its individual rect. For a directory, it yields the
-                // exact unified rect of its visible children on-screen.
-                let mut target_rect: Option<eframe::egui::Rect> = None;
-                for block in &self.cached_blocks {
-                    if is_descendant(&snapshot.nodes, block.node_idx, root_idx) {
-                        match target_rect {
-                            None => target_rect = Some(block.rect),
-                            Some(ref mut r) => *r = r.union(block.rect),
+            if context.selected_nodes.len() == 1 {
+                // Fast-path: Skip get_selection_roots entirely.
+                // A single selected node is guaranteed to be its own selection root.
+                if let Some(&root_idx) = context.selected_nodes.iter().next() {
+                    let mut target_rect: Option<eframe::egui::Rect> = None;
+
+                    for block in &self.cached_blocks {
+                        if is_descendant(&snapshot.nodes, block.node_idx, root_idx) {
+                            match target_rect {
+                                None => target_rect = Some(block.rect),
+                                Some(ref mut r) => *r = r.union(block.rect),
+                            }
                         }
+                    }
+
+                    if let Some(rect) = target_rect {
+                        draw_glow(ui, &painter, rect);
+                    }
+                }
+            } else {
+                // Slow-path: Multiple selections.
+                let roots = get_selection_roots(&snapshot.nodes, context.selected_nodes);
+                let mut root_rects: std::collections::HashMap<
+                    u32,
+                    eframe::egui::Rect,
+                    ahash::RandomState,
+                > = std::collections::HashMap::with_hasher(ahash::RandomState::new());
+
+                for block in &self.cached_blocks {
+                    let mut curr = Some(block.node_idx);
+                    while let Some(idx) = curr {
+                        if roots.contains(&idx) {
+                            root_rects
+                                .entry(idx)
+                                .and_modify(|r| *r = r.union(block.rect))
+                                .or_insert(block.rect);
+                            break;
+                        }
+                        curr = snapshot
+                            .nodes
+                            .get(idx as usize)
+                            .and_then(crate::model::arena::FileNode::parent_opt);
                     }
                 }
 
-                if let Some(rect) = target_rect {
-                    let time = ui.input(|i| i.time);
-
-                    // A wave factor oscillating smoothly between 0.0 and 1.0 (approx. 1Hz frequency)
-                    let pulse = 0.5f64.mul_add((time * 6.0).sin(), 0.5);
-
-                    // 1. Draw Outer Expanding Glow (grows and fades)
-                    let glow_alpha = 0.20f64.mul_add(pulse, 0.1);
-                    let glow_color =
-                        crate::colors::GLOW_OUTER_BASE.linear_multiply(glow_alpha as f32);
-                    let glow_thickness = 6.0f32.mul_add(pulse as f32, 4.0); // Oscillates thickness
-                    painter.rect(
-                        rect,
-                        0.0,
-                        crate::colors::COLOR_TRANSPARENT,
-                        eframe::egui::Stroke::new(glow_thickness, glow_color),
-                        eframe::egui::StrokeKind::Outside,
-                    );
-
-                    // 2. Draw Inner Sharp Contrast Core (stays crisp)
-                    let core_color = crate::colors::GLOW_INNER_CORE; // Soft pastel purple/violet
-                    let core_thickness = 1.0f32.mul_add(pulse as f32, 1.5);
-                    painter.rect(
-                        rect,
-                        0.0,
-                        crate::colors::COLOR_TRANSPARENT,
-                        eframe::egui::Stroke::new(core_thickness, core_color),
-                        eframe::egui::StrokeKind::Inside,
-                    );
+                for (&_root_idx, &rect) in &root_rects {
+                    draw_glow(ui, &painter, rect);
                 }
             }
         }
@@ -292,6 +295,34 @@ impl StatComponent for TreemapChart {
             });
         }
     }
+}
+
+fn draw_glow(ui: &eframe::egui::Ui, painter: &eframe::egui::Painter, rect: eframe::egui::Rect) {
+    let time = ui.input(|i| i.time);
+    let pulse = 0.5f64.mul_add((time * 6.0).sin(), 0.5);
+
+    // 1. Draw Outer Expanding Glow (grows and fades)
+    let glow_alpha = 0.20f64.mul_add(pulse, 0.1);
+    let glow_color = crate::colors::GLOW_OUTER_BASE.linear_multiply(glow_alpha as f32);
+    let glow_thickness = 6.0f32.mul_add(pulse as f32, 4.0); // Oscillates thickness
+    painter.rect(
+        rect,
+        0.0,
+        crate::colors::COLOR_TRANSPARENT,
+        eframe::egui::Stroke::new(glow_thickness, glow_color),
+        eframe::egui::StrokeKind::Outside,
+    );
+
+    // 2. Draw Inner Sharp Contrast Core (stays crisp)
+    let core_color = crate::colors::GLOW_INNER_CORE;
+    let core_thickness = 1.0f32.mul_add(pulse as f32, 1.5);
+    painter.rect(
+        rect,
+        0.0,
+        crate::colors::COLOR_TRANSPARENT,
+        eframe::egui::Stroke::new(core_thickness, core_color),
+        eframe::egui::StrokeKind::Inside,
+    );
 }
 
 struct TreemapConfig<'a> {
@@ -486,27 +517,24 @@ fn build_treemap(
             break;
         }
 
-        let mut current_row = Vec::new();
-        current_row.push(child_areas[i]);
+        // zero-allocation index bounds tracking
         let mut j = i + 1;
+        let mut worst_before = worst_aspect_ratio(&child_areas[i..j], w);
 
         while j < active_children.len() {
-            let next_area = child_areas[j];
-            let mut test_row = current_row.clone();
-            test_row.push(next_area);
-
-            let worst_before = worst_aspect_ratio(&current_row, w);
-            let worst_after = worst_aspect_ratio(&test_row, w);
+            // Evaluate aspect ratio with next sibling using contiguous slice indexing
+            let worst_after = worst_aspect_ratio(&child_areas[i..=j], w);
 
             if worst_after <= worst_before {
-                current_row.push(next_area);
+                worst_before = worst_after;
                 j += 1;
             } else {
                 break;
             }
         }
 
-        let row_sum: f64 = current_row.iter().sum();
+        // Sum and iterate over child_areas[i..j] slice boundaries
+        let row_sum: f64 = child_areas[i..j].iter().sum();
         let vertical_layout = remaining_rect.width() >= remaining_rect.height();
 
         if vertical_layout {
@@ -514,7 +542,7 @@ fn build_treemap(
             let thickness = if h > 0.0 { row_sum / h } else { 0.0 };
             let mut current_y = remaining_rect.min.y;
 
-            for (k, &area) in current_row.iter().enumerate() {
+            for (k, &area) in child_areas[i..j].iter().enumerate() {
                 let child_idx = active_children[i + k];
                 let item_height = if row_sum > 0.0 {
                     h * (area / row_sum)
@@ -541,7 +569,7 @@ fn build_treemap(
             let thickness = if width > 0.0 { row_sum / width } else { 0.0 };
             let mut current_x = remaining_rect.min.x;
 
-            for (k, &area) in current_row.iter().enumerate() {
+            for (k, &area) in child_areas[i..j].iter().enumerate() {
                 let child_idx = active_children[i + k];
                 let item_width = if row_sum > 0.0 {
                     width * (area / row_sum)
