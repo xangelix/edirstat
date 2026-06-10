@@ -20,9 +20,11 @@ impl GuiApp {
             );
             ui.separator();
 
-            // Map the pre-computed/pre-sorted stats vector from our background thread
+            // 1. O(1) Pointer Cache Check: Only map and allocate when stats actually change
             let shared_ext_stats = self.shared_state.extension_stats.load();
-            if !shared_ext_stats.is_empty() {
+            let current_ptr = std::sync::Arc::as_ptr(&shared_ext_stats) as usize;
+
+            if self.last_extension_stats_ptr != current_ptr {
                 self.extension_stats = shared_ext_stats
                     .iter()
                     .map(|(ext, total_size, file_count)| ExtensionStat {
@@ -32,45 +34,66 @@ impl GuiApp {
                         color: theme::get_color_for_extension(ext),
                     })
                     .collect();
+                self.last_extension_stats_ptr = current_ptr;
             }
 
             if self.extension_stats.is_empty() {
                 ui.label("No statistics gathered yet.");
             } else {
-                egui::ScrollArea::vertical().show(ui, |ui| {
-                    for stat in &self.extension_stats {
-                        ui.horizontal(|ui| {
-                            // Colored dot
-                            let (rect, _) = ui
-                                .allocate_exact_size(egui::vec2(10.0, 10.0), egui::Sense::hover());
-                            ui.painter().circle_filled(rect.center(), 5.0, stat.color);
+                // 2. Lazy Viewport Rendering: Render only the rows visible on screen
+                let row_height = 20.0;
+                let total_rows = self.extension_stats.len();
 
-                            // Allocate name width and truncate it
-                            let name_width = (ui.available_width() - 65.0).max(10.0);
-                            ui.allocate_ui(
-                                egui::vec2(name_width, ui.spacing().interact_size.y),
-                                |ui| {
-                                    ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Truncate);
+                egui::ScrollArea::vertical().show_rows(
+                    ui,
+                    row_height,
+                    total_rows,
+                    |ui, row_range| {
+                        for idx in row_range {
+                            let stat = &self.extension_stats[idx];
+                            ui.horizontal(|ui| {
+                                ui.set_min_height(row_height);
 
-                                    // Render the label and attach a hover tooltip showing file count
-                                    ui.label(&stat.ext)
-                                        .on_hover_text(format!("Files: {}", stat.file_count));
-                                },
-                            );
+                                // Colored dot
+                                let (rect, _) = ui.allocate_exact_size(
+                                    egui::vec2(10.0, 10.0),
+                                    egui::Sense::hover(),
+                                );
+                                ui.painter().circle_filled(rect.center(), 4.5, stat.color);
 
-                            ui.with_layout(
-                                egui::Layout::right_to_left(egui::Align::Center),
-                                |ui| {
-                                    ui.label(
-                                        prettier_bytes::ByteFormatter::new()
-                                            .format(stat.total_size)
-                                            .to_string(),
-                                    );
-                                },
-                            );
-                        });
-                    }
-                });
+                                // Column alignment pre-calculations (avoids nesting heavy UI containers)
+                                let available_width = ui.available_width();
+                                let size_str = prettier_bytes::ByteFormatter::new()
+                                    .format(stat.total_size)
+                                    .to_string();
+
+                                let size_width = 72.0;
+                                let name_width = (available_width - size_width - 8.0).max(10.0);
+
+                                // Left Column: Extension Name
+                                ui.allocate_ui_with_layout(
+                                    egui::vec2(name_width, row_height),
+                                    egui::Layout::left_to_right(egui::Align::Center),
+                                    |ui| {
+                                        ui.style_mut().wrap_mode =
+                                            Some(egui::TextWrapMode::Truncate);
+                                        ui.label(&stat.ext)
+                                            .on_hover_text(format!("Files: {}", stat.file_count));
+                                    },
+                                );
+
+                                // Right Column: Space Consumed
+                                ui.allocate_ui_with_layout(
+                                    egui::vec2(ui.available_width(), row_height),
+                                    egui::Layout::right_to_left(egui::Align::Center),
+                                    |ui| {
+                                        ui.label(size_str);
+                                    },
+                                );
+                            });
+                        }
+                    },
+                );
             }
         });
     }

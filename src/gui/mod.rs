@@ -127,6 +127,7 @@ pub struct GuiApp {
     pub(crate) highlight_duplicates: bool,
     pub(crate) hovered_node_idx: Option<u32>,
     pub(crate) last_rendered_snapshot_ptr: usize,
+    pub(crate) last_extension_stats_ptr: usize,
 }
 
 impl GuiApp {
@@ -233,6 +234,7 @@ impl GuiApp {
             highlight_duplicates: false,
             hovered_node_idx: None,
             last_rendered_snapshot_ptr: 0,
+            last_extension_stats_ptr: 0,
         };
 
         #[cfg(test)]
@@ -292,6 +294,7 @@ impl GuiApp {
 
         self.scroll_to_selected = false;
         self.last_rendered_snapshot_ptr = 0;
+        self.last_extension_stats_ptr = 0;
     }
 
     pub(crate) fn start_scan(&mut self, path: PathBuf) {
