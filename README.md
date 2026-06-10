@@ -10,6 +10,8 @@
 
 Unlike traditional analyzers that crawl sequentially, **eDirStat** is built from the ground up for modern multi-core systems. It couples a blazing-fast, work-stealing multithreaded directory walker with a zero-copy arena data structure. This allows you to scan millions of files seamlessly, visualize space hogs instantly via adaptive HSL gradients, and save/load system snapshots in milliseconds using memory-mapped files.
 
+[**26.9x speedup** vs `WinDirStat`](#benchmarks)
+
 [**3.6x to 7.5x speedup** vs `QDirStat`](#benchmarks)
 
 ---
@@ -185,15 +187,19 @@ The engine remains hardlink-aware, allowing it to accurately differentiate betwe
 
 ## Benchmarks
 
+### Vs `WinDirStat`
+
+### Vs `QDirStat`
+
 To evaluate traversal performance, `edirstat` includes a custom comparison benchmark target comparing it against `qdirstat-cache-writer` (the official headless command-line crawler shipped with `QDirStat` for background scanning).
 
-### How It Works & Why It's Fair
+#### How It Works & Why It's Fair
 
 1. **End-to-End Subprocess Spawning:** Both tools are launched as independent external subprocesses (running the optimized release binary for `edirstat` and the `perl` script execution for `QDirStat`). This captures full end-to-end CLI execution time, including binary loading, runtime initialization (Perl interpreter boot vs. Rust startup), option parsing, and traversal startup.
 2. **Warm Cache Inode Priming:** The benchmark performs 2 warm-up runs for each target directory to prime the OS directory entry page caches. This eliminates disk I/O bottlenecks and isolates CPU/algorithm execution efficiency (multi-threaded, work-stealing Rust vs. single-threaded Perl).
 3. **Statistical Averaging:** Measurements are collected across 5 consecutive sample runs to compute a robust median and average traversal duration.
 
-### Vs `QDirStat`
+#### Results
 
 Across a diverse suite of storage devices and directory layouts, **eDirStat** consistently exceeds the performance of `QDirStat` in duplicate, delivering a consistent **3.6x to 7.5x speedup** in scan time!
 
