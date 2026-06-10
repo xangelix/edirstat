@@ -63,10 +63,10 @@ pub fn save_snapshot(
     let bytes_count = string_pool.data.len() as u64;
     let string_pool_length = 8 + offsets_size + 8 + bytes_count;
 
-    // Create header
+    // Create header with version 2
     let header = FileHeader {
         magic: *b"EDST",
-        version: 1,
+        version: 2,
         _padding: 0,
         node_count: nodes.len() as u64,
         string_pool_offset,
@@ -105,7 +105,8 @@ pub fn load_snapshot(path: &Path) -> Result<(PersistentArena, StringPool), crate
     if header.magic != *b"EDST" {
         return Err(crate::EdirstatError::InvalidMagic);
     }
-    if header.version != 1 {
+    // Only accept version 2
+    if header.version != 2 {
         return Err(crate::EdirstatError::UnsupportedVersion(header.version));
     }
 
