@@ -44,7 +44,7 @@ smallvec = "1.15.1"
 thiserror = "2.0.18"
 trash = "5.2.6"
 
-[target.x86_64-pc-windows-gnu.dependencies]
+[target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.62.2", features = ["Win32_Storage_FileSystem"] }
 
 [build-dependencies]
