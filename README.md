@@ -20,6 +20,8 @@ Unlike traditional analyzers that crawl sequentially, **eDirStat** is built from
 
 <https://github.com/user-attachments/assets/aab8ea46-4bf7-4ac5-8d09-cdbf73d8a607>
 
+**`eDirStat` is 27x faster than `WinDirStat`.** And, no, that's not "time to first data"-- that's a complete and equivalent scan. `eDirStat` uses a modern multi-threaded work-stealing algorithm, whereas `WinDirStat` uses a single-threaded recursive algorithm. `eDirStat` really is that much faster. While the effect is exaggerated on an SSD, you'll still experience dramatic (usually >10x faster) speedups on traditional hard drives too.
+
 ---
 
 ## 📽️ Demo Video
