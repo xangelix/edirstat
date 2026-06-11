@@ -1662,32 +1662,29 @@ fn get_unix_metadata(path_str: &str) -> Option<(String, String, String)> {
     let gid = metadata.gid();
     let mode = metadata.mode();
 
-    let user = std::process::Command::new("id")
-        .args(["-nu", &uid.to_string()])
-        .output()
-        .ok()
-        .and_then(|o| {
-            if o.status.success() {
-                Some(String::from_utf8_lossy(&o.stdout).trim().to_string())
-            } else {
-                None
-            }
-        })
-        .unwrap_or_else(|| uid.to_string());
+    // Query UID natively
+    let user = unsafe {
+        let passwd = libc::getpwuid(uid);
+        if passwd.is_null() {
+            uid.to_string()
+        } else {
+            std::ffi::CStr::from_ptr((*passwd).pw_name)
+                .to_string_lossy()
+                .into_owned()
+        }
+    };
 
-    let group = std::process::Command::new("getent")
-        .args(["group", &gid.to_string()])
-        .output()
-        .ok()
-        .and_then(|o| {
-            if o.status.success() {
-                let s = String::from_utf8_lossy(&o.stdout);
-                s.split(':').next().map(|name| name.trim().to_string())
-            } else {
-                None
-            }
-        })
-        .unwrap_or_else(|| gid.to_string());
+    // Query GID natively
+    let group = unsafe {
+        let grp = libc::getgrgid(gid);
+        if grp.is_null() {
+            gid.to_string()
+        } else {
+            std::ffi::CStr::from_ptr((*grp).gr_name)
+                .to_string_lossy()
+                .into_owned()
+        }
+    };
 
     let file_type_char = if metadata.is_dir() {
         'd'

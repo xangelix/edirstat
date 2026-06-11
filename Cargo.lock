@@ -1116,6 +1116,7 @@ dependencies = [
  "egui-table-kit",
  "egui_extras",
  "egui_plot",
+ "libc",
  "memmap2",
  "open",
  "parking_lot",
