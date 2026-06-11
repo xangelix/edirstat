@@ -44,10 +44,10 @@ prettier-bytes = "0.2.1"
 rayon = "1.12.0"
 regex = { version = "1.12.4", features = ["use_std"] }
 rfd = "0.17.2"
-smallvec = "1.15.1"
+smallvec = "1.15.2"
 thiserror = "2.0.18"
 trash = "5.2.6"
-xgx_intern = "0.6.2"
+xgx_intern = "0.6.3"
 
 # feature: online
 egui-async = { version = "0.4", optional = true }
