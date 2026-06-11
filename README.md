@@ -86,10 +86,16 @@ The compiled binary will be located at `target/release/edirstat`.
 
 ## 📖 Usage Guide
 
-Run the application from the command line:
+To run the GUI application from the command line:
 
 ```bash
 ./target/release/edirstat
+```
+
+You can also pass a directory path as a positional argument to automatically launch and begin scanning that folder on startup:
+
+```bash
+./target/release/edirstat /path/to/scan
 ```
 
 ### Navigating the User Interface
