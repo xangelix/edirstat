@@ -16,6 +16,17 @@ All notable changes to **eDirStat** will be documented in this file.
 - **❓ "How it Works" Modal:** Added an informative explanation modal to help users understand the deduplication process.
 - **🌳 Default Root Selection:** Automatically selects the root directory node upon loading, improving the initial navigation flow.
 - **⚙️ EditorConfig:** Added an `.editorconfig` file to establish and enforce consistent coding styles across different editors.
+- **🚀 CLI / Positional Arguments:** Added support for passing a directory path as a positional command-line argument to automatically start scanning on startup.
+- **📊 Benchmark & Demo Media:** Added comparison benchmarks against QDirStat and WinDirStat in the README, along with high-quality demonstration videos (drag race, deduplicator demo, and WinDirStat layout mode).
+- **🪟 Windows NTFS MFT Driver:** Integrated a new Windows-native NTFS driver utilizing the Master File Table (MFT) for near-instantaneous drive scanning on Windows.
+- **⏱️ Scan Stats Persistence:** Retained the elapsed scan time and scanning speed in the status bar even after the scan has finished.
+- **📋 Clipboard Tools:** Added "Copy Name" and "Copy Path" tools to easily copy file metadata from the directory tree.
+- **🔆 Scan Button Highlight:** Added a subtle glow/highlight effect to the "Scan Directory" button when no scan has been run or directory data is empty.
+- **📊 New Table Implementation:** Switched to a robust, feature-rich table view powered by `egui-table-kit`, supporting horizontal scrolling and cleaner row selection/operations traits.
+- **📅 Created Time Column:** Added a "Created" column in the directory tree/explorer view (positioned before "Modified") to view file creation dates.
+- **🔄 Root Refresh Support:** Restored the ability to refresh/rescan the root node directly in the directory explorer.
+- **📦 Windows Installer (Inno Setup):** Added support for building proper Windows setup/installer binaries (`.exe` via Inno Setup) in the CI/CD pipeline on every commit.
+- **⚖️ MIT License:** Formally initialized the repository with the MIT License.
 
 ### Changed
 
@@ -28,12 +39,27 @@ All notable changes to **eDirStat** will be documented in this file.
 - **🧹 Deduplicator Cleanup:** Disabled the file extensions panel while viewing the Deduplicator tab to reduce visual clutter, and cleaned up tab headings.
 - **♻️ Recycle Icon:** Swapped the toolbar recycle icon with a larger, more visible version.
 - **📦 Dependency Updates:** Bumped project dependencies to their latest versions for improved security and stability.
+- **⚡ Treemap Render Optimizations:** Dramatically optimized interactive treemap rendering by switching to zero-allocation draw calls, discarding sub-pixel draws earlier, and adjusting the pixel precision limit to `0.2` for crisper rendering.
+- **⚡ Extension List Caching:** Implemented a cached rendering strategy for file extension statistics, reducing draw calls by up to 50%.
+- **⚡ Performance Polish:** Switched key hashing tables to `ahash`'s `RandomState` and replaced the extension map string types with `CompactString` to further minimize heap allocations, and reduced load on the current snapshot mutex lock.
+- **✏️ Explorer Column Renaming:** Renamed the "Last Modified" column to "Modified" for a cleaner and more compact header layout.
+- **🎨 UI Enhancements:** Improved the table operations buttons styling (removing gray backgrounds for a cleaner look) and styled warning/detail modals with stronger, higher-contrast text.
+- **💾 Persistence Format V2:** Bumped the snapshot persistence header to `v2` to support new metadata features.
+- **📦 Dependency Upgrades:** Upgraded underlying project dependencies, including updating `egui-table-kit` to version `0.1.5`.
+- **🪟 Console-Free Windows Executable:** Configured the application so that the console command window does not spawn when launching the GUI on Windows.
 
 ### Fixed
 
 - **🍏 macOS Packaging:** Fixed incorrect icon paths in the macOS CI/CD release configuration.
 - **🖱️ Selection Behavior:** Restored the ability to de-select nodes in both the directory explorer and the interactive treemap.
 - **🔘 Dropdown Interactivity:** Fixed the click hitbox for dropdown buttons in the directory explorer.
+- **🪟 Windows Ancestor Traversal:** Resolved a bug in the directory traverser that caused incorrect ancestor resolution on Windows.
+- **🖱️ Treemap & Scatter Plot Bugfixes:** Truncated treemap depth past a set limit to prevent rendering overflows, resolved a block selection issue in the treemap, and improved hover text wrapping on plots.
+- **🪟 Windows Drive Resolution:** Fixed a path-resolution issue for Windows root drives in the directory allocator arena.
+- **📦 Cross-Platform Compilation:** Fixed build configurations so that the `windows` crate dependency is only compiled on Windows targets and correctly supports MSVC builds.
+- **📝 Clippy Warnings in Docs:** Fixed documentation formatting and naming to eliminate Clippy lints.
+- **♻️ Cache Clearing on Refresh:** Fixed a bug where cached GUI elements were not cleared during a directory refresh or rescan.
+- **🪟 Windows GUI Launching:** Fixed the entry point executable logic to properly apply the Windows GUI subsystem directive.
 
 ---
 
