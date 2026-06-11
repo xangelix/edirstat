@@ -5,6 +5,8 @@ use memmap2::MmapOptions;
 
 use super::arena::{FileNode, StringPool};
 
+pub const FILE_VERSION: u16 = 2;
+
 #[derive(Debug, Copy, Clone, Pod, Zeroable)]
 #[repr(C)]
 pub struct FileHeader {
@@ -74,7 +76,7 @@ pub fn save_snapshot(
     // Create header with version 2
     let header = FileHeader {
         magic: *b"EDST",
-        version: 2,
+        version: FILE_VERSION,
         _padding: 0,
         node_count: nodes.len() as u64,
         string_pool_offset,
@@ -113,8 +115,8 @@ pub fn load_snapshot(path: &Path) -> Result<(PersistentArena, StringPool), crate
     if header.magic != *b"EDST" {
         return Err(crate::EdirstatError::InvalidMagic);
     }
-    // Only accept version 2
-    if header.version != 2 {
+    // Only accept the current `FILE_VERSION`
+    if header.version != FILE_VERSION {
         return Err(crate::EdirstatError::UnsupportedVersion(header.version));
     }
 
