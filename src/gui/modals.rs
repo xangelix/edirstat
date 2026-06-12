@@ -60,6 +60,7 @@ fn walk_dir(
     last_child_map: &mut Vec<u32>,
     traversal_stats: &crate::engine::traversal::TraversalStats,
     dir_idx: u32,
+    ancestors: &mut smallvec::SmallVec<[(u64, u64); 16]>,
 ) {
     let Ok(entries) = std::fs::read_dir(dir_path) else {
         return;
@@ -73,6 +74,11 @@ fn walk_dir(
         let Some(meta) = crate::arena::EntryMetadata::from_dir_entry(&entry) else {
             continue;
         };
+
+        // Cycle Detection
+        if meta.file_id != (0, 0) && ancestors.contains(&meta.file_id) {
+            continue;
+        }
 
         let name_id = string_pool.get_or_insert(meta.name.as_bytes());
         let child_idx = cloned_nodes.len() as u32;
@@ -92,6 +98,9 @@ fn walk_dir(
         last_child_map[p_idx] = child_idx;
 
         if meta.is_dir {
+            if meta.file_id != (0, 0) {
+                ancestors.push(meta.file_id);
+            }
             walk_dir(
                 &entry.path(),
                 child_idx,
@@ -100,7 +109,11 @@ fn walk_dir(
                 last_child_map,
                 traversal_stats,
                 dir_idx,
+                ancestors,
             );
+            if meta.file_id != (0, 0) {
+                ancestors.pop();
+            }
         } else {
             traversal_stats.files_scanned.fetch_add(1, Ordering::SeqCst);
             traversal_stats
@@ -1255,6 +1268,16 @@ impl GuiApp {
                 // 2. Scan the directory recursively on disk and append new nodes
                 let mut last_child_map = vec![crate::arena::NO_INDEX; cloned_nodes.len()];
 
+                // --- BUILD ANCESTORS FOR CYCLE DETECTION ---
+                let mut ancestors: smallvec::SmallVec<[(u64, u64); 16]> = smallvec::smallvec![];
+                for ancestor_path in path.ancestors() {
+                    if let Ok(meta) = std::fs::metadata(ancestor_path) {
+                        ancestors.push(crate::engine::traversal::get_file_id(&meta));
+                    }
+                }
+                // Reverse so that the root ancestor is first and the target path is last
+                ancestors.reverse();
+
                 walk_dir(
                     &path,
                     dir_idx,
@@ -1263,6 +1286,7 @@ impl GuiApp {
                     &mut last_child_map,
                     &traversal_stats,
                     dir_idx,
+                    &mut ancestors, // Pass the tracked ancestors
                 );
 
                 // 3. Now propagate the new size/counts of dir_idx to all its ancestors!
