@@ -121,7 +121,14 @@ pub fn load_snapshot(path: &Path) -> Result<(PersistentArena, StringPool), crate
     }
 
     let node_count = header.node_count as usize;
-    let expected_size = 32 + node_count * std::mem::size_of::<FileNode>();
+    let nodes_byte_size = node_count
+        .checked_mul(std::mem::size_of::<FileNode>())
+        .ok_or(crate::EdirstatError::TruncatedNodes)?;
+
+    let expected_size = nodes_byte_size
+        .checked_add(32)
+        .ok_or(crate::EdirstatError::TruncatedNodes)?;
+
     if mmap.len() < expected_size {
         return Err(crate::EdirstatError::TruncatedNodes);
     }
