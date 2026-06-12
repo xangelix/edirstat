@@ -12,7 +12,7 @@ Unlike traditional analyzers that crawl sequentially, **eDirStat** is built from
 
 [**26.9x speedup** vs `WinDirStat`](#benchmarks)
 
-[**3.6x to 7.5x speedup** vs `QDirStat`](#benchmarks)
+[**6.0x to 9.6x speedup** vs `QDirStat`](#benchmarks)
 
 ---
 
@@ -242,7 +242,7 @@ Linux 6.18.34-1-cachyos-lts
 Dense, an enormous amount of small files and directories.
 
 ```text
-Running benches/compare.rs (target/release/deps/compare-f758f81e7b6c6d90)
+Running benches/compare.rs (target/release/deps/compare-95ade4249a41f004)
 ==================================================
           eDirStat vs QDirStat Benchmark
 ==================================================
@@ -251,24 +251,24 @@ CPU Cores Available: 32
 ==================================================
 Performing 2 warm-up runs...
 Performing 5 sample runs...
-Run 1/5... edirstat: 1.23s, qdirstat: 6.18s
-Run 2/5... edirstat: 1.23s, qdirstat: 6.19s
-Run 3/5... edirstat: 1.23s, qdirstat: 6.17s
-Run 4/5... edirstat: 1.24s, qdirstat: 6.17s
-Run 5/5... edirstat: 1.23s, qdirstat: 6.16s
+Run 1/5... edirstat: 856.10ms, qdirstat: 6.70s
+Run 2/5... edirstat: 869.77ms, qdirstat: 7.11s
+Run 3/5... edirstat: 881.21ms, qdirstat: 6.89s
+Run 4/5... edirstat: 865.67ms, qdirstat: 6.91s
+Run 5/5... edirstat: 851.16ms, qdirstat: 7.31s
 
 ================ RESULTS SUMMARY ================
 eDirStat (Rust, parallel):
-  Min   : 1.23s
-  Max   : 1.24s
-  Median: 1.23s
-  Mean  : 1.23s
+  Min   : 851.16ms
+  Max   : 881.21ms
+  Median: 865.67ms
+  Mean  : 864.78ms
 QDirStat (Perl writer):
-  Min   : 6.16s
-  Max   : 6.19s
-  Median: 6.17s
-  Mean  : 6.17s
-Speedup (QDirStat / eDirStat): 5.00x
+  Min   : 6.70s
+  Max   : 7.31s
+  Median: 6.91s
+  Mean  : 6.98s
+Speedup (QDirStat / eDirStat): 7.99x
 ==================================================
 ```
 
@@ -279,33 +279,33 @@ Speedup (QDirStat / eDirStat): 5.00x
 Game files, a mix of large and small files on a SATA SSD.
 
 ```text
-Running benches/compare.rs (target/release/deps/compare-f758f81e7b6c6d90)
+Running benches/compare.rs (target/release/deps/compare-95ade4249a41f004)
 ==================================================
-eDirStat vs QDirStat Benchmark
+          eDirStat vs QDirStat Benchmark
 ==================================================
 Target Directory : /run/media/tux/F1/Games/PC/SteamLibrary/steamapps/common
 CPU Cores Available: 32
 ==================================================
 Performing 2 warm-up runs...
 Performing 5 sample runs...
-Run 1/5... edirstat: 570.87ms, qdirstat: 4.02s
-Run 2/5... edirstat: 562.79ms, qdirstat: 4.03s
-Run 3/5... edirstat: 566.17ms, qdirstat: 4.06s
-Run 4/5... edirstat: 557.54ms, qdirstat: 4.07s
-Run 5/5... edirstat: 563.63ms, qdirstat: 4.06s
+Run 1/5... edirstat: 471.00ms, qdirstat: 4.24s
+Run 2/5... edirstat: 478.63ms, qdirstat: 5.12s
+Run 3/5... edirstat: 467.80ms, qdirstat: 4.54s
+Run 4/5... edirstat: 475.84ms, qdirstat: 4.27s
+Run 5/5... edirstat: 451.38ms, qdirstat: 8.45s
 
 ================ RESULTS SUMMARY ================
 eDirStat (Rust, parallel):
-Min : 557.54ms
-Max : 570.87ms
-Median: 563.63ms
-Mean : 564.20ms
+  Min   : 451.38ms
+  Max   : 478.63ms
+  Median: 471.00ms
+  Mean  : 468.93ms
 QDirStat (Perl writer):
-Min : 4.02s
-Max : 4.07s
-Median: 4.06s
-Mean : 4.05s
-Speedup (QDirStat / eDirStat): 7.20x
+  Min   : 4.24s
+  Max   : 8.45s
+  Median: 4.54s
+  Mean  : 5.32s
+Speedup (QDirStat / eDirStat): 9.64x
 ==================================================
 ```
 
@@ -316,33 +316,33 @@ Speedup (QDirStat / eDirStat): 7.20x
 Large files, but fewer, on an HDD. Less directory nesting.
 
 ```text
-Running benches/compare.rs (target/release/deps/compare-f758f81e7b6c6d90)
+Running benches/compare.rs (target/release/deps/compare-95ade4249a41f004)
 ==================================================
-eDirStat vs QDirStat Benchmark
+          eDirStat vs QDirStat Benchmark
 ==================================================
 Target Directory : /run/media/tux/D1
 CPU Cores Available: 32
 ==================================================
 Performing 2 warm-up runs...
 Performing 5 sample runs...
-Run 1/5... edirstat: 4.36ms, qdirstat: 30.76ms
-Run 2/5... edirstat: 4.15ms, qdirstat: 31.57ms
-Run 3/5... edirstat: 4.17ms, qdirstat: 31.31ms
-Run 4/5... edirstat: 3.83ms, qdirstat: 30.92ms
-Run 5/5... edirstat: 4.03ms, qdirstat: 31.40ms
+Run 1/5... edirstat: 8.01ms, qdirstat: 33.43ms
+Run 2/5... edirstat: 5.34ms, qdirstat: 33.03ms
+Run 3/5... edirstat: 5.48ms, qdirstat: 32.67ms
+Run 4/5... edirstat: 4.59ms, qdirstat: 33.06ms
+Run 5/5... edirstat: 5.81ms, qdirstat: 33.49ms
 
 ================ RESULTS SUMMARY ================
 eDirStat (Rust, parallel):
-Min : 3.83ms
-Max : 4.36ms
-Median: 4.15ms
-Mean : 4.11ms
+  Min   : 4.59ms
+  Max   : 8.01ms
+  Median: 5.48ms
+  Mean  : 5.85ms
 QDirStat (Perl writer):
-Min : 30.76ms
-Max : 31.57ms
-Median: 31.31ms
-Mean : 31.19ms
-Speedup (QDirStat / eDirStat): 7.54x
+  Min   : 32.67ms
+  Max   : 33.49ms
+  Median: 33.06ms
+  Mean  : 33.14ms
+Speedup (QDirStat / eDirStat): 6.03x
 ==================================================
 ```
 
@@ -353,33 +353,33 @@ Speedup (QDirStat / eDirStat): 7.54x
 An enormous amount of tiny files with deep directory nesting, on an HDD.
 
 ```text
-Running benches/compare.rs (target/release/deps/compare-f758f81e7b6c6d90)
+Running benches/compare.rs (target/release/deps/compare-95ade4249a41f004)
 ==================================================
-eDirStat vs QDirStat Benchmark
+          eDirStat vs QDirStat Benchmark
 ==================================================
 Target Directory : /run/media/tux/B4
 CPU Cores Available: 32
 ==================================================
 Performing 2 warm-up runs...
 Performing 5 sample runs...
-Run 1/5... edirstat: 976.23ms, qdirstat: 3.40s
-Run 2/5... edirstat: 953.45ms, qdirstat: 3.42s
-Run 3/5... edirstat: 938.84ms, qdirstat: 3.38s
-Run 4/5... edirstat: 945.62ms, qdirstat: 3.41s
-Run 5/5... edirstat: 931.06ms, qdirstat: 3.46s
+Run 1/5... edirstat: 515.15ms, qdirstat: 3.54s
+Run 2/5... edirstat: 520.41ms, qdirstat: 3.51s
+Run 3/5... edirstat: 537.08ms, qdirstat: 3.50s
+Run 4/5... edirstat: 580.76ms, qdirstat: 4.24s
+Run 5/5... edirstat: 612.70ms, qdirstat: 4.05s
 
 ================ RESULTS SUMMARY ================
 eDirStat (Rust, parallel):
-Min : 931.06ms
-Max : 976.23ms
-Median: 945.62ms
-Mean : 949.04ms
+  Min   : 515.15ms
+  Max   : 612.70ms
+  Median: 537.08ms
+  Mean  : 553.22ms
 QDirStat (Perl writer):
-Min : 3.38s
-Max : 3.46s
-Median: 3.41s
-Mean : 3.41s
-Speedup (QDirStat / eDirStat): 3.60x
+  Min   : 3.50s
+  Max   : 4.24s
+  Median: 3.54s
+  Mean  : 3.77s
+Speedup (QDirStat / eDirStat): 6.60x
 ==================================================
 ```
 
