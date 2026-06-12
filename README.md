@@ -169,17 +169,17 @@ To conserve system memory and minimize pointers, the scanned directory hierarchy
 The `.edst` snapshot file layout matches the structure of the in-memory arena:
 
 ```text
-+------------------------------------------------------------+
-|  Header (32 Bytes)                                         |
-|  - Magic: "EDST"                                           |
-|  - Version: u16                                            |
-|  - Node Count: u64                                         |
-|  - String Pool Offset & Length                             |
-+------------------------------------------------------------+
-|  Array of FileNode Structs (Flat Binary Segment)           |
-+------------------------------------------------------------+
-|  String Pool Data (Serialized Offsets + Packed UTF-8 Bytes)|
-+------------------------------------------------------------+
++-------------------------------------------------------------+
+|  Header (32 Bytes)                                          |
+|  - Magic: "EDST"                                            |
+|  - Version: u16                                             |
+|  - Node Count: u64                                          |
+|  - String Pool Offset & Length                              |
++-------------------------------------------------------------+
+|  Array of FileNode Structs (Flat Binary Segment)            |
++-------------------------------------------------------------+
+|  String Pool Data (Serialized Offsets + Packed UTF-8 Bytes) |
++-------------------------------------------------------------+
 ```
 
 - **Memory-Mapped Loading:** Loading a snapshot uses copy-on-write virtual memory maps (`memmap2`).
