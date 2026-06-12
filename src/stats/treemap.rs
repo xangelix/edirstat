@@ -68,11 +68,17 @@ pub fn get_selection_roots<S: ::std::hash::BuildHasher + Default>(
 ) -> std::collections::HashSet<u32> {
     let mut roots = std::collections::HashSet::new();
     for &idx in selected_nodes {
+        if idx as usize >= nodes.len() {
+            continue;
+        }
         let mut curr = nodes[idx as usize].parent;
         let mut ancestor_selected = false;
         while curr != crate::arena::NO_INDEX {
             if selected_nodes.contains(&curr) {
                 ancestor_selected = true;
+                break;
+            }
+            if curr as usize >= nodes.len() {
                 break;
             }
             curr = nodes[curr as usize].parent;
