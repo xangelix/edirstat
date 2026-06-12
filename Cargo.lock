@@ -1118,6 +1118,7 @@ dependencies = [
  "egui_plot",
  "libc",
  "memmap2",
+ "mimalloc-rspack",
  "open",
  "parking_lot",
  "prettier-bytes",
@@ -2541,6 +2542,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "mimalloc-rspack"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "de20bb33bf95d9c060030d53bcb5d5dc03cbbedfbd1dcda5f6f285b946dae2c0"
+dependencies = [
+ "rspack-libmimalloc-sys",
+]
+
+[[package]]
 name = "mime"
 version = "0.3.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3783,6 +3793,16 @@ name = "roxmltree"
 version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6c20b6793b5c2fa6553b250154b78d6d0db37e72700ae35fad9387a46f487c97"
+
+[[package]]
+name = "rspack-libmimalloc-sys"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4c741844b1fbe0cfbae8dfeb73b5e5fdc95daf7be58bdd72afb3fd85c86bccdb"
+dependencies = [
+ "cc",
+ "libc",
+]
 
 [[package]]
 name = "rustc-hash"

@@ -31,6 +31,9 @@ use std::{path::PathBuf, sync::Arc};
 use clap::Parser;
 use edirstat::{coordinator::SharedState, gui::GuiApp, traversal::TraversalEngine};
 
+#[global_allocator]
+static GLOBAL: mimalloc_rspack::MiMalloc = mimalloc_rspack::MiMalloc;
+
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
