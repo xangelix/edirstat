@@ -391,14 +391,16 @@ fn scan_directory<F>(
 #[cfg(unix)]
 #[must_use]
 pub fn get_file_id(meta: &fs::Metadata) -> (u64, u64) {
-    use std::os::unix::fs::MetadataExt;
+    use std::os::unix::fs::MetadataExt as _;
+
     (meta.dev(), meta.ino())
 }
 
 #[cfg(windows)]
 #[must_use]
 pub fn get_file_id(meta: &fs::Metadata) -> (u64, u64) {
-    use std::os::windows::fs::MetadataExt;
+    use std::os::windows::fs::MetadataExt as _;
+
     (
         meta.volume_serial_number().unwrap_or(0) as u64,
         meta.file_index().unwrap_or(0),
@@ -413,13 +415,15 @@ pub fn get_file_id(_meta: &fs::Metadata) -> (u64, u64) {
 
 #[cfg(unix)]
 fn get_device_id(meta: &fs::Metadata) -> u64 {
-    use std::os::unix::fs::MetadataExt;
+    use std::os::unix::fs::MetadataExt as _;
+
     meta.dev()
 }
 
 #[cfg(windows)]
 fn get_device_id(meta: &fs::Metadata) -> u64 {
-    use std::os::windows::fs::MetadataExt;
+    use std::os::windows::fs::MetadataExt as _;
+
     meta.volume_serial_number().unwrap_or(0) as u64
 }
 

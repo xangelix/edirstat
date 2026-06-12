@@ -1402,10 +1402,9 @@ pub const fn is_elevated() -> bool {
 
 #[cfg(target_os = "windows")]
 pub fn relaunch_as_admin() -> std::io::Result<()> {
-    use std::os::windows::ffi::OsStrExt;
+    use std::os::windows::ffi::OsStrExt as _;
 
-    use windows::Win32::UI::Shell::ShellExecuteW;
-    use windows::Win32::UI::WindowsAndMessaging::SW_SHOWDEFAULT;
+    use windows::Win32::UI::{Shell::ShellExecuteW, WindowsAndMessaging::SW_SHOWDEFAULT};
 
     let current_exe = std::env::current_exe()?;
     let mut exe_path: Vec<u16> = current_exe.as_os_str().encode_wide().collect();

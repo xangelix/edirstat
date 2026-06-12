@@ -2,8 +2,8 @@ use std::{
     collections::{HashMap, HashSet},
     fs::OpenOptions,
     io::{Read, Seek, SeekFrom},
-    os::windows::ffi::OsStrExt,
-    os::windows::fs::OpenOptionsExt,
+    os::windows::ffi::OsStrExt as _,
+    os::windows::fs::OpenOptionsExt as _,
     path::{Path, PathBuf},
     sync::atomic::Ordering,
 };
