@@ -1,3 +1,6 @@
+use std::cell::RefCell;
+
+use ahash::HashMap;
 use eframe::egui::{self, Color32};
 
 // --- Custom Theme Palette Constants ---
@@ -62,6 +65,13 @@ pub const COLOR_TRANSPARENT: Color32 = Color32::TRANSPARENT;
 
 #[must_use]
 pub fn get_color_for_extension(ext: &str) -> egui::Color32 {
+    thread_local! {
+        /// Caches calculated colors for custom extensions to avoid expensive
+        /// Hsva -> Rgba -> Color32 (powf) conversions in the render loop.
+        static COLOR_CACHE: RefCell<HashMap<String, egui::Color32>> =
+            RefCell::new(HashMap::default());
+    }
+
     let mut buf = [0u8; 16];
     let ext_lower = if ext.len() <= 16 && ext.bytes().any(|b| b.is_ascii_uppercase()) {
         let mut len = 0;
@@ -88,17 +98,28 @@ pub fn get_color_for_extension(ext: &str) -> egui::Color32 {
         "mp4" | "mkv" | "avi" => EXT_VIDEO,
         crate::arena::NO_EXTENSION => EXT_NONE,
         _ => {
-            // Hash the extension to generate a stable, beautiful pseudo-random color
-            let mut hash: u32 = 5381;
-            for b in ext_lower.bytes() {
-                hash = ((hash << 5).wrapping_add(hash)).wrapping_add(b as u32);
-            }
-            // Hue from hash, Saturation ~75%, Lightness ~55%
-            #[allow(clippy::cast_precision_loss)]
-            let hue = (hash % 360) as f32 / 360.0;
+            // Retrieve color from cache, or compute and insert if absent
+            COLOR_CACHE.with(|cache| {
+                let mut cache = cache.borrow_mut();
+                if let Some(&color) = cache.get(ext_lower) {
+                    color
+                } else {
+                    // Hash the extension to generate a stable, pseudo-random color
+                    let mut hash: u32 = 5381;
+                    for b in ext_lower.bytes() {
+                        hash = ((hash << 5).wrapping_add(hash)).wrapping_add(b as u32);
+                    }
+                    // Hue from hash, Saturation ~75%, Lightness ~55%
+                    #[allow(clippy::cast_precision_loss)]
+                    let hue = (hash % 360) as f32 / 360.0;
 
-            let color = egui::epaint::Hsva::new(hue, 0.75, 0.55, 1.0);
-            egui::Color32::from(color)
+                    let color = egui::epaint::Hsva::new(hue, 0.75, 0.55, 1.0);
+                    let color32 = egui::Color32::from(color);
+
+                    cache.insert(ext_lower.to_string(), color32);
+                    color32
+                }
+            })
         }
     }
 }
