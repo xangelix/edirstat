@@ -129,6 +129,9 @@ pub struct GuiApp {
     pub(crate) last_rendered_snapshot_ptr: usize,
     pub(crate) last_extension_stats_ptr: usize,
 
+    /// Caches (Node Index, User String, Group String, Permissions String)
+    pub(crate) unix_metadata_cache: Option<(u32, String, String, String)>,
+
     #[cfg(feature = "online")]
     pub(crate) update_checker: egui_async::Bind<Option<String>, String>,
 }
@@ -248,6 +251,8 @@ impl GuiApp {
             last_rendered_snapshot_ptr: 0,
             last_extension_stats_ptr: 0,
 
+            unix_metadata_cache: None,
+
             #[cfg(feature = "online")]
             update_checker: egui_async::Bind::default(),
         };
@@ -309,6 +314,8 @@ impl GuiApp {
         self.scroll_to_selected = false;
         self.last_rendered_snapshot_ptr = 0;
         self.last_extension_stats_ptr = 0;
+
+        self.unix_metadata_cache = None;
 
         #[cfg(feature = "online")]
         self.update_checker.clear();

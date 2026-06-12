@@ -1505,8 +1505,24 @@ impl GuiApp {
                             // Unix-only details (User, Group, Permissions)
                             #[cfg(unix)]
                             {
-                                let full_path = snapshot.get_full_path(node_idx);
-                                if let Some((user, group, perm)) = get_unix_metadata(&full_path) {
+                                // Retrieve or populate cache
+                                let needs_update = self
+                                    .unix_metadata_cache
+                                    .as_ref()
+                                    .is_none_or(|(cached_idx, _, _, _)| *cached_idx != node_idx);
+
+                                if needs_update {
+                                    let full_path = snapshot.get_full_path(node_idx);
+                                    if let Some((user, group, perm)) = get_unix_metadata(&full_path)
+                                    {
+                                        self.unix_metadata_cache =
+                                            Some((node_idx, user, group, perm));
+                                    } else {
+                                        self.unix_metadata_cache = None;
+                                    }
+                                }
+
+                                if let Some((_, user, group, perm)) = &self.unix_metadata_cache {
                                     ui.weak("User:");
                                     ui.allocate_ui(
                                         egui::vec2(
