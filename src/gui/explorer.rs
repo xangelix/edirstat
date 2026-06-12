@@ -1670,8 +1670,7 @@ impl GuiApp {
 
 #[cfg(unix)]
 fn get_unix_metadata(path_str: &str) -> Option<(String, String, String)> {
-    use std::fs;
-    use std::os::unix::fs::MetadataExt;
+    use std::{fs, os::unix::fs::MetadataExt as _};
 
     let metadata = fs::symlink_metadata(path_str).ok()?;
     let uid = metadata.uid();
