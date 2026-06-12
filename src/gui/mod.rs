@@ -332,7 +332,11 @@ impl GuiApp {
         }
     }
 
-    pub(crate) fn start_scan(&mut self, path: PathBuf) {
+    pub(crate) fn start_scan(&mut self, mut path: PathBuf) {
+        if let Ok(abs_path) = std::fs::canonicalize(&path) {
+            path = abs_path;
+        }
+
         self.reset_state();
 
         // Select the root row by default
