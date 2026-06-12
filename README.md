@@ -42,9 +42,9 @@ Unlike traditional analyzers that crawl sequentially, **eDirStat** is built from
 
 ![eDirStat Plots - Directory Composition](docs/screenshots/directory_composition.png)
 
-![eDirStat Plots - File Sizes by Extension](docs/screenshots/file_sizes_by_extension.png)
+![eDirStat Plots - File Sizes by Extension](docs/screenshots/file_sizes_by_extension.jpg)
 
-![eDirStat Plots - Linked Temporal Timelines](docs/screenshots/linked_temporal_timelines.png)
+![eDirStat Plots - Linked Temporal Timelines](docs/screenshots/linked_temporal_timelines.jpg)
 
 ![eDirStat Plots - Duplicate Waste by Extension](docs/screenshots/duplicate_waste_by_extension.png)
 
