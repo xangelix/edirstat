@@ -207,6 +207,14 @@ The engine remains hardlink-aware, allowing it to accurately differentiate betwe
 
 ### Vs `WinDirStat`
 
+A dense Windows primary drive.
+
+`NVMe PCIe Gen3 [ntfs]`
+
+(same video as above)
+
+<https://github.com/user-attachments/assets/aab8ea46-4bf7-4ac5-8d09-cdbf73d8a607>
+
 ### Vs `QDirStat`
 
 To evaluate traversal performance, `edirstat` includes a custom comparison benchmark target comparing it against `qdirstat-cache-writer` (the official headless command-line crawler shipped with `QDirStat` for background scanning).
