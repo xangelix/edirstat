@@ -142,8 +142,8 @@ impl StatComponent for TreemapChart {
         let mut combined_mesh = eframe::egui::Mesh::default();
         for block in &self.cached_blocks {
             let fill_color = block.color;
-            let color_light = fill_color.linear_multiply(1.15);
-            let color_dark = fill_color.linear_multiply(0.75);
+            let color_light = fill_color.gamma_multiply(1.15);
+            let color_dark = fill_color.gamma_multiply(0.75);
 
             let base_vertex_idx = combined_mesh.vertices.len() as u32;
 
@@ -303,7 +303,7 @@ fn draw_glow(ui: &eframe::egui::Ui, painter: &eframe::egui::Painter, rect: efram
 
     // 1. Draw Outer Expanding Glow (grows and fades)
     let glow_alpha = 0.20f64.mul_add(pulse, 0.1);
-    let glow_color = crate::colors::GLOW_OUTER_BASE.linear_multiply(glow_alpha as f32);
+    let glow_color = crate::colors::GLOW_OUTER_BASE.gamma_multiply(glow_alpha as f32);
     let glow_thickness = 6.0f32.mul_add(pulse as f32, 4.0); // Oscillates thickness
     painter.rect(
         rect,
