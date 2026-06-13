@@ -136,7 +136,12 @@ impl TraversalEngine {
             let root_id = (0, 0); // Placeholder for root
             let root_metadata = fs::metadata(&root_path);
             let root_file_id = root_metadata.as_ref().map_or(root_id, get_file_id);
-            let expected_device_id = root_metadata.as_ref().map(get_device_id).ok();
+            let is_root_scan = root_path == std::path::Path::new("/");
+            let expected_device_id = if is_root_scan {
+                None // Allow crossing local subvolumes/partitions when scanning from the system root
+            } else {
+                root_metadata.as_ref().map(get_device_id).ok()
+            };
 
             let initial_task = ScanTask {
                 path: root_path.clone(),
@@ -299,7 +304,17 @@ fn scan_directory<F>(
 
         // Check if directory
         if meta.is_dir {
-            // Mount Point / Device boundary safety protection check (using nested let-chains)
+            // If we are scanning the system root, skip locations that contain
+            // virtual files, network mounts, or sandboxed/containerized filesystems.
+            if task.path == std::path::Path::new("/") {
+                let name_str = meta.name.as_str();
+                match name_str {
+                    "proc" | "sys" | "dev" | "run" | "tmp" | "mnt" | "media" => continue,
+                    _ => {}
+                }
+            }
+
+            // Mount Point / Device boundary safety protection check
             if let Some(expected_dev) = task.expected_device_id
                 && meta.file_id != (0, 0)
                 && meta.file_id.0 != expected_dev
