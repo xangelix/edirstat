@@ -144,18 +144,16 @@ fn run_headless_scan_and_save(
     Ok(())
 }
 
-fn main() -> eframe::Result {
+fn main() -> anyhow::Result<()> {
     #[cfg(feature = "profile-tracy")]
     let _client = tracy_client::Client::start();
 
     let args = Args::parse();
 
     if args.benchmark {
-        if let Err(e) = run_benchmark(args.path) {
-            eprintln!("{e}");
-            std::process::exit(1);
-        }
-        std::process::exit(0);
+        run_benchmark(args.path).map_err(|e| anyhow::anyhow!("{e}"))?;
+
+        return Ok(());
     }
 
     if let Some(to_path) = args.to {
@@ -164,11 +162,9 @@ fn main() -> eframe::Result {
             std::process::exit(1);
         });
 
-        if let Err(e) = run_headless_scan_and_save(&scan_path, to_path) {
-            eprintln!("{e}");
-            std::process::exit(1);
-        }
-        std::process::exit(0);
+        run_headless_scan_and_save(&scan_path, to_path).map_err(|e| anyhow::anyhow!("{e}"))?;
+
+        return Ok(());
     }
 
     // Create system states
@@ -205,5 +201,7 @@ fn main() -> eframe::Result {
                 initial_path,
             )))
         }),
-    )
+    )?;
+
+    Ok(())
 }
