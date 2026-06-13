@@ -42,7 +42,7 @@ impl SharedState {
         Self {
             current_snapshot: ArcSwap::new(Arc::new(initial_snapshot)),
             is_scanning: Arc::new(AtomicBool::new(false)),
-            extension_stats: ArcSwap::new(Arc::new(Vec::new())), // Initialize
+            extension_stats: ArcSwap::new(Arc::new(Vec::new())),
         }
     }
 }
@@ -65,7 +65,7 @@ impl Coordinator {
     pub fn run_coordinator_loop(&mut self, root_path_str: &str) {
         self.shared_state.is_scanning.store(true, Ordering::SeqCst);
 
-        let mut arena = Vec::with_capacity(1024 * 1024); // Pre-allocate for ~1M nodes
+        let mut arena = Vec::with_capacity(1024 * 1024); // Pre-allocate space for ~1M nodes
         let mut string_pool = StringPool::new();
 
         // Local extension tracking in the background thread
@@ -88,7 +88,7 @@ impl Coordinator {
         register_id(&mut id_map, 0, LocalId(0), 0);
 
         let mut last_publish = Instant::now();
-        let publish_interval = Duration::from_millis(100);
+        let mut publish_interval = Duration::from_millis(100);
         let mut dirty = false;
 
         while let Ok(batch) = self.event_rx.recv() {
@@ -195,16 +195,6 @@ impl Coordinator {
                                 file_global_id,
                             );
 
-                            // Propagate size and latest metadata upwards through parent indices
-                            propagate_size_and_time(
-                                &mut arena,
-                                parent_global_id,
-                                size,
-                                modified_timestamp,
-                                created_timestamp,
-                                accessed_timestamp,
-                            );
-
                             // O(1) Background Live Extension Tracking
                             let ext_slice = crate::arena::get_ext_slice(&name);
                             crate::arena::with_lowercase_ext(ext_slice, |ext_lowercased| {
@@ -229,11 +219,26 @@ impl Coordinator {
                 }
             }
 
-            // Publish snapshot if dirty and interval elapsed
+            // Publish snapshot if dirty and scaled interval elapsed
             if dirty && last_publish.elapsed() >= publish_interval {
-                let dir_counts = Arc::new(precompute_dir_counts(&arena));
+                let current_size = arena.len();
+
+                // Dynamically scale updates to prevent main thread rendering stutter
+                publish_interval = if current_size > 500_000 {
+                    Duration::from_millis(1000)
+                } else if current_size > 100_000 {
+                    Duration::from_millis(500)
+                } else {
+                    Duration::from_millis(100)
+                };
+
+                // Propagate sizes bottom-up before publishing
+                let mut published_arena = arena.clone();
+                propagate_all_sizes_bottom_up(&mut published_arena);
+
+                let dir_counts = Arc::new(precompute_dir_counts(&published_arena));
                 let snapshot = FileArenaSnapshot {
-                    nodes: Arc::new(NodeStorage::Owned(arena.clone())),
+                    nodes: Arc::new(NodeStorage::Owned(published_arena)),
                     string_pool: Arc::new(string_pool.clone()),
                     dir_counts,
                 };
@@ -252,7 +257,9 @@ impl Coordinator {
             }
         }
 
-        // Final publish at completion
+        // Final size propagation and metrics compilation upon loop exit
+        propagate_all_sizes_bottom_up(&mut arena);
+
         let dir_counts = Arc::new(precompute_dir_counts(&arena));
         let snapshot = FileArenaSnapshot {
             nodes: Arc::new(NodeStorage::Owned(arena)),
@@ -269,6 +276,40 @@ impl Coordinator {
         self.shared_state.extension_stats.store(Arc::new(stats_vec));
 
         self.shared_state.is_scanning.store(false, Ordering::SeqCst);
+    }
+}
+
+/// Accumulates file sizes, counts, and latest timestamps from leaf nodes up
+/// to the root in a single, cache-friendly, reverse O(N) sweep.
+fn propagate_all_sizes_bottom_up(arena: &mut [FileNode]) {
+    for idx in (0..arena.len()).rev() {
+        let parent = arena[idx].parent;
+        if parent != NO_INDEX {
+            let parent_idx = parent as usize;
+            let size = arena[idx].size;
+            let file_count = if arena[idx].is_directory() {
+                arena[idx].file_count
+            } else {
+                1
+            };
+            let modified = arena[idx].modified_timestamp;
+            let created = arena[idx].created_timestamp;
+            let accessed = arena[idx].accessed_timestamp;
+
+            // Update parent directly in contiguous slice memory
+            let parent_node = &mut arena[parent_idx];
+            parent_node.size += size;
+            parent_node.file_count += file_count;
+            if modified > parent_node.modified_timestamp {
+                parent_node.modified_timestamp = modified;
+            }
+            if created > parent_node.created_timestamp {
+                parent_node.created_timestamp = created;
+            }
+            if accessed > parent_node.accessed_timestamp {
+                parent_node.accessed_timestamp = accessed;
+            }
+        }
     }
 }
 
@@ -322,31 +363,4 @@ const fn connect_child(
 
     // Update the last child pointer for this parent
     last_child_map[p_idx] = child_global_id;
-}
-
-#[inline]
-const fn propagate_size_and_time(
-    arena: &mut [FileNode],
-    start_parent_idx: u32,
-    size: u64,
-    modified: i64,
-    created: i64,
-    accessed: i64,
-) {
-    let mut current_idx = Some(start_parent_idx);
-    while let Some(idx) = current_idx {
-        let node = &mut arena[idx as usize];
-        node.size += size;
-        node.file_count += 1;
-        if modified > node.modified_timestamp {
-            node.modified_timestamp = modified;
-        }
-        if created > node.created_timestamp {
-            node.created_timestamp = created;
-        }
-        if accessed > node.accessed_timestamp {
-            node.accessed_timestamp = accessed;
-        }
-        current_idx = node.parent_opt();
-    }
 }
