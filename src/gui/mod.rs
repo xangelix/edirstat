@@ -925,7 +925,7 @@ impl eframe::App for GuiApp {
                     let speed = bytes as f64 / elapsed.as_secs_f64();
 
                     ui.separator();
-                    ui.label(format!("⏱ Time: {:.1}s", elapsed.as_secs_f64()));
+                    ui.label(format!("⏱ Time: {:.3}s", elapsed.as_secs_f64()));
                     ui.separator();
                     ui.label(format!(
                         "⚡ Speed: {}/s",
@@ -933,7 +933,7 @@ impl eframe::App for GuiApp {
                     ));
                 } else if !is_scanning && let Some(duration) = self.total_scan_duration {
                     ui.separator();
-                    ui.label(format!("⏱ Time: {:.1}s", duration.as_secs_f64()));
+                    ui.label(format!("⏱ Time: {:.3}s", duration.as_secs_f64()));
                     ui.separator();
                     #[allow(clippy::cast_precision_loss)]
                     let speed = if duration.as_secs_f64() > 0.0 {
