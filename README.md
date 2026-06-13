@@ -2,6 +2,8 @@
 
 ![eDirStat Logo](assets/img/logo.svg)
 
+![eDirStat Treemap](docs/screenshots/treemap.png)
+
 [![Crates.io](https://img.shields.io/crates/v/edirstat)](https://crates.io/crates/edirstat)
 [![Docs.rs](https://docs.rs/edirstat/badge.svg)](https://docs.rs/edirstat)
 [![License](https://img.shields.io/crates/l/edirstat)](https://spdx.org/licenses/MIT)
