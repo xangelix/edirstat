@@ -331,7 +331,7 @@ mod tests {
 
         assert_eq!(snapshot.get_full_path(0), "C:\\");
         assert_eq!(snapshot.get_full_path(1), "C:\\Program Files");
-        assert_eq!(snapshot.get_full_path(2), "C:\\Program Files/test.exe");
+        assert_eq!(snapshot.get_full_path(2), "C:\\Program Files\\test.exe");
     }
 }
 
