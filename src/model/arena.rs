@@ -174,9 +174,27 @@ impl StringPool {
 }
 
 #[derive(Debug)]
+pub enum NodeStorage {
+    Owned(Vec<FileNode>),
+    Mmapped(crate::persistence::PersistentArena),
+}
+
+impl std::ops::Deref for NodeStorage {
+    type Target = [FileNode];
+
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Self::Owned(v) => v,
+            Self::Mmapped(m) => m.nodes(),
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct FileArenaSnapshot {
     /// Read-only snapshot of the nodes
-    pub nodes: Arc<Vec<FileNode>>,
+    pub nodes: Arc<NodeStorage>,
     /// Read-only snapshot of the string pool
     pub string_pool: Arc<StringPool>,
     /// Precomputed subdirectory counts indexed by node ID
@@ -281,7 +299,7 @@ mod tests {
 
         let dir_counts = precompute_dir_counts(&nodes);
         let snapshot = FileArenaSnapshot {
-            nodes: Arc::new(nodes),
+            nodes: Arc::new(NodeStorage::Owned(nodes)),
             string_pool: Arc::new(pool),
             dir_counts: Arc::new(dir_counts),
         };
@@ -306,7 +324,7 @@ mod tests {
 
         let dir_counts = precompute_dir_counts(&nodes);
         let snapshot = FileArenaSnapshot {
-            nodes: Arc::new(nodes),
+            nodes: Arc::new(NodeStorage::Owned(nodes)),
             string_pool: Arc::new(pool),
             dir_counts: Arc::new(dir_counts),
         };

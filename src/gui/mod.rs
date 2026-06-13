@@ -375,10 +375,11 @@ impl GuiApp {
         self.table_state.selected_rows.insert(0);
         self.focus_node_idx = Some(0);
 
+        // Keep the nodes in the memory map zero-copy
         let loaded_snapshot = FileArenaSnapshot {
-            nodes: Arc::new(arena.nodes().to_vec()),
-            string_pool: Arc::new(string_pool),
             dir_counts: Arc::new(precompute_dir_counts(arena.nodes())),
+            nodes: Arc::new(crate::arena::NodeStorage::Mmapped(arena)),
+            string_pool: Arc::new(string_pool),
         };
         self.shared_state
             .current_snapshot

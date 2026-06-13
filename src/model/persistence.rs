@@ -18,6 +18,7 @@ pub struct FileHeader {
     pub string_pool_length: u64,
 }
 
+#[derive(Debug)]
 pub struct PersistentArena {
     /// Underlying memory-mapped file (mapped copy-on-write)
     mmap: memmap2::MmapMut,

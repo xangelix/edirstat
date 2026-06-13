@@ -3,7 +3,7 @@ use std::sync::{Arc, atomic::Ordering};
 use eframe::egui;
 
 use super::{GuiApp, theme};
-use crate::arena::{FileArenaSnapshot, precompute_dir_counts};
+use crate::arena::{FileArenaSnapshot, NodeStorage, precompute_dir_counts};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ActiveModal {
@@ -143,7 +143,7 @@ impl GuiApp {
         }
 
         let current_snap = self.shared_state.current_snapshot.load();
-        let mut cloned_nodes = (*current_snap.nodes).clone();
+        let mut cloned_nodes = current_snap.nodes.to_vec();
 
         let mut files_to_remove = 0;
         let mut dirs_to_remove = 0;
@@ -236,7 +236,7 @@ impl GuiApp {
 
         let dir_counts = Arc::new(precompute_dir_counts(&cloned_nodes));
         let new_snapshot = crate::arena::FileArenaSnapshot {
-            nodes: std::sync::Arc::new(cloned_nodes),
+            nodes: std::sync::Arc::new(NodeStorage::Owned(cloned_nodes)),
             string_pool: current_snap.string_pool.clone(),
             dir_counts,
         };
@@ -1210,7 +1210,7 @@ impl GuiApp {
 
         std::thread::spawn(move || {
             let current_snap = state.current_snapshot.load();
-            let mut cloned_nodes = (*current_snap.nodes).clone();
+            let mut cloned_nodes = current_snap.nodes.to_vec();
             let mut string_pool = (*current_snap.string_pool).clone();
 
             for (dir_idx, path) in valid_indices {
@@ -1305,7 +1305,7 @@ impl GuiApp {
             // 4. Swap snapshot
             let dir_counts = Arc::new(precompute_dir_counts(&cloned_nodes));
             let new_snapshot = FileArenaSnapshot {
-                nodes: Arc::new(cloned_nodes),
+                nodes: Arc::new(NodeStorage::Owned(cloned_nodes)),
                 string_pool: Arc::new(string_pool),
                 dir_counts,
             };

@@ -12,7 +12,8 @@ use crossbeam::channel::Receiver;
 
 use super::traversal::{LocalId, ScanEvent};
 use crate::arena::{
-    FileArenaSnapshot, FileNode, NO_EXTENSION, NO_INDEX, StringPool, precompute_dir_counts,
+    FileArenaSnapshot, FileNode, NO_EXTENSION, NO_INDEX, NodeStorage, StringPool,
+    precompute_dir_counts,
 };
 
 #[derive(Debug)]
@@ -35,7 +36,7 @@ impl SharedState {
     #[must_use]
     pub fn new() -> Self {
         let initial_snapshot = FileArenaSnapshot {
-            nodes: Arc::new(Vec::new()),
+            nodes: Arc::new(NodeStorage::Owned(Vec::new())),
             string_pool: Arc::new(StringPool::new()),
             dir_counts: Arc::new(Vec::new()),
         };
@@ -219,7 +220,7 @@ impl Coordinator {
             if dirty && last_publish.elapsed() >= publish_interval {
                 let dir_counts = Arc::new(precompute_dir_counts(&arena));
                 let snapshot = FileArenaSnapshot {
-                    nodes: Arc::new(arena.clone()),
+                    nodes: Arc::new(NodeStorage::Owned(arena.clone())),
                     string_pool: Arc::new(string_pool.clone()),
                     dir_counts,
                 };
@@ -241,7 +242,7 @@ impl Coordinator {
         // Final publish at completion
         let dir_counts = Arc::new(precompute_dir_counts(&arena));
         let snapshot = FileArenaSnapshot {
-            nodes: Arc::new(arena),
+            nodes: Arc::new(NodeStorage::Owned(arena)),
             string_pool: Arc::new(string_pool),
             dir_counts,
         };
