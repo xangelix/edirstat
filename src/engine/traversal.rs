@@ -116,6 +116,21 @@ impl TraversalEngine {
         let stats = self.stats.clone();
 
         let handle = thread::spawn(move || {
+            // Run MFT parser directly if target is a file named "$MFT" (case-insensitive)
+            let is_mft_file = root_path
+                .file_name()
+                .and_then(|s| s.to_str())
+                .is_some_and(|s| s.eq_ignore_ascii_case("$mft"));
+
+            if is_mft_file {
+                match super::mft::try_scan_mft(&root_path, &event_tx, &stats) {
+                    Ok(()) => return,
+                    Err(_) => {
+                        stats.reset();
+                    }
+                }
+            }
+
             // Attempt raw MFT parsing on Windows only if partition is explicitly detected as NTFS
             #[cfg(target_os = "windows")]
             {

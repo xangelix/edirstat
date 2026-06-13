@@ -1,15 +1,18 @@
 use std::{
     collections::{HashMap, HashSet},
-    fs::OpenOptions,
+    fs::{File, OpenOptions},
     io::{Read, Seek, SeekFrom},
-    os::windows::ffi::OsStrExt as _,
-    os::windows::fs::OpenOptionsExt as _,
     path::{Path, PathBuf},
     sync::atomic::Ordering,
 };
 
+#[cfg(target_os = "windows")]
+use std::{os::windows::ffi::OsStrExt as _, os::windows::fs::OpenOptionsExt as _};
+
 use compact_str::CompactString;
 use crossbeam::channel::Sender;
+
+#[cfg(target_os = "windows")]
 use windows::{Win32::Storage::FileSystem::GetVolumeInformationW, core::PCWSTR};
 
 use super::traversal::{LocalId, ScanEvent, TraversalStats};
@@ -391,23 +394,255 @@ fn find_target_record_in_memory(
     current_record
 }
 
-/// Primary entry point for raw Windows MFT scanning.
-/// Parses the raw drive partition, builds the structural index, and streams events hierarchically.
+/// Helper function to parse an exported, raw $MFT metadata file sequentially on any platform.
+fn scan_mft_file_sequential(
+    file_path: &Path,
+    event_tx: &Sender<Vec<ScanEvent>>,
+    stats: &TraversalStats,
+) -> Result<(), crate::EdirstatError> {
+    let mut file = File::open(file_path)?;
+    let file_len = file.metadata()?.len();
+    let max_records = file_len / MFT_RECORD_SIZE as u64;
+
+    if max_records == 0 || max_records > 50_000_000 {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "MFT file size descriptor is invalid or excessively large",
+        )
+        .into());
+    }
+
+    let mut mft_entries: Vec<Option<MftEntry>> = Vec::new();
+    mft_entries.resize_with(max_records as usize, || None);
+
+    let mut children_map: HashMap<u64, Vec<u64>, ahash::RandomState> =
+        HashMap::with_capacity_and_hasher(max_records as usize / 10, ahash::RandomState::new());
+
+    let mut record_buffer = vec![0u8; MFT_RECORD_SIZE];
+    let mut current_record_id = 0u64;
+
+    while current_record_id < max_records {
+        if file.read_exact(&mut record_buffer).is_err() {
+            break;
+        }
+
+        let record_id = current_record_id;
+        current_record_id += 1;
+
+        if !apply_fixup(&mut record_buffer) {
+            continue;
+        }
+
+        if record_buffer.len() < 40 {
+            continue;
+        }
+
+        let flags = u16::from_le_bytes(record_buffer[22..24].try_into().unwrap_or([0; 2]));
+        if (flags & 1) == 0 {
+            continue;
+        }
+
+        let base_file_ref = u64::from_le_bytes(record_buffer[32..40].try_into().unwrap_or([0; 8]));
+        let base_record_id = base_file_ref & 0x0000_ffff_ffff_ffff;
+
+        if base_record_id == 0 {
+            let extracted_links = extract_all_links_from_record(&record_buffer);
+            let is_dir = (flags & 2) != 0;
+
+            let mut modified = 0i64;
+            let mut created = 0i64;
+            let mut accessed = 0i64;
+
+            let attrs = parse_attributes(&record_buffer);
+            for attr in &attrs {
+                if attr.ty == 0x10 && !attr.is_non_resident && attr.payload.len() >= 24 {
+                    let val_offset =
+                        u16::from_le_bytes(attr.payload[20..22].try_into().unwrap_or([0; 2]))
+                            as usize;
+                    if val_offset + 32 <= attr.payload.len() {
+                        if let Some(std_info) = attr.payload.get(val_offset..val_offset + 32) {
+                            created = nt_time_to_unix(u64::from_le_bytes(
+                                std_info[0..8].try_into().unwrap_or([0; 8]),
+                            ));
+                            modified = nt_time_to_unix(u64::from_le_bytes(
+                                std_info[8..16].try_into().unwrap_or([0; 8]),
+                            ));
+                            accessed = nt_time_to_unix(u64::from_le_bytes(
+                                std_info[24..32].try_into().unwrap_or([0; 8]),
+                            ));
+                        }
+                        break;
+                    }
+                }
+            }
+
+            for (link_idx, link) in extracted_links.into_iter().enumerate() {
+                let size = if is_dir { 0 } else { link.size };
+
+                let target_id = if link_idx == 0 {
+                    record_id
+                } else {
+                    let virt_id = mft_entries.len() as u64;
+                    mft_entries.push(None);
+                    virt_id
+                };
+
+                if (target_id as usize) < mft_entries.len() {
+                    mft_entries[target_id as usize] = Some(MftEntry {
+                        name: link.name,
+                        size,
+                        parent_record_id: link.parent_ref,
+                        modified_timestamp: modified,
+                        created_timestamp: created,
+                        accessed_timestamp: accessed,
+                        is_dir,
+                        is_symlink: false,
+                        has_attr_list: link.has_attr_list,
+                    });
+
+                    children_map
+                        .entry(link.parent_ref)
+                        .or_default()
+                        .push(target_id);
+                }
+            }
+        }
+
+        if current_record_id.is_multiple_of(10000) {
+            stats
+                .files_scanned
+                .store(current_record_id as usize, Ordering::Relaxed);
+            stats.bytes_scanned.store(
+                (current_record_id * MFT_RECORD_SIZE as u64) as usize,
+                Ordering::Relaxed,
+            );
+        }
+    }
+
+    stats
+        .files_scanned
+        .store(current_record_id as usize, Ordering::Relaxed);
+    stats.bytes_scanned.store(
+        (current_record_id * MFT_RECORD_SIZE as u64) as usize,
+        Ordering::Relaxed,
+    );
+
+    let target_record = 5u64; // Root directory record reference
+    stats.reset();
+
+    let mut buffered_events = Vec::with_capacity(1024 * 1024);
+    let mut local_id_counter = 1u32;
+    let mut visited = HashSet::with_capacity(max_records as usize / 5);
+    visited.insert(target_record);
+
+    let mut stack = vec![TraversalFrame {
+        record_id: target_record,
+        parent_local_id: LocalId(0),
+    }];
+
+    while let Some(frame) = stack.pop() {
+        let Some(children) = children_map.get(&frame.record_id) else {
+            continue;
+        };
+
+        for &child_record in children {
+            if child_record as usize >= mft_entries.len() {
+                continue;
+            }
+            let Some(entry) = &mft_entries[child_record as usize] else {
+                continue;
+            };
+
+            if entry.is_dir {
+                if !visited.insert(child_record) {
+                    continue;
+                }
+
+                let child_local_id = LocalId(local_id_counter);
+                local_id_counter = local_id_counter.saturating_add(1);
+
+                stats.dirs_scanned.fetch_add(1, Ordering::Relaxed);
+
+                buffered_events.push(ScanEvent::DirDiscovered {
+                    parent_worker_id: 0,
+                    child_worker_id: 0,
+                    local_parent_id: frame.parent_local_id,
+                    local_child_id: child_local_id,
+                    name: entry.name.clone(),
+                    modified_timestamp: entry.modified_timestamp,
+                    created_timestamp: entry.created_timestamp,
+                    accessed_timestamp: entry.accessed_timestamp,
+                    no_permission: false,
+                });
+
+                stack.push(TraversalFrame {
+                    record_id: child_record,
+                    parent_local_id: child_local_id,
+                });
+            } else {
+                let file_size = entry.size;
+                stats.files_scanned.fetch_add(1, Ordering::Relaxed);
+                stats
+                    .bytes_scanned
+                    .fetch_add(file_size as usize, Ordering::Relaxed);
+
+                buffered_events.push(ScanEvent::FileDiscovered {
+                    parent_worker_id: 0,
+                    local_parent_id: frame.parent_local_id,
+                    name: entry.name.clone(),
+                    size: file_size,
+                    is_symlink: entry.is_symlink,
+                    modified_timestamp: entry.modified_timestamp,
+                    created_timestamp: entry.created_timestamp,
+                    accessed_timestamp: entry.accessed_timestamp,
+                    no_permission: false,
+                });
+            }
+        }
+    }
+
+    let mut batch = Vec::with_capacity(1024);
+    for event in buffered_events {
+        batch.push(event);
+        if batch.len() >= 1024 {
+            let _ = event_tx.send(std::mem::replace(&mut batch, Vec::with_capacity(1024)));
+        }
+    }
+    if !batch.is_empty() {
+        let _ = event_tx.send(batch);
+    }
+
+    Ok(())
+}
+
+/// Primary entry point for raw MFT scanning.
+/// Parses either the raw drive partition on Windows or a standalone MFT copy on any platform.
 pub fn try_scan_mft(
     root_path: &Path,
     event_tx: &Sender<Vec<ScanEvent>>,
     stats: &TraversalStats,
 ) -> Result<(), crate::EdirstatError> {
+    if root_path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .is_some_and(|s| s.eq_ignore_ascii_case("$mft"))
+    {
+        return scan_mft_file_sequential(root_path, event_tx, stats);
+    }
+
     let volume_path = get_volume_path(root_path).ok_or_else(|| {
         std::io::Error::new(
             std::io::ErrorKind::Unsupported,
-            "Unable to determine partition drive letter from target path",
+            "Unable to determine partition drive path from target path",
         )
     })?;
 
     let mut options = OpenOptions::new();
     options.read(true);
-    options.share_mode(7);
+    #[cfg(target_os = "windows")]
+    {
+        options.share_mode(7);
+    }
 
     let mut raw_disk = options.open(&volume_path)?;
 
@@ -767,6 +1002,7 @@ pub fn try_scan_mft(
 }
 
 /// Resolves the Windows partition volume path from a standard file path
+#[cfg(target_os = "windows")]
 fn get_volume_path(path: &Path) -> Option<String> {
     let path_str = path.to_string_lossy();
     let trimmed = path_str.strip_prefix(r"\\?\").unwrap_or(&path_str);
@@ -781,7 +1017,15 @@ fn get_volume_path(path: &Path) -> Option<String> {
     }
 }
 
+/// Resolves partition paths on non-Windows targets.
+#[cfg(not(target_os = "windows"))]
+#[allow(clippy::unnecessary_wraps)]
+fn get_volume_path(path: &Path) -> Option<String> {
+    Some(path.to_string_lossy().into_owned())
+}
+
 /// Checks the root of the specified directory path to verify if the file system is NTFS.
+#[cfg(target_os = "windows")]
 #[must_use]
 pub fn get_fs_type(path: &Path) -> Option<String> {
     let root_path = path.ancestors().last()?;
@@ -812,4 +1056,11 @@ pub fn get_fs_type(path: &Path) -> Option<String> {
     } else {
         None
     }
+}
+
+/// Fallback fs type check for non-Windows systems.
+#[cfg(not(target_os = "windows"))]
+#[must_use]
+pub const fn get_fs_type(_path: &Path) -> Option<String> {
+    None
 }

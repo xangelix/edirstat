@@ -58,11 +58,21 @@ fn run_benchmark(path_opt: Option<PathBuf>) -> Result<(), Box<dyn std::error::Er
         return Err(format!("Error: Path does not exist: {}", path.display()).into());
     }
     let path = std::fs::canonicalize(&path)?;
-    if !path.is_dir() {
+
+    let is_mft = path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .is_some_and(|s| s.eq_ignore_ascii_case("$mft"));
+
+    if !is_mft && !path.is_dir() {
         return Err(format!("Error: Path is not a directory: {}", path.display()).into());
     }
 
-    println!("Running edirstat benchmark on: {}", path.display());
+    println!(
+        "Running edirstat benchmark on {}: {}",
+        if is_mft { "mft" } else { "dir" },
+        path.display()
+    );
 
     let shared_state = Arc::new(SharedState::new());
     let traversal_engine = Arc::new(TraversalEngine::new());
@@ -103,7 +113,13 @@ fn run_headless_scan_and_save(
         return Err(format!("Error: Scan path does not exist: {}", scan_path.display()).into());
     }
     let scan_path = std::fs::canonicalize(scan_path)?;
-    if !scan_path.is_dir() {
+
+    let is_mft = scan_path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .is_some_and(|s| s.eq_ignore_ascii_case("$mft"));
+
+    if !is_mft && !scan_path.is_dir() {
         return Err(format!(
             "Error: Scan path is not a directory: {}",
             scan_path.display()
