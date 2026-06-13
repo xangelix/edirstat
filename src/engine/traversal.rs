@@ -527,7 +527,12 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn test_traversal_permission_denied() -> Result<(), crate::EdirstatError> {
-        use std::os::unix::fs::PermissionsExt;
+        use std::os::unix::fs::PermissionsExt as _;
+
+        // If running as root skip this test.
+        if unsafe { libc::getuid() } == 0 {
+            return Ok(());
+        }
 
         let temp_dir = std::env::current_dir()?
             .join("target")
