@@ -207,3 +207,59 @@ impl super::StatComponent for FileAgeSizeScatterChart {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use super::*;
+    use crate::{
+        arena::{FileArenaSnapshot, FileNode, NodeStorage, StringPool, precompute_dir_counts},
+        stats::StatsChart,
+    };
+
+    #[test]
+    fn test_scatter_plot_empty() {
+        let pool = StringPool::new();
+        let snapshot = FileArenaSnapshot {
+            nodes: Arc::new(NodeStorage::Owned(vec![])),
+            string_pool: Arc::new(pool),
+            dir_counts: Arc::new(vec![]),
+        };
+        let mut chart = FileAgeSizeScatterChart::new();
+        chart.compute(&snapshot);
+        assert!(chart.top_files.is_empty());
+        assert_eq!(chart.max_timestamp, 0);
+    }
+
+    #[test]
+    fn test_scatter_plot_standard() {
+        let mut pool = StringPool::new();
+        let r_id = pool.get_or_insert(b"root");
+        let f1_id = pool.get_or_insert(b"f1.png");
+        let f2_id = pool.get_or_insert(b"f2.txt");
+
+        let mut nodes = vec![
+            FileNode::new(r_id, None, true, false, 0, 0, 0),
+            FileNode::new(f1_id, Some(0), false, false, 1000, 0, 0),
+            FileNode::new(f2_id, Some(0), false, false, 2000, 0, 0),
+        ];
+        nodes[1].size = 500;
+        nodes[2].size = 1000;
+
+        let dir_counts = precompute_dir_counts(&nodes);
+        let snapshot = FileArenaSnapshot {
+            nodes: Arc::new(NodeStorage::Owned(nodes)),
+            string_pool: Arc::new(pool),
+            dir_counts: Arc::new(dir_counts),
+        };
+
+        let mut chart = FileAgeSizeScatterChart::new();
+        chart.compute(&snapshot);
+
+        assert_eq!(chart.max_timestamp, 2000);
+        assert_eq!(chart.top_files.len(), 2);
+        assert_eq!(chart.top_files[0], (2, 1000));
+        assert_eq!(chart.top_files[1], (1, 500));
+    }
+}

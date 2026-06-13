@@ -333,6 +333,122 @@ mod tests {
         assert_eq!(snapshot.get_full_path(1), "C:\\Program Files");
         assert_eq!(snapshot.get_full_path(2), "C:\\Program Files\\test.exe");
     }
+
+    #[test]
+    fn test_filenode_new() {
+        let node = FileNode::new(StringId(12), Some(5), true, true, 100, 200, 300);
+        assert_eq!(node.name_id, StringId(12));
+        assert_eq!(node.parent, 5);
+        assert!(node.is_directory());
+        assert!(node.is_symlink());
+        assert_eq!(node.modified_timestamp, 100);
+        assert_eq!(node.created_timestamp, 200);
+        assert_eq!(node.accessed_timestamp, 300);
+        assert_eq!(node.size, 0);
+    }
+
+    #[test]
+    fn test_filenode_flags() {
+        let node_file = FileNode::new(StringId(0), None, false, false, 0, 0, 0);
+        assert!(!node_file.is_directory());
+        assert!(!node_file.is_symlink());
+
+        let node_dir = FileNode::new(StringId(0), None, true, false, 0, 0, 0);
+        assert!(node_dir.is_directory());
+        assert!(!node_dir.is_symlink());
+
+        let node_sym = FileNode::new(StringId(0), None, false, true, 0, 0, 0);
+        assert!(!node_sym.is_directory());
+        assert!(node_sym.is_symlink());
+    }
+
+    #[test]
+    fn test_filenode_parent_opt() {
+        let node1 = FileNode::new(StringId(0), None, false, false, 0, 0, 0);
+        assert_eq!(node1.parent_opt(), None);
+
+        let node2 = FileNode::new(StringId(0), Some(42), false, false, 0, 0, 0);
+        assert_eq!(node2.parent_opt(), Some(42));
+    }
+
+    #[test]
+    fn test_filenode_first_child_opt() {
+        let mut node = FileNode::new(StringId(0), None, false, false, 0, 0, 0);
+        assert_eq!(node.first_child_opt(), None);
+        node.first_child = 7;
+        assert_eq!(node.first_child_opt(), Some(7));
+    }
+
+    #[test]
+    fn test_filenode_next_sibling_opt() {
+        let mut node = FileNode::new(StringId(0), None, false, false, 0, 0, 0);
+        assert_eq!(node.next_sibling_opt(), None);
+        node.next_sibling = 100;
+        assert_eq!(node.next_sibling_opt(), Some(100));
+    }
+
+    #[test]
+    fn test_filenode_from_metadata() {
+        let meta = EntryMetadata {
+            name: "test.txt".into(),
+            is_dir: false,
+            is_symlink: true,
+            len: 12345,
+            modified_timestamp: 10,
+            created_timestamp: 20,
+            accessed_timestamp: 30,
+            file_id: (1, 2),
+        };
+        let node = FileNode::from_metadata(StringId(5), Some(3), &meta);
+        assert_eq!(node.name_id, StringId(5));
+        assert_eq!(node.parent, 3);
+        assert!(!node.is_directory());
+        assert!(node.is_symlink());
+        assert_eq!(node.size, 12345);
+        assert_eq!(node.modified_timestamp, 10);
+    }
+
+    #[test]
+    fn test_with_lowercase_ext_short() {
+        let mut result = String::new();
+        with_lowercase_ext("PNG", |ext| {
+            result = ext.to_string();
+        });
+        assert_eq!(result, "png");
+    }
+
+    #[test]
+    fn test_with_lowercase_ext_long() {
+        let long_ext = "A".repeat(40);
+        let mut result = String::new();
+        with_lowercase_ext(&long_ext, |ext| {
+            result = ext.to_string();
+        });
+        assert_eq!(result, "a".repeat(40));
+    }
+
+    #[test]
+    fn test_get_ext_slice() {
+        assert_eq!(get_ext_slice("test.png"), "png");
+        assert_eq!(get_ext_slice("no_ext"), "(no extension)");
+        assert_eq!(get_ext_slice(".gitignore"), "(no extension)");
+        assert_eq!(get_ext_slice("foo.tar.gz"), "gz");
+        assert_eq!(get_ext_slice("ends_dot."), "(no extension)");
+    }
+
+    #[test]
+    fn test_contains_case_insensitive_ascii() {
+        assert!(contains_case_insensitive("Hello World", "hello"));
+        assert!(contains_case_insensitive("Hello World", "WORLD"));
+        assert!(!contains_case_insensitive("Hello World", "foo"));
+        assert!(contains_case_insensitive("Hello World", ""));
+    }
+
+    #[test]
+    fn test_contains_case_insensitive_non_ascii() {
+        assert!(contains_case_insensitive("Héllö Wörld", "héllö"));
+        assert!(!contains_case_insensitive("Héllö Wörld", "hello"));
+    }
 }
 
 #[derive(Debug, Clone)]

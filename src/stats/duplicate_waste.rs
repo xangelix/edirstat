@@ -232,3 +232,111 @@ impl super::StatComponent for DuplicateWasteChart {
         });
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use super::*;
+    use crate::{
+        arena::{FileArenaSnapshot, FileNode, NodeStorage, StringPool, precompute_dir_counts},
+        stats::deduplicator::{DeduplicationResults, DuplicateGroup},
+    };
+
+    #[test]
+    fn test_duplicate_waste_empty() {
+        let pool = StringPool::new();
+        let snapshot = FileArenaSnapshot {
+            nodes: Arc::new(NodeStorage::Owned(vec![])),
+            string_pool: Arc::new(pool),
+            dir_counts: Arc::new(vec![]),
+        };
+        let results = DeduplicationResults::default();
+        let mut chart = DuplicateWasteChart::new();
+        chart.compute_waste(&snapshot, &results);
+        assert!(chart.top_extensions.is_empty());
+    }
+
+    #[test]
+    fn test_duplicate_waste_with_groups() {
+        let mut pool = StringPool::new();
+        let r_id = pool.get_or_insert(b"root");
+        let f1_id = pool.get_or_insert(b"file1.png");
+        let f2_id = pool.get_or_insert(b"file2.png");
+        let f3_id = pool.get_or_insert(b"file3.txt");
+        let f4_id = pool.get_or_insert(b"file4.txt");
+
+        let nodes = vec![
+            FileNode::new(r_id, None, true, false, 0, 0, 0),
+            FileNode::new(f1_id, Some(0), false, false, 0, 0, 0),
+            FileNode::new(f2_id, Some(0), false, false, 0, 0, 0),
+            FileNode::new(f3_id, Some(0), false, false, 0, 0, 0),
+            FileNode::new(f4_id, Some(0), false, false, 0, 0, 0),
+        ];
+
+        let dir_counts = precompute_dir_counts(&nodes);
+        let snapshot = FileArenaSnapshot {
+            nodes: Arc::new(NodeStorage::Owned(nodes)),
+            string_pool: Arc::new(pool),
+            dir_counts: Arc::new(dir_counts),
+        };
+
+        let results = DeduplicationResults {
+            groups: vec![
+                DuplicateGroup {
+                    size: 1000,
+                    nodes: vec![1, 2],
+                    file_ids: vec![(0, 0), (0, 0)],
+                },
+                DuplicateGroup {
+                    size: 500,
+                    nodes: vec![3, 4],
+                    file_ids: vec![(0, 0), (0, 0)],
+                },
+            ],
+            flat_rows: vec![],
+        };
+
+        let mut chart = DuplicateWasteChart::new();
+        chart.compute_waste(&snapshot, &results);
+
+        assert_eq!(chart.top_extensions.len(), 2);
+        assert_eq!(chart.top_extensions[0], ("png".to_string(), 1000));
+        assert_eq!(chart.top_extensions[1], ("txt".to_string(), 500));
+    }
+
+    #[test]
+    fn test_duplicate_waste_with_hardlinks() {
+        let mut pool = StringPool::new();
+        let r_id = pool.get_or_insert(b"root");
+        let f1_id = pool.get_or_insert(b"file1.png");
+        let f2_id = pool.get_or_insert(b"file2.png");
+
+        let nodes = vec![
+            FileNode::new(r_id, None, true, false, 0, 0, 0),
+            FileNode::new(f1_id, Some(0), false, false, 0, 0, 0),
+            FileNode::new(f2_id, Some(0), false, false, 0, 0, 0),
+        ];
+
+        let dir_counts = precompute_dir_counts(&nodes);
+        let snapshot = FileArenaSnapshot {
+            nodes: Arc::new(NodeStorage::Owned(nodes)),
+            string_pool: Arc::new(pool),
+            dir_counts: Arc::new(dir_counts),
+        };
+
+        let results = DeduplicationResults {
+            groups: vec![DuplicateGroup {
+                size: 1000,
+                nodes: vec![1, 2],
+                file_ids: vec![(1, 1), (1, 1)],
+            }],
+            flat_rows: vec![],
+        };
+
+        let mut chart = DuplicateWasteChart::new();
+        chart.compute_waste(&snapshot, &results);
+
+        assert!(chart.top_extensions.is_empty());
+    }
+}

@@ -248,4 +248,116 @@ mod tests {
         let _ = std::fs::remove_file(&test_path);
         Ok(())
     }
+
+    #[test]
+    fn test_load_snapshot_header_too_small() -> Result<(), crate::EdirstatError> {
+        let temp_dir = std::env::current_dir()?.join("target");
+        let test_path = temp_dir.join("test_small.edst");
+        let _ = std::fs::create_dir_all(&temp_dir);
+        std::fs::write(&test_path, b"too_small")?;
+
+        let res = load_snapshot(&test_path);
+        assert!(matches!(res, Err(crate::EdirstatError::HeaderTooSmall)));
+
+        let _ = std::fs::remove_file(&test_path);
+        Ok(())
+    }
+
+    #[test]
+    fn test_load_snapshot_invalid_magic() -> Result<(), crate::EdirstatError> {
+        let temp_dir = std::env::current_dir()?.join("target");
+        let test_path = temp_dir.join("test_invalid_magic.edst");
+        let _ = std::fs::create_dir_all(&temp_dir);
+
+        let header = FileHeader {
+            magic: *b"BAD!",
+            version: FILE_VERSION,
+            _padding: 0,
+            node_count: 0,
+            string_pool_offset: 32,
+            string_pool_length: 0,
+        };
+        std::fs::write(&test_path, bytemuck::bytes_of(&header))?;
+
+        let res = load_snapshot(&test_path);
+        assert!(matches!(res, Err(crate::EdirstatError::InvalidMagic)));
+
+        let _ = std::fs::remove_file(&test_path);
+        Ok(())
+    }
+
+    #[test]
+    fn test_load_snapshot_unsupported_version() -> Result<(), crate::EdirstatError> {
+        let temp_dir = std::env::current_dir()?.join("target");
+        let test_path = temp_dir.join("test_unsupported_version.edst");
+        let _ = std::fs::create_dir_all(&temp_dir);
+
+        let header = FileHeader {
+            magic: *b"EDST",
+            version: 99,
+            _padding: 0,
+            node_count: 0,
+            string_pool_offset: 32,
+            string_pool_length: 0,
+        };
+        std::fs::write(&test_path, bytemuck::bytes_of(&header))?;
+
+        let res = load_snapshot(&test_path);
+        assert!(matches!(
+            res,
+            Err(crate::EdirstatError::UnsupportedVersion(99))
+        ));
+
+        let _ = std::fs::remove_file(&test_path);
+        Ok(())
+    }
+
+    #[test]
+    fn test_load_snapshot_truncated_nodes() -> Result<(), crate::EdirstatError> {
+        let temp_dir = std::env::current_dir()?.join("target");
+        let test_path = temp_dir.join("test_truncated_nodes.edst");
+        let _ = std::fs::create_dir_all(&temp_dir);
+
+        let header = FileHeader {
+            magic: *b"EDST",
+            version: FILE_VERSION,
+            _padding: 0,
+            node_count: 100,
+            string_pool_offset: 32,
+            string_pool_length: 0,
+        };
+        std::fs::write(&test_path, bytemuck::bytes_of(&header))?;
+
+        let res = load_snapshot(&test_path);
+        assert!(matches!(res, Err(crate::EdirstatError::TruncatedNodes)));
+
+        let _ = std::fs::remove_file(&test_path);
+        Ok(())
+    }
+
+    #[test]
+    fn test_load_snapshot_truncated_string_pool() -> Result<(), crate::EdirstatError> {
+        let temp_dir = std::env::current_dir()?.join("target");
+        let test_path = temp_dir.join("test_truncated_sp.edst");
+        let _ = std::fs::create_dir_all(&temp_dir);
+
+        let header = FileHeader {
+            magic: *b"EDST",
+            version: FILE_VERSION,
+            _padding: 0,
+            node_count: 0,
+            string_pool_offset: 32,
+            string_pool_length: 1000,
+        };
+        std::fs::write(&test_path, bytemuck::bytes_of(&header))?;
+
+        let res = load_snapshot(&test_path);
+        assert!(matches!(
+            res,
+            Err(crate::EdirstatError::TruncatedStringPool)
+        ));
+
+        let _ = std::fs::remove_file(&test_path);
+        Ok(())
+    }
 }

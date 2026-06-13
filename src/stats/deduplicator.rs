@@ -760,11 +760,16 @@ pub fn run_deduplication(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::coordinator::{Coordinator, SharedState};
-    use crate::engine::traversal::TraversalEngine;
-    use parking_lot::RwLock;
     use std::sync::atomic::AtomicBool;
+
+    use parking_lot::RwLock;
+
+    use super::*;
+    use crate::{
+        arena::{FileArenaSnapshot, FileNode, NodeStorage, StringPool},
+        coordinator::{Coordinator, SharedState},
+        engine::traversal::TraversalEngine,
+    };
 
     #[test]
     fn test_deduplication_with_hardlink() -> Result<(), crate::EdirstatError> {
@@ -828,5 +833,127 @@ mod tests {
         // Clean up
         let _ = std::fs::remove_dir_all(&temp_dir);
         Ok(())
+    }
+
+    #[test]
+    fn test_is_excluded_path_system() {
+        assert!(is_excluded_path("/etc/passwd", true, false));
+        assert!(is_excluded_path(
+            "C:\\System Volume Information\\test",
+            true,
+            false
+        ));
+        assert!(is_excluded_path("/var/log/syslog", true, false));
+        assert!(!is_excluded_path("/etc/passwd", false, false));
+    }
+
+    #[test]
+    fn test_is_excluded_path_hidden() {
+        assert!(is_excluded_path("/home/tux/.git/config", false, true));
+        assert!(is_excluded_path("C:\\foo\\.bar\\test", false, true));
+        assert!(!is_excluded_path("/home/tux/.git/config", false, false));
+        assert!(!is_excluded_path("/home/tux/normal/path", false, true));
+    }
+
+    #[test]
+    fn test_is_excluded_path_none() {
+        assert!(!is_excluded_path(
+            "/home/tux/Documents/test.txt",
+            true,
+            true
+        ));
+    }
+
+    #[test]
+    fn test_rebuild_flat_rows_empty() {
+        let pool = StringPool::new();
+        let snapshot = FileArenaSnapshot {
+            nodes: Arc::new(NodeStorage::Owned(vec![])),
+            string_pool: Arc::new(pool),
+            dir_counts: Arc::new(vec![]),
+        };
+        let mut results = DeduplicationResults::default();
+        results.rebuild_flat_rows(&snapshot);
+        assert!(results.flat_rows.is_empty());
+    }
+
+    #[test]
+    fn test_rebuild_flat_rows_standard() {
+        let mut pool = StringPool::new();
+        let r_id = pool.get_or_insert(b"/");
+        let f1_id = pool.get_or_insert(b"file1.png");
+        let f2_id = pool.get_or_insert(b"file2.png");
+
+        let nodes = vec![
+            FileNode::new(r_id, None, true, false, 0, 0, 0),
+            FileNode::new(f1_id, Some(0), false, false, 10, 0, 0),
+            FileNode::new(f2_id, Some(0), false, false, 20, 0, 0),
+        ];
+
+        let snapshot = FileArenaSnapshot {
+            nodes: Arc::new(NodeStorage::Owned(nodes)),
+            string_pool: Arc::new(pool),
+            dir_counts: Arc::new(vec![]),
+        };
+
+        let mut results = DeduplicationResults {
+            groups: vec![DuplicateGroup {
+                size: 1000,
+                nodes: vec![1, 2],
+                file_ids: vec![(0, 0), (0, 0)],
+            }],
+            flat_rows: vec![],
+        };
+
+        results.rebuild_flat_rows(&snapshot);
+        assert_eq!(results.flat_rows.len(), 2);
+
+        assert_eq!(results.flat_rows[0].node_idx, 1);
+        assert!(results.flat_rows[0].is_original);
+        assert_eq!(results.flat_rows[0].reclaimable_str, "1000 B");
+
+        assert_eq!(results.flat_rows[1].node_idx, 2);
+        assert!(!results.flat_rows[1].is_original);
+        assert_eq!(results.flat_rows[1].reclaimable_str, "1000 B");
+    }
+
+    #[test]
+    fn test_rebuild_flat_rows_hardlinks() {
+        let mut pool = StringPool::new();
+        let r_id = pool.get_or_insert(b"/");
+        let f1_id = pool.get_or_insert(b"file1.png");
+        let f2_id = pool.get_or_insert(b"file2.png");
+
+        let nodes = vec![
+            FileNode::new(r_id, None, true, false, 0, 0, 0),
+            FileNode::new(f1_id, Some(0), false, false, 10, 0, 0),
+            FileNode::new(f2_id, Some(0), false, false, 20, 0, 0),
+        ];
+
+        let snapshot = FileArenaSnapshot {
+            nodes: Arc::new(NodeStorage::Owned(nodes)),
+            string_pool: Arc::new(pool),
+            dir_counts: Arc::new(vec![]),
+        };
+
+        let mut results = DeduplicationResults {
+            groups: vec![DuplicateGroup {
+                size: 1000,
+                nodes: vec![1, 2],
+                file_ids: vec![(5, 5), (5, 5)],
+            }],
+            flat_rows: vec![],
+        };
+
+        results.rebuild_flat_rows(&snapshot);
+        assert_eq!(results.flat_rows.len(), 2);
+
+        assert_eq!(results.flat_rows[0].node_idx, 1);
+        assert!(results.flat_rows[0].is_hardlink);
+        assert_eq!(results.flat_rows[0].reclaimable_str, "0 B");
+
+        assert_eq!(results.flat_rows[1].node_idx, 2);
+        assert!(results.flat_rows[1].is_hardlink);
+        assert_eq!(results.flat_rows[1].reclaimable_str, "0 B");
     }
 }

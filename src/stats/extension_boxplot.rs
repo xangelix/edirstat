@@ -198,3 +198,102 @@ impl super::StatComponent for ExtensionBoxplotChart {
         });
     }
 }
+
+#[cfg(test)]
+#[allow(clippy::float_cmp)]
+mod tests {
+    use std::sync::Arc;
+
+    use super::*;
+    use crate::{
+        arena::{FileArenaSnapshot, FileNode, NodeStorage, StringPool, precompute_dir_counts},
+        stats::StatsChart,
+    };
+
+    #[test]
+    fn test_extension_boxplot_empty() {
+        let pool = StringPool::new();
+        let snapshot = FileArenaSnapshot {
+            nodes: Arc::new(NodeStorage::Owned(vec![])),
+            string_pool: Arc::new(pool),
+            dir_counts: Arc::new(vec![]),
+        };
+        let mut chart = ExtensionBoxplotChart::new();
+        chart.compute(&snapshot);
+        assert!(chart.top_extensions.is_empty());
+        assert!(chart.computed_spreads.is_empty());
+    }
+
+    #[test]
+    fn test_extension_boxplot_too_few_files() {
+        let mut pool = StringPool::new();
+        let r_id = pool.get_or_insert(b"root");
+        let f1_id = pool.get_or_insert(b"f1.png");
+        let f2_id = pool.get_or_insert(b"f2.png");
+        let f3_id = pool.get_or_insert(b"f3.png");
+
+        let mut nodes = vec![
+            FileNode::new(r_id, None, true, false, 0, 0, 0),
+            FileNode::new(f1_id, Some(0), false, false, 0, 0, 0),
+            FileNode::new(f2_id, Some(0), false, false, 0, 0, 0),
+            FileNode::new(f3_id, Some(0), false, false, 0, 0, 0),
+        ];
+        nodes[1].size = 100;
+        nodes[2].size = 200;
+        nodes[3].size = 300;
+
+        let dir_counts = precompute_dir_counts(&nodes);
+        let snapshot = FileArenaSnapshot {
+            nodes: Arc::new(NodeStorage::Owned(nodes)),
+            string_pool: Arc::new(pool),
+            dir_counts: Arc::new(dir_counts),
+        };
+
+        let mut chart = ExtensionBoxplotChart::new();
+        chart.compute(&snapshot);
+
+        assert!(chart.computed_spreads.is_empty());
+    }
+
+    #[test]
+    fn test_extension_boxplot_sufficient_files() {
+        let mut pool = StringPool::new();
+        let r_id = pool.get_or_insert(b"root");
+        let f1_id = pool.get_or_insert(b"f1.png");
+        let f2_id = pool.get_or_insert(b"f2.png");
+        let f3_id = pool.get_or_insert(b"f3.png");
+        let f4_id = pool.get_or_insert(b"f4.png");
+
+        let mut nodes = vec![
+            FileNode::new(r_id, None, true, false, 0, 0, 0),
+            FileNode::new(f1_id, Some(0), false, false, 0, 0, 0),
+            FileNode::new(f2_id, Some(0), false, false, 0, 0, 0),
+            FileNode::new(f3_id, Some(0), false, false, 0, 0, 0),
+            FileNode::new(f4_id, Some(0), false, false, 0, 0, 0),
+        ];
+        nodes[1].size = 10;
+        nodes[2].size = 100;
+        nodes[3].size = 1000;
+        nodes[4].size = 10000;
+
+        let dir_counts = precompute_dir_counts(&nodes);
+        let snapshot = FileArenaSnapshot {
+            nodes: Arc::new(NodeStorage::Owned(nodes)),
+            string_pool: Arc::new(pool),
+            dir_counts: Arc::new(dir_counts),
+        };
+
+        let mut chart = ExtensionBoxplotChart::new();
+        chart.compute(&snapshot);
+
+        assert_eq!(chart.computed_spreads.len(), 1);
+        let (ext, spread) = &chart.computed_spreads[0];
+        assert_eq!(ext, "png");
+
+        assert_eq!(spread.lower_whisker, 1.0);
+        assert_eq!(spread.quartile1, 2.0);
+        assert_eq!(spread.median, 3.0);
+        assert_eq!(spread.quartile3, 4.0);
+        assert_eq!(spread.upper_whisker, 4.0);
+    }
+}

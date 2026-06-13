@@ -155,3 +155,92 @@ impl super::StatComponent for SizeDistributionChart {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use super::*;
+    use crate::{
+        arena::{FileArenaSnapshot, FileNode, NodeStorage, StringPool, precompute_dir_counts},
+        stats::StatsChart,
+    };
+
+    #[test]
+    fn test_size_distribution_empty() {
+        let pool = StringPool::new();
+        let snapshot = FileArenaSnapshot {
+            nodes: Arc::new(NodeStorage::Owned(vec![])),
+            string_pool: Arc::new(pool),
+            dir_counts: Arc::new(vec![]),
+        };
+        let mut chart = SizeDistributionChart::new();
+        let counts = chart.compute(&snapshot);
+        assert_eq!(counts, [0u64; 8]);
+    }
+
+    #[test]
+    fn test_size_distribution_various_sizes() {
+        let mut pool = StringPool::new();
+        let r_id = pool.get_or_insert(b"root");
+        let f1_id = pool.get_or_insert(b"f1");
+        let f2_id = pool.get_or_insert(b"f2");
+        let f3_id = pool.get_or_insert(b"f3");
+        let f4_id = pool.get_or_insert(b"f4");
+
+        let mut nodes = vec![
+            FileNode::new(r_id, None, true, false, 0, 0, 0),
+            FileNode::new(f1_id, Some(0), false, false, 0, 0, 0),
+            FileNode::new(f2_id, Some(0), false, false, 0, 0, 0),
+            FileNode::new(f3_id, Some(0), false, false, 0, 0, 0),
+            FileNode::new(f4_id, Some(0), false, false, 0, 0, 0),
+        ];
+        nodes[1].size = 5000;
+        nodes[2].size = 50000;
+        nodes[3].size = 5_000_000;
+        nodes[4].size = 15_000_000_000;
+
+        let dir_counts = precompute_dir_counts(&nodes);
+        let snapshot = FileArenaSnapshot {
+            nodes: Arc::new(NodeStorage::Owned(nodes)),
+            string_pool: Arc::new(pool),
+            dir_counts: Arc::new(dir_counts),
+        };
+
+        let mut chart = SizeDistributionChart::new();
+        let counts = chart.compute(&snapshot);
+
+        assert_eq!(counts[0], 1);
+        assert_eq!(counts[1], 1);
+        assert_eq!(counts[2], 0);
+        assert_eq!(counts[3], 1);
+        assert_eq!(counts[4], 0);
+        assert_eq!(counts[5], 0);
+        assert_eq!(counts[6], 0);
+        assert_eq!(counts[7], 1);
+    }
+
+    #[test]
+    fn test_size_distribution_only_directories() {
+        let mut pool = StringPool::new();
+        let r_id = pool.get_or_insert(b"root");
+        let d1_id = pool.get_or_insert(b"dir1");
+
+        let mut nodes = vec![
+            FileNode::new(r_id, None, true, false, 0, 0, 0),
+            FileNode::new(d1_id, Some(0), true, false, 0, 0, 0),
+        ];
+        nodes[1].size = 5000;
+
+        let dir_counts = precompute_dir_counts(&nodes);
+        let snapshot = FileArenaSnapshot {
+            nodes: Arc::new(NodeStorage::Owned(nodes)),
+            string_pool: Arc::new(pool),
+            dir_counts: Arc::new(dir_counts),
+        };
+
+        let mut chart = SizeDistributionChart::new();
+        let counts = chart.compute(&snapshot);
+        assert_eq!(counts, [0u64; 8]);
+    }
+}

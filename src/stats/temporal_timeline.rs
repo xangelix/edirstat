@@ -183,3 +183,123 @@ impl super::StatComponent for TemporalTimelineChart {
         });
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use super::*;
+    use crate::{
+        arena::{FileArenaSnapshot, FileNode, NodeStorage, StringPool, precompute_dir_counts},
+        stats::StatsChart,
+    };
+
+    #[test]
+    fn test_temporal_timeline_empty() {
+        let pool = StringPool::new();
+        let snapshot = FileArenaSnapshot {
+            nodes: Arc::new(NodeStorage::Owned(vec![])),
+            string_pool: Arc::new(pool),
+            dir_counts: Arc::new(vec![]),
+        };
+        let mut chart = TemporalTimelineChart::new();
+        chart.compute(&snapshot);
+        assert!(chart.sorted_days.is_empty());
+        assert!(chart.daily_totals.is_empty());
+    }
+
+    #[test]
+    fn test_temporal_timeline_standard() {
+        let mut pool = StringPool::new();
+        let r_id = pool.get_or_insert(b"root");
+        let f1_id = pool.get_or_insert(b"f1");
+        let f2_id = pool.get_or_insert(b"f2");
+        let f3_id = pool.get_or_insert(b"f3");
+
+        let mut nodes = vec![
+            FileNode::new(r_id, None, true, false, 0, 0, 0),
+            FileNode::new(f1_id, Some(0), false, false, 1_686_657_845, 0, 0),
+            FileNode::new(f2_id, Some(0), false, false, 1_686_667_845, 0, 0),
+            FileNode::new(f3_id, Some(0), false, false, 1_686_744_200, 0, 0),
+        ];
+        nodes[1].size = 100;
+        nodes[2].size = 200;
+        nodes[3].size = 1000;
+
+        let dir_counts = precompute_dir_counts(&nodes);
+        let snapshot = FileArenaSnapshot {
+            nodes: Arc::new(NodeStorage::Owned(nodes)),
+            string_pool: Arc::new(pool),
+            dir_counts: Arc::new(dir_counts),
+        };
+
+        let mut chart = TemporalTimelineChart::new();
+        chart.compute(&snapshot);
+
+        assert_eq!(chart.sorted_days.len(), 2);
+
+        let day_a = (1_686_657_845 / 86400) * 86400;
+        let day_b = (1_686_744_200 / 86400) * 86400;
+
+        assert_eq!(chart.sorted_days, vec![day_a, day_b]);
+
+        assert_eq!(chart.daily_totals.get(&day_a), Some(&(300, 2)));
+        assert_eq!(chart.daily_totals.get(&day_b), Some(&(1000, 1)));
+    }
+
+    #[test]
+    fn test_temporal_timeline_no_mod_times() {
+        let mut pool = StringPool::new();
+        let r_id = pool.get_or_insert(b"root");
+        let f1_id = pool.get_or_insert(b"f1");
+
+        let mut nodes = vec![
+            FileNode::new(r_id, None, true, false, 0, 0, 0),
+            FileNode::new(f1_id, Some(0), false, false, 0, 0, 0),
+        ];
+        nodes[1].size = 500;
+
+        let dir_counts = precompute_dir_counts(&nodes);
+        let snapshot = FileArenaSnapshot {
+            nodes: Arc::new(NodeStorage::Owned(nodes)),
+            string_pool: Arc::new(pool),
+            dir_counts: Arc::new(dir_counts),
+        };
+
+        let mut chart = TemporalTimelineChart::new();
+        chart.compute(&snapshot);
+
+        assert!(chart.sorted_days.is_empty());
+        assert!(chart.daily_totals.is_empty());
+    }
+
+    #[test]
+    fn test_temporal_timeline_limit_5000_days() {
+        let mut pool = StringPool::new();
+        let r_id = pool.get_or_insert(b"root");
+
+        let mut nodes = vec![FileNode::new(r_id, None, true, false, 0, 0, 0)];
+
+        for i in 0..5005 {
+            let f_id = pool.get_or_insert(format!("f{i}").as_bytes());
+            let timestamp = 1_686_657_845 + (i * 86400);
+            let mut node = FileNode::new(f_id, Some(0), false, false, timestamp, 0, 0);
+            node.size = 1;
+            nodes.push(node);
+        }
+
+        let dir_counts = precompute_dir_counts(&nodes);
+        let snapshot = FileArenaSnapshot {
+            nodes: Arc::new(NodeStorage::Owned(nodes)),
+            string_pool: Arc::new(pool),
+            dir_counts: Arc::new(dir_counts),
+        };
+
+        let mut chart = TemporalTimelineChart::new();
+        chart.compute(&snapshot);
+
+        assert_eq!(chart.sorted_days.len(), 5000);
+        let last_day = ((1_686_657_845 + 5004 * 86400) / 86400) * 86400;
+        assert_eq!(chart.sorted_days[4999], last_day);
+    }
+}

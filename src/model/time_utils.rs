@@ -62,3 +62,62 @@ pub fn system_time_to_unix_timestamp(t: std::time::SystemTime) -> i64 {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::time::{Duration, SystemTime};
+
+    use super::*;
+
+    #[test]
+    fn test_format_epoch_pre_1970() {
+        assert_eq!(format_epoch(0, false), "Pre-1970");
+        assert_eq!(format_epoch(0, true), "Unknown");
+        assert_eq!(format_epoch(-50, false), "Pre-1970");
+        assert_eq!(format_epoch(-50, true), "Unknown");
+    }
+
+    #[test]
+    fn test_format_epoch_post_maximum() {
+        assert_eq!(format_epoch(253_402_300_800, false), "Pre-1970");
+        assert_eq!(format_epoch(253_402_300_800, true), "Unknown");
+    }
+
+    #[test]
+    fn test_format_epoch_standard_no_time() {
+        assert_eq!(format_epoch(1_686_614_400, false), "2023-06-13");
+    }
+
+    #[test]
+    fn test_format_epoch_standard_with_time() {
+        assert_eq!(format_epoch(1_686_657_845, true), "2023-06-13 12:04:05");
+    }
+
+    #[test]
+    fn test_format_epoch_leap_year() {
+        assert_eq!(format_epoch(1_582_977_600, true), "2020-02-29 12:00:00");
+    }
+
+    #[test]
+    fn test_format_epoch_non_leap_year() {
+        assert_eq!(format_epoch(1_614_513_600, true), "2021-02-28 12:00:00");
+    }
+
+    #[test]
+    fn test_system_time_to_unix_timestamp_epoch() {
+        let t = SystemTime::UNIX_EPOCH;
+        assert_eq!(system_time_to_unix_timestamp(t), 0);
+    }
+
+    #[test]
+    fn test_system_time_to_unix_timestamp_future() {
+        let t = SystemTime::UNIX_EPOCH + Duration::from_secs(123_456_789);
+        assert_eq!(system_time_to_unix_timestamp(t), 123_456_789);
+    }
+
+    #[test]
+    fn test_system_time_to_unix_timestamp_past() {
+        let t = SystemTime::UNIX_EPOCH - Duration::from_secs(98765);
+        assert_eq!(system_time_to_unix_timestamp(t), -98765);
+    }
+}

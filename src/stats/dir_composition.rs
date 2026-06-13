@@ -319,3 +319,113 @@ pub fn gather_dir_extensions(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use super::*;
+    use crate::{
+        arena::{FileArenaSnapshot, FileNode, NodeStorage, StringPool, precompute_dir_counts},
+        stats::StatsChart,
+    };
+
+    #[test]
+    fn test_dir_composition_empty() {
+        let pool = StringPool::new();
+        let snapshot = FileArenaSnapshot {
+            nodes: Arc::new(NodeStorage::Owned(vec![])),
+            string_pool: Arc::new(pool),
+            dir_counts: Arc::new(vec![]),
+        };
+        let mut chart = DirCompositionChart::new(0);
+        chart.compute(&snapshot);
+        assert!(chart.top_extensions.is_empty());
+        assert!(chart.children_composition.is_empty());
+    }
+
+    #[test]
+    fn test_dir_composition_no_children() {
+        let mut pool = StringPool::new();
+        let r_id = pool.get_or_insert(b"root");
+
+        let nodes = vec![FileNode::new(r_id, None, true, false, 0, 0, 0)];
+        let dir_counts = precompute_dir_counts(&nodes);
+        let snapshot = FileArenaSnapshot {
+            nodes: Arc::new(NodeStorage::Owned(nodes)),
+            string_pool: Arc::new(pool),
+            dir_counts: Arc::new(dir_counts),
+        };
+
+        let mut chart = DirCompositionChart::new(0);
+        chart.compute(&snapshot);
+        assert!(chart.top_extensions.is_empty());
+        assert!(chart.children_composition.is_empty());
+    }
+
+    #[test]
+    fn test_dir_composition_standard() {
+        let mut pool = StringPool::new();
+        let r_id = pool.get_or_insert(b"root");
+        let f1_id = pool.get_or_insert(b"f1.png");
+        let f2_id = pool.get_or_insert(b"f2.txt");
+
+        let mut nodes = vec![
+            FileNode::new(r_id, None, true, false, 0, 0, 0),
+            FileNode::new(f1_id, Some(0), false, false, 0, 0, 0),
+            FileNode::new(f2_id, Some(0), false, false, 0, 0, 0),
+        ];
+        nodes[0].first_child = 1;
+        nodes[1].next_sibling = 2;
+        nodes[1].size = 500;
+        nodes[2].size = 300;
+
+        let dir_counts = precompute_dir_counts(&nodes);
+        let snapshot = FileArenaSnapshot {
+            nodes: Arc::new(NodeStorage::Owned(nodes)),
+            string_pool: Arc::new(pool),
+            dir_counts: Arc::new(dir_counts),
+        };
+
+        let mut chart = DirCompositionChart::new(0);
+        chart.compute(&snapshot);
+
+        assert_eq!(chart.top_extensions.len(), 2);
+        assert_eq!(chart.top_extensions[0], "png");
+        assert_eq!(chart.top_extensions[1], "txt");
+
+        assert_eq!(chart.children_composition.len(), 2);
+        assert_eq!(chart.children_composition[0].0, "f1.png");
+        assert_eq!(chart.children_composition[0].2, 500);
+        assert_eq!(chart.children_composition[1].0, "f2.txt");
+        assert_eq!(chart.children_composition[1].2, 300);
+    }
+
+    #[test]
+    fn test_gather_dir_extensions() {
+        let mut pool = StringPool::new();
+        let r_id = pool.get_or_insert(b"root");
+        let d1_id = pool.get_or_insert(b"dir1");
+        let f1_id = pool.get_or_insert(b"f1.png");
+        let f2_id = pool.get_or_insert(b"f2.txt");
+
+        let mut nodes = vec![
+            FileNode::new(r_id, None, true, false, 0, 0, 0),
+            FileNode::new(d1_id, Some(0), true, false, 0, 0, 0),
+            FileNode::new(f1_id, Some(1), false, false, 0, 0, 0),
+            FileNode::new(f2_id, Some(1), false, false, 0, 0, 0),
+        ];
+        nodes[0].first_child = 1;
+        nodes[1].first_child = 2;
+        nodes[2].next_sibling = 3;
+        nodes[2].size = 100;
+        nodes[3].size = 200;
+
+        let mut ext_sizes = HashMap::with_hasher(ahash::RandomState::new());
+        gather_dir_extensions(&nodes, &pool, 1, &mut ext_sizes);
+
+        assert_eq!(ext_sizes.len(), 2);
+        assert_eq!(ext_sizes.get("png"), Some(&100));
+        assert_eq!(ext_sizes.get("txt"), Some(&200));
+    }
+}

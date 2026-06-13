@@ -602,3 +602,112 @@ fn build_treemap(
         i = j;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use eframe::egui::Rect;
+
+    use super::*;
+    use crate::{
+        arena::{FileArenaSnapshot, FileNode, NodeStorage, StringPool, precompute_dir_counts},
+        stats::StatsChart,
+    };
+
+    #[test]
+    fn test_is_descendant() {
+        let mut pool = StringPool::new();
+        let r_id = pool.get_or_insert(b"root");
+        let d_id = pool.get_or_insert(b"dir");
+        let f_id = pool.get_or_insert(b"file");
+        let nodes = vec![
+            FileNode::new(r_id, None, true, false, 0, 0, 0),
+            FileNode::new(d_id, Some(0), true, false, 0, 0, 0),
+            FileNode::new(f_id, Some(1), false, false, 0, 0, 0),
+        ];
+
+        assert!(is_descendant(&nodes, 2, 1));
+        assert!(is_descendant(&nodes, 2, 0));
+        assert!(is_descendant(&nodes, 1, 0));
+        assert!(is_descendant(&nodes, 2, 2));
+        assert!(!is_descendant(&nodes, 1, 2));
+    }
+
+    #[test]
+    fn test_get_selection_roots() {
+        let mut pool = StringPool::new();
+        let r_id = pool.get_or_insert(b"root");
+        let d_id = pool.get_or_insert(b"dir");
+        let f_id = pool.get_or_insert(b"file");
+        let nodes = vec![
+            FileNode::new(r_id, None, true, false, 0, 0, 0),
+            FileNode::new(d_id, Some(0), true, false, 0, 0, 0),
+            FileNode::new(f_id, Some(1), false, false, 0, 0, 0),
+        ];
+
+        let mut selected = std::collections::HashSet::new();
+        selected.insert(1);
+        selected.insert(2);
+
+        let roots = get_selection_roots(&nodes, &selected);
+        assert_eq!(roots.len(), 1);
+        assert!(roots.contains(&1));
+    }
+
+    #[allow(clippy::float_cmp)]
+    #[test]
+    fn test_worst_aspect_ratio() {
+        assert_eq!(worst_aspect_ratio(&[], 10.0), f64::INFINITY);
+        assert_eq!(worst_aspect_ratio(&[10.0], 0.0), f64::INFINITY);
+
+        let ratio = worst_aspect_ratio(&[10.0], 5.0);
+        assert_eq!(ratio, 2.5);
+    }
+
+    #[test]
+    fn test_treemap_compute_empty() {
+        let pool = StringPool::new();
+        let snapshot = FileArenaSnapshot {
+            nodes: Arc::new(NodeStorage::Owned(vec![])),
+            string_pool: Arc::new(pool),
+            dir_counts: Arc::new(vec![]),
+        };
+        let mut chart = TreemapChart::new();
+        let blocks = chart.compute(&snapshot);
+        assert!(blocks.is_empty());
+    }
+
+    #[allow(clippy::float_cmp)]
+    #[test]
+    fn test_treemap_compute_standard() {
+        let mut pool = StringPool::new();
+        let r_id = pool.get_or_insert(b"root");
+        let f1_id = pool.get_or_insert(b"f1.png");
+
+        let mut nodes = vec![
+            FileNode::new(r_id, None, true, false, 0, 0, 0),
+            FileNode::new(f1_id, Some(0), false, false, 0, 0, 0),
+        ];
+        nodes[0].first_child = 1;
+        nodes[0].size = 1000;
+        nodes[1].size = 1000;
+
+        let dir_counts = precompute_dir_counts(&nodes);
+        let snapshot = FileArenaSnapshot {
+            nodes: Arc::new(NodeStorage::Owned(nodes)),
+            string_pool: Arc::new(pool),
+            dir_counts: Arc::new(dir_counts),
+        };
+
+        let mut chart = TreemapChart::new();
+        chart.last_rect =
+            Rect::from_min_size(eframe::egui::Pos2::ZERO, eframe::egui::vec2(100.0, 100.0));
+        let blocks = chart.compute(&snapshot);
+
+        assert_eq!(blocks.len(), 1);
+        assert_eq!(blocks[0].node_idx, 1);
+        assert_eq!(blocks[0].rect.width(), 100.0);
+        assert_eq!(blocks[0].rect.height(), 100.0);
+    }
+}
