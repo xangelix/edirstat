@@ -8,7 +8,7 @@
 
 **eDirStat** is a modern, high-performance, cross-platform disk usage analyzer written in Rust. Inspired by legacy utilities like [WinDirStat](https://windirstat.net/), it leverages an immediate-mode graphical interface [`egui`](https://egui.rs/) to provide a real-time, interactive treemap visualization of your filesystem.
 
-Unlike traditional analyzers that crawl sequentially, **eDirStat** is built from the ground up for modern multi-core systems. It couples a blazing-fast, work-stealing multithreaded directory walker with a zero-copy arena data structure. This allows you to scan millions of files seamlessly, visualize space hogs instantly via adaptive HSL gradients, and save/load system snapshots in milliseconds using memory-mapped files.
+Unlike traditional analyzers that crawl sequentially, **eDirStat** is engineered from the ground up for modern multi-core systems. It couples a highly optimized, work-stealing multithreaded directory walker with a zero-copy arena data structure. This allows you to scan millions of files, locate space-wasting files using a treemap diagram (among other plots), identify duplicate files, and save or load system snapshots in milliseconds using memory-mapped files.
 
 [**26.9x speedup** vs `WinDirStat`](#benchmarks)
 
@@ -52,12 +52,14 @@ Unlike traditional analyzers that crawl sequentially, **eDirStat** is built from
 
 ## 🚀 Key Features
 
-- ⚡ **Work-Stealing Multi-threading:** Powered by a lock-free task injector queue for optimal utilization of all CPU cores during directory traversal.
-- 👥 **Multi-Stage Deduplication Engine:** Detects byte-for-byte identical files using an optimized 7-stage hashing pipeline with full hardlink awareness.
-- 📦 **Zero-Copy Serialization:** Uses binary snapshot layouts that can be instantly mapped into memory via `memmap2` and cast via `bytemuck`, bypassing traditional parsing overhead.
-- 📊 **Dynamic Treemap Visualization:** An interactive, responsive layout canvas that slices and dices data, using stable extension hashing for color-coded grouping.
-- 🔀 **Lazy Tree View:** Fluid interface navigation with automatic sibling-size sorting and recursive guidance lines.
-- 🛡️ **Safe & Native:** Built completely in safe, pure Rust with immediate-mode UI rendering and cross-platform path handling.
+- ⚡ **Work-Stealing Multi-threading:** Powered by a lock-free task injector queue that keeps all CPU cores saturated during scanning.
+- 🪟 **NTFS MFT Scanner (Windows):** Accesses raw NTFS physical handles to parse the Master File Table directly, bypassing OS filesystem bottlenecks for near-instantaneous drive indexing (requires administrative privileges).
+- 👥 **7-Stage Deduplication Engine:** Safely identifies byte-for-byte identical files using cryptographically secure BLAKE3 hashing. It is hardlink-aware to protect shared filesystem links.
+- 📦 **Zero-Copy Snapshot Serialization:** Writes structured tree snapshots to disk that can be instantly remapped into memory using `memmap2` and cast via `bytemuck`, eliminating parsing overhead. Cross-compatible on all Little-Endian platforms.
+- 📊 **Dynamic Treemap Visualization:** Features a responsive layout canvas with smooth HSL gradient scaling based on file extensions.
+- 🗂️ **Layout Modes and Plots:** Choose between the different layout modes, both featuring data visualizations that can be cycled between.
+- 📋 **Bulk Operations & Multi-Select:** Select multiple rows in the directory tree or deduplicator to execute batch trashing, deletion, or linking.
+- 🛡️ **Safe & Native:** Built completely in safe, pure Rust with immediate-mode UI rendering and cross-platform support.
 
 ---
 
@@ -131,7 +133,7 @@ If you need to analyze a server or remote environment:
 
 ---
 
-## 🛠 Architectural Design & Internals
+## ⚙️ Architectural Design & Internals
 
 ### 1. Parallel Work-Stealing Walker (`src/traversal.rs`)
 
@@ -139,7 +141,8 @@ The traversal engine avoids the performance bottlenecks of standard recursive si
 
 - **Workers & Stealers:** Each parallel thread operates on a local thread-safe FIFO task queue. When a thread runs out of directories to scan, it attempts to steal tasks from a global injector or peer worker queues.
 - **Cycle Detection:** Avoids infinite directory loops (caused by recursive symbolic links) by checking filesystem identity descriptors (`dev`/`ino` on Unix, and `volume_serial_number`/`file_index` on Windows) against an inherited stack of ancestors.
-- **Ignore Matching:** Evaluates file pathways against globally defined structures and localized directory-level `.gitignore` files using compiled `globset` configurations.
+- **Developer-Friendly Ignore Matching:** Evaluates file pathways against globally defined structures and localized directory-level `.gitignore` files using compiled `globset` configurations.
+- **Device Boundary Restrictions:** Restricts the scan to the primary mount point or device boundary to prevent unintended traversal of system directories (e.g., `/sys` or `/proc`).
 
 ### 2. Lock-Free Snapshot Commit Loop (`src/coordinator.rs`)
 
@@ -151,7 +154,7 @@ To prevent traversal worker threads from blocking the UI rendering cycle, `edirs
 
 ### 3. Cache-Friendly Arena Representation (`src/arena.rs`)
 
-To conserve system memory and minimize pointers, the scanned directory hierarchy is flattened into a single contiguous array (arena):
+To conserve memory and avoid pointer-chasing latency, the directory tree is flattened into a single contiguous array (arena):
 
 ```text
 [ Root Node ] ---> [ Child A ] ---> [ Child B ] ---> [ Child C ]
@@ -160,9 +163,9 @@ To conserve system memory and minimize pointers, the scanned directory hierarchy
                  [ Sub-child 1 ]
 ```
 
-- **No Pointer Chasing:** Individual `FileNode` blocks reference their parents, first-born children, and next siblings through raw `u32` indices rather than heap-allocated pointers (`Box` or `Rc`).
-- **Plain Old Data (POD):** The `FileNode` struct is annotated with `bytemuck::Pod` and `bytemuck::Zeroable` and is strictly aligned to 8 bytes to prevent uninitialized memory gaps.
-- **Compact String Pool:** Names of files and folders are deduplicated and written into a contiguous byte sequence (`StringPool`). Nodes keep a simple index wrapper (`StringId`), minimizing allocations for duplicate names like `node_modules` or `.git`.
+- **Index-Based References:** Individual `FileNode` blocks reference parent, child, and sibling nodes using raw `u32` indices rather than heap-allocated pointers (`Box` or `Rc`).
+- **Plain Old Data (POD):** The `FileNode` struct is annotated with `bytemuck::Pod` and `bytemuck::Zeroable`, strictly aligned to 8-byte boundaries.
+- **Compact String Pool:** Directory and file names are deduplicated and stored in a contiguous byte sequence (`StringPool`). Nodes reference these names via a lightweight `StringId` wrapper.
 
 ### 4. Zero-Copy Snapshot Persistence (`src/persistence.rs`)
 
@@ -182,7 +185,7 @@ The `.edst` snapshot file layout matches the structure of the in-memory arena:
 +-------------------------------------------------------------+
 ```
 
-- **Memory-Mapped Loading:** Loading a snapshot uses copy-on-write virtual memory maps (`memmap2`).
+- **Memory-Mapped Loading:** Loading a snapshot utilizes copy-on-write virtual memory maps (`memmap2`).
 - **Zero Parsing Overhead:** Because `FileNode` is a POD structure, the loaded byte buffer is safely cast directly to a slice of `&[FileNode]`. This yields instant loading, even for files tracking millions of objects.
 
 ### 5. Multi-Stage Deduplication Engine (`src/stats/deduplicator.rs`)
