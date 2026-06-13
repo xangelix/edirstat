@@ -3,14 +3,14 @@ use std::{
     fs::{File, OpenOptions},
     io::{Read, Seek, SeekFrom},
     path::{Path, PathBuf},
-    sync::atomic::Ordering,
+    sync::{Arc, atomic::Ordering},
 };
 
 #[cfg(target_os = "windows")]
 use std::{os::windows::ffi::OsStrExt as _, os::windows::fs::OpenOptionsExt as _};
 
 use compact_str::CompactString;
-use crossbeam::channel::Sender;
+use crossbeam::channel::{Sender, bounded};
 
 #[cfg(target_os = "windows")]
 use windows::{Win32::Storage::FileSystem::GetVolumeInformationW, core::PCWSTR};
@@ -20,16 +20,16 @@ use super::traversal::{LocalId, ScanEvent, TraversalStats};
 const MFT_RECORD_SIZE: usize = 1024;
 const CHUNK_SIZE: usize = 16 * 1024 * 1024; // 16MB Reusable Staging Buffer
 
+#[repr(C, align(8))]
 struct MftEntry {
-    name: CompactString,
     size: u64,
     parent_record_id: u64,
     modified_timestamp: i64,
     created_timestamp: i64,
     accessed_timestamp: i64,
-    is_dir: bool,
-    is_symlink: bool,
-    has_attr_list: bool,
+    name_id: u32,
+    flags: u8, // bit 0: is_dir, bit 1: is_symlink, bit 2: has_attr_list
+    _padding: [u8; 3],
 }
 
 struct TraversalFrame {
@@ -37,16 +37,124 @@ struct TraversalFrame {
     parent_local_id: LocalId,
 }
 
+#[derive(Clone)]
 struct DataRun {
     length_clusters: u64,
     lcn: Option<i64>, // None means sparse
 }
 
+#[derive(Clone)]
 struct ExtractedLink {
     parent_ref: u64,
     name: CompactString,
     size: u64,
     has_attr_list: bool,
+}
+
+struct IngestionChunk {
+    buffer: Vec<u8>,
+    start_record_id: u64,
+    bytes_read: usize,
+}
+
+struct TlCacheEntry {
+    hash: u64,
+    val: CompactString,
+    id: crate::arena::StringId,
+}
+
+thread_local! {
+    static TL_INTERN_CACHE: std::cell::RefCell<[Option<TlCacheEntry>; 512]> = const { std::cell::RefCell::new(
+        const { [const { None }; 512] }
+    ) };
+}
+
+/// Sharded parallel interner utilizing `RwLock` with a Thread-Local L1 Cache for lock-free resolutions
+pub struct ShardedStringPool {
+    shards: Vec<parking_lot::RwLock<crate::arena::StringPool>>,
+}
+
+impl ShardedStringPool {
+    fn new(num_shards: usize) -> Self {
+        let mut shards = Vec::with_capacity(num_shards);
+        for _ in 0..num_shards {
+            shards.push(parking_lot::RwLock::new(crate::arena::StringPool::new()));
+        }
+        Self { shards }
+    }
+
+    #[inline]
+    fn get_or_insert(&self, s_bytes: &[u8]) -> crate::arena::StringId {
+        let mut hash = 5381u64;
+        for &b in s_bytes {
+            hash = (hash << 5).wrapping_add(hash).wrapping_add(b as u64);
+        }
+        let cache_idx = (hash % 512) as usize;
+
+        // 1. Thread-Local L1 Cache Check (Zero locks, zero atomic instructions)
+        let hit = TL_INTERN_CACHE.with(|cache| {
+            let cache_ref = cache.borrow();
+            if let Some(entry) = &cache_ref[cache_idx]
+                && entry.hash == hash
+                && entry.val.as_bytes() == s_bytes
+            {
+                return Some(entry.id);
+            }
+            None
+        });
+
+        if let Some(id) = hit {
+            return id;
+        }
+
+        // 2. Fallback to Global Shard Lookup
+        let id = self.global_get_or_insert(s_bytes, hash);
+
+        // 3. Update Thread-Local L1 Cache on Miss
+        if let Ok(s_str) = std::str::from_utf8(s_bytes) {
+            TL_INTERN_CACHE.with(|cache| {
+                let mut cache_mut = cache.borrow_mut();
+                cache_mut[cache_idx] = Some(TlCacheEntry {
+                    hash,
+                    val: CompactString::new(s_str),
+                    id,
+                });
+            });
+        }
+
+        id
+    }
+
+    #[inline]
+    fn global_get_or_insert(&self, s_bytes: &[u8], hash: u64) -> crate::arena::StringId {
+        let shard_idx = (hash % self.shards.len() as u64) as usize;
+        let s_str = std::str::from_utf8(s_bytes).unwrap_or("");
+
+        {
+            let shard_read = self.shards[shard_idx].read();
+            if let Ok(Some(local_id)) = shard_read.interner.lookup_handle(s_str) {
+                let global_id = ((shard_idx as u32) << 24) | local_id;
+                return crate::arena::StringId(global_id);
+            }
+        }
+
+        let local_id = self.shards[shard_idx].write().get_or_insert(s_bytes);
+        let global_id = ((shard_idx as u32) << 24) | local_id.0;
+        crate::arena::StringId(global_id)
+    }
+
+    fn get_str(&self, global_id: u32) -> Option<String> {
+        let shard_idx = (global_id >> 24) as usize;
+        let local_id = global_id & 0x00FF_FFFF;
+        if shard_idx < self.shards.len() {
+            let shard = self.shards[shard_idx].read();
+            shard
+                .get(crate::arena::StringId(local_id))
+                .map(std::string::ToString::to_string)
+        } else {
+            None
+        }
+    }
 }
 
 /// Converts Windows NT 100-nanosecond intervals to standard Unix epoch seconds.
@@ -320,7 +428,7 @@ fn parse_attributes(record_data: &[u8]) -> Vec<AttributeHeader<'_>> {
 
 /// Extracts all unique directory links from a file record, deduplicating local namespace variants.
 fn extract_all_links_from_record(record_buffer: &[u8]) -> Vec<ExtractedLink> {
-    let mut links: HashMap<u64, (CompactString, i32)> = HashMap::new();
+    let mut links: ahash::HashMap<u64, (CompactString, i32)> = ahash::HashMap::default();
     let mut unnamed_data_size = None;
     let mut has_attr_list = false;
     let mut fallback_size = 0u64;
@@ -412,6 +520,7 @@ fn reconstruct_path(
     record_id: u64,
     root_record_id: u64,
     root_path: &Path,
+    sharded_pool: &ShardedStringPool,
 ) -> PathBuf {
     let mut path = PathBuf::new();
     let mut curr = record_id;
@@ -424,7 +533,9 @@ fn reconstruct_path(
             break;
         }
         if let Some(Some(entry)) = mft_entries.get(curr as usize) {
-            segments.push(entry.name.as_str());
+            if let Some(name_str) = sharded_pool.get_str(entry.name_id) {
+                segments.push(name_str);
+            }
             curr = entry.parent_record_id;
         } else {
             break;
@@ -433,7 +544,7 @@ fn reconstruct_path(
 
     path.push(root_path);
     for segment in segments.into_iter().rev() {
-        path.push(segment);
+        path.push(&segment);
     }
     path
 }
@@ -443,6 +554,7 @@ fn find_target_record_in_memory(
     mft_entries: &[Option<MftEntry>],
     children_map: &HashMap<u64, Vec<u64>, ahash::RandomState>,
     root_path: &Path,
+    sharded_pool: &ShardedStringPool,
 ) -> u64 {
     let mut current_record = 5u64; // Root folder constant
     let mut components = Vec::new();
@@ -457,12 +569,16 @@ fn find_target_record_in_memory(
         if let Some(children) = children_map.get(&current_record) {
             for &child_id in children {
                 if let Some(Some(entry)) = mft_entries.get(child_id as usize)
-                    && entry.is_dir
-                    && entry.name.to_ascii_lowercase() == segment
+                    && entry.flags & 1 != 0
                 {
-                    current_record = child_id;
-                    found = true;
-                    break;
+                    // is_dir check
+                    if let Some(name_str) = sharded_pool.get_str(entry.name_id)
+                        && name_str.to_ascii_lowercase() == segment
+                    {
+                        current_record = child_id;
+                        found = true;
+                        break;
+                    }
                 }
             }
         }
@@ -479,7 +595,7 @@ fn scan_mft_file_sequential(
     event_tx: &Sender<Vec<ScanEvent>>,
     stats: &TraversalStats,
 ) -> Result<(), crate::EdirstatError> {
-    let mut file = File::open(file_path)?;
+    let file = File::open(file_path)?;
     let file_len = file.metadata()?.len();
     let max_records = file_len / MFT_RECORD_SIZE as u64;
 
@@ -497,116 +613,216 @@ fn scan_mft_file_sequential(
     let mut children_map: HashMap<u64, Vec<u64>, ahash::RandomState> =
         HashMap::with_capacity_and_hasher(max_records as usize / 10, ahash::RandomState::new());
 
-    let mut record_buffer = vec![0u8; MFT_RECORD_SIZE];
-    let mut current_record_id = 0u64;
+    // Spawns a background thread to read file chunks sequentially
+    let (filled_tx, filled_rx) = bounded::<IngestionChunk>(4);
+    let mut file_clone = file.try_clone()?;
 
-    while current_record_id < max_records {
-        if file.read_exact(&mut record_buffer).is_err() {
-            break;
-        }
+    std::thread::spawn(move || {
+        let mut record_buffer = vec![0u8; CHUNK_SIZE];
+        let mut record_id_counter = 0u64;
 
-        let record_id = current_record_id;
-        current_record_id += 1;
-
-        if !apply_fixup(&mut record_buffer) {
-            continue;
-        }
-
-        if record_buffer.len() < 40 {
-            continue;
-        }
-
-        let flags = u16::from_le_bytes(record_buffer[22..24].try_into().unwrap_or([0; 2]));
-        if (flags & 1) == 0 {
-            continue;
-        }
-
-        let base_file_ref = u64::from_le_bytes(record_buffer[32..40].try_into().unwrap_or([0; 8]));
-        let base_record_id = base_file_ref & 0x0000_ffff_ffff_ffff;
-
-        if base_record_id == 0 {
-            let extracted_links = extract_all_links_from_record(&record_buffer);
-            let is_dir = (flags & 2) != 0;
-
-            let mut modified = 0i64;
-            let mut created = 0i64;
-            let mut accessed = 0i64;
-
-            let attrs = parse_attributes(&record_buffer);
-            for attr in &attrs {
-                if attr.ty == 0x10 && !attr.is_non_resident && attr.payload.len() >= 24 {
-                    let val_offset =
-                        u16::from_le_bytes(attr.payload[20..22].try_into().unwrap_or([0; 2]))
-                            as usize;
-                    if val_offset + 32 <= attr.payload.len() {
-                        if let Some(std_info) = attr.payload.get(val_offset..val_offset + 32) {
-                            created = nt_time_to_unix(u64::from_le_bytes(
-                                std_info[0..8].try_into().unwrap_or([0; 8]),
-                            ));
-                            modified = nt_time_to_unix(u64::from_le_bytes(
-                                std_info[8..16].try_into().unwrap_or([0; 8]),
-                            ));
-                            accessed = nt_time_to_unix(u64::from_le_bytes(
-                                std_info[24..32].try_into().unwrap_or([0; 8]),
-                            ));
-                        }
-                        break;
-                    }
-                }
+        while let Ok(n) = file_clone.read(&mut record_buffer) {
+            if n == 0 {
+                break;
             }
+            let chunk = IngestionChunk {
+                buffer: record_buffer[..n].to_vec(),
+                start_record_id: record_id_counter,
+                bytes_read: n,
+            };
+            record_id_counter += (n / MFT_RECORD_SIZE) as u64;
+            if filled_tx.send(chunk).is_err() {
+                break;
+            }
+        }
+    });
 
-            for (link_idx, link) in extracted_links.into_iter().enumerate() {
-                let size = if is_dir { 0 } else { link.size };
+    let sharded_pool = Arc::new(ShardedStringPool::new(16));
+    let side_channel_links = Arc::new(parking_lot::Mutex::new(Vec::new()));
 
-                let target_id = if link_idx == 0 {
-                    record_id
-                } else {
-                    let virt_id = mft_entries.len() as u64;
-                    mft_entries.push(None);
-                    virt_id
+    // Consume chunks and parse records concurrently using Rayon threads
+    rayon::scope(|scope| {
+        let mft_entries_ptr = mft_entries.as_mut_ptr() as usize;
+
+        while let Ok(chunk) = filled_rx.recv() {
+            let records_count = chunk.bytes_read / MFT_RECORD_SIZE;
+            let start_idx = chunk.start_record_id as usize;
+
+            let side_channel_links_clone = side_channel_links.clone();
+            let sharded_pool_clone = sharded_pool.clone();
+
+            scope.spawn(move |_| {
+                // Assert safe slice bounds to prevent any possible memory overflow
+                let safe_records_count = records_count.min(max_records as usize - start_idx);
+                let target_slice = unsafe {
+                    std::slice::from_raw_parts_mut(
+                        (mft_entries_ptr as *mut Option<MftEntry>).add(start_idx),
+                        safe_records_count,
+                    )
                 };
 
-                if (target_id as usize) < mft_entries.len() {
-                    mft_entries[target_id as usize] = Some(MftEntry {
-                        name: link.name,
-                        size,
-                        parent_record_id: link.parent_ref,
-                        modified_timestamp: modified,
-                        created_timestamp: created,
-                        accessed_timestamp: accessed,
-                        is_dir,
-                        is_symlink: false,
-                        has_attr_list: link.has_attr_list,
-                    });
+                let mut local_links = Vec::new();
 
-                    children_map
-                        .entry(link.parent_ref)
-                        .or_default()
-                        .push(target_id);
+                for i in 0..safe_records_count {
+                    let offset = i * MFT_RECORD_SIZE;
+                    if offset + MFT_RECORD_SIZE <= chunk.bytes_read {
+                        let record_buffer = &chunk.buffer[offset..offset + MFT_RECORD_SIZE];
+
+                        // Match raw pointer verification safely via standard arrays
+                        if record_buffer[..4] == *b"FILE" {
+                            let mut local_record = record_buffer.to_vec();
+                            if apply_fixup(&mut local_record) {
+                                let flags = u16::from_le_bytes(
+                                    local_record[22..24].try_into().unwrap_or([0; 2]),
+                                );
+                                if (flags & 1) != 0 {
+                                    let base_file_ref = u64::from_le_bytes(
+                                        local_record[32..40].try_into().unwrap_or([0; 8]),
+                                    );
+                                    let base_record_id = base_file_ref & 0x0000_ffff_ffff_ffff;
+
+                                    if base_record_id == 0 {
+                                        let extracted_links =
+                                            extract_all_links_from_record(&local_record);
+                                        let is_dir = (flags & 2) != 0;
+
+                                        let mut modified = 0i64;
+                                        let mut created = 0i64;
+                                        let mut accessed = 0i64;
+
+                                        let attrs = parse_attributes(&local_record);
+                                        for attr in &attrs {
+                                            if attr.ty == 0x10
+                                                && !attr.is_non_resident
+                                                && attr.payload.len() >= 24
+                                            {
+                                                let val_offset = u16::from_le_bytes(
+                                                    attr.payload[20..22]
+                                                        .try_into()
+                                                        .unwrap_or([0; 2]),
+                                                )
+                                                    as usize;
+                                                if val_offset + 32 <= attr.payload.len() {
+                                                    if let Some(std_info) = attr
+                                                        .payload
+                                                        .get(val_offset..val_offset + 32)
+                                                    {
+                                                        created =
+                                                            nt_time_to_unix(u64::from_le_bytes(
+                                                                std_info[0..8]
+                                                                    .try_into()
+                                                                    .unwrap_or([0; 8]),
+                                                            ));
+                                                        modified =
+                                                            nt_time_to_unix(u64::from_le_bytes(
+                                                                std_info[8..16]
+                                                                    .try_into()
+                                                                    .unwrap_or([0; 8]),
+                                                            ));
+                                                        accessed =
+                                                            nt_time_to_unix(u64::from_le_bytes(
+                                                                std_info[24..32]
+                                                                    .try_into()
+                                                                    .unwrap_or([0; 8]),
+                                                            ));
+                                                    }
+                                                    break;
+                                                }
+                                            }
+                                        }
+
+                                        if let Some(first) = extracted_links.first() {
+                                            let name_id = sharded_pool_clone
+                                                .get_or_insert(first.name.as_bytes());
+                                            let size = if is_dir { 0 } else { first.size };
+
+                                            let mut entry_flags = 0u8;
+                                            if is_dir {
+                                                entry_flags |= 1;
+                                            }
+                                            if first.has_attr_list {
+                                                entry_flags |= 4;
+                                            }
+
+                                            target_slice[i] = Some(MftEntry {
+                                                size,
+                                                parent_record_id: first.parent_ref,
+                                                modified_timestamp: modified,
+                                                created_timestamp: created,
+                                                accessed_timestamp: accessed,
+                                                name_id: name_id.0,
+                                                flags: entry_flags,
+                                                _padding: [0; 3],
+                                            });
+
+                                            if extracted_links.len() > 1 {
+                                                local_links.extend(extracted_links[1..].to_vec());
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
+
+                if !local_links.is_empty() {
+                    side_channel_links_clone.lock().extend(local_links);
+                }
+            });
+
+            let current_id = start_idx + records_count;
+            if current_id.is_multiple_of(20000) {
+                stats.files_scanned.store(current_id, Ordering::Relaxed);
+                stats
+                    .bytes_scanned
+                    .store(current_id * MFT_RECORD_SIZE, Ordering::Relaxed);
             }
         }
+    });
 
-        if current_record_id.is_multiple_of(10000) {
-            stats
-                .files_scanned
-                .store(current_record_id as usize, Ordering::Relaxed);
-            stats.bytes_scanned.store(
-                (current_record_id * MFT_RECORD_SIZE as u64) as usize,
-                Ordering::Relaxed,
-            );
+    // 1. Build children_map for the base entries
+    for (record_id, entry_opt) in mft_entries.iter().enumerate() {
+        if let Some(entry) = entry_opt {
+            children_map
+                .entry(entry.parent_record_id)
+                .or_default()
+                .push(record_id as u64);
         }
+    }
+
+    // 2. Append secondary virtual links (hardlinks) safely on the single main thread
+    for link in side_channel_links.lock().drain(..) {
+        let virt_id = mft_entries.len() as u64;
+        let name_id = sharded_pool.get_or_insert(link.name.as_bytes());
+
+        mft_entries.push(Some(MftEntry {
+            size: link.size,
+            parent_record_id: link.parent_ref,
+            modified_timestamp: 0,
+            created_timestamp: 0,
+            accessed_timestamp: 0,
+            name_id: name_id.0,
+            flags: 0, // Hardlinks are files
+            _padding: [0; 3],
+        }));
+
+        children_map
+            .entry(link.parent_ref)
+            .or_default()
+            .push(virt_id);
     }
 
     stats
         .files_scanned
-        .store(current_record_id as usize, Ordering::Relaxed);
+        .store(max_records as usize, Ordering::Relaxed);
     stats.bytes_scanned.store(
-        (current_record_id * MFT_RECORD_SIZE as u64) as usize,
+        (max_records * MFT_RECORD_SIZE as u64) as usize,
         Ordering::Relaxed,
     );
 
-    let target_record = 5u64; // Root directory record reference
+    let target_record =
+        find_target_record_in_memory(&mft_entries, &children_map, file_path, &sharded_pool);
     stats.reset();
 
     let mut buffered_events = Vec::with_capacity(1024 * 1024);
@@ -632,7 +848,9 @@ fn scan_mft_file_sequential(
                 continue;
             };
 
-            if entry.is_dir {
+            let is_dir = entry.flags & 1 != 0;
+
+            if is_dir {
                 if !visited.insert(child_record) {
                     continue;
                 }
@@ -642,40 +860,58 @@ fn scan_mft_file_sequential(
 
                 stats.dirs_scanned.fetch_add(1, Ordering::Relaxed);
 
-                buffered_events.push(ScanEvent::DirDiscovered {
-                    parent_worker_id: 0,
-                    child_worker_id: 0,
-                    local_parent_id: frame.parent_local_id,
-                    local_child_id: child_local_id,
-                    name: entry.name.clone(),
-                    modified_timestamp: entry.modified_timestamp,
-                    created_timestamp: entry.created_timestamp,
-                    accessed_timestamp: entry.accessed_timestamp,
-                    no_permission: false,
-                });
+                if let Some(name_str) = sharded_pool.get_str(entry.name_id) {
+                    buffered_events.push(ScanEvent::DirDiscovered {
+                        parent_worker_id: 0,
+                        child_worker_id: 0,
+                        local_parent_id: frame.parent_local_id,
+                        local_child_id: child_local_id,
+                        name: CompactString::new(name_str),
+                        modified_timestamp: entry.modified_timestamp,
+                        created_timestamp: entry.created_timestamp,
+                        accessed_timestamp: entry.accessed_timestamp,
+                        no_permission: false,
+                    });
+                }
 
                 stack.push(TraversalFrame {
                     record_id: child_record,
                     parent_local_id: child_local_id,
                 });
             } else {
-                let file_size = entry.size;
+                let mut file_size = entry.size;
+                if file_size == 0 && entry.flags & 4 != 0 {
+                    // has_attr_list check
+                    let full_path = reconstruct_path(
+                        &mft_entries,
+                        child_record,
+                        target_record,
+                        file_path,
+                        &sharded_pool,
+                    );
+                    if let Ok(meta) = std::fs::metadata(&full_path) {
+                        file_size = meta.len();
+                    }
+                }
+
                 stats.files_scanned.fetch_add(1, Ordering::Relaxed);
                 stats
                     .bytes_scanned
                     .fetch_add(file_size as usize, Ordering::Relaxed);
 
-                buffered_events.push(ScanEvent::FileDiscovered {
-                    parent_worker_id: 0,
-                    local_parent_id: frame.parent_local_id,
-                    name: entry.name.clone(),
-                    size: file_size,
-                    is_symlink: entry.is_symlink,
-                    modified_timestamp: entry.modified_timestamp,
-                    created_timestamp: entry.created_timestamp,
-                    accessed_timestamp: entry.accessed_timestamp,
-                    no_permission: false,
-                });
+                if let Some(name_str) = sharded_pool.get_str(entry.name_id) {
+                    buffered_events.push(ScanEvent::FileDiscovered {
+                        parent_worker_id: 0,
+                        local_parent_id: frame.parent_local_id,
+                        name: CompactString::new(name_str),
+                        size: file_size,
+                        is_symlink: entry.flags & 2 != 0,
+                        modified_timestamp: entry.modified_timestamp,
+                        created_timestamp: entry.created_timestamp,
+                        accessed_timestamp: entry.accessed_timestamp,
+                        no_permission: false,
+                    });
+                }
             }
         }
     }
@@ -818,161 +1054,235 @@ pub fn try_scan_mft(
     let mut children_map: HashMap<u64, Vec<u64>, ahash::RandomState> =
         HashMap::with_capacity_and_hasher(max_records as usize / 10, ahash::RandomState::new());
 
-    // Allocate a large reusable staging buffer for chunked ingestion
-    let mut run_buffer = vec![0u8; CHUNK_SIZE];
-    let mut current_record_id = 0u64;
+    // Spawns a background thread to ingest disk sectors sequentially
+    let (filled_tx, filled_rx) = bounded::<IngestionChunk>(4);
+    let mut raw_disk_clone = raw_disk.try_clone()?;
+    let mft_runs_clone = mft_runs;
 
-    // --- Pass 1: Linear ingest phase - completely in-memory, zero random seeks ---
-    for run in mft_runs {
-        let length_bytes = run.length_clusters * cluster_size;
-        let mut bytes_left = length_bytes;
+    std::thread::spawn(move || {
+        let mut run_buffer = vec![0u8; CHUNK_SIZE];
+        let mut current_record_id = 0u64;
 
-        if let Some(lcn) = run.lcn {
-            let start_byte = lcn as u64 * cluster_size;
-            raw_disk.seek(SeekFrom::Start(start_byte))?;
+        for run in mft_runs_clone {
+            let length_bytes = run.length_clusters * cluster_size;
+            let mut bytes_left = length_bytes;
 
-            while bytes_left > 0 && current_record_id < max_records {
-                let to_read = (bytes_left as usize).min(CHUNK_SIZE);
-                let active_slice = &mut run_buffer[..to_read];
-
-                // Graceful reading: If raw partition bounds are exceeded, break instead of failing the scan.
-                if raw_disk.read_exact(active_slice).is_err() {
+            if let Some(lcn) = run.lcn {
+                let start_byte = lcn as u64 * cluster_size;
+                if raw_disk_clone.seek(SeekFrom::Start(start_byte)).is_err() {
                     break;
                 }
 
-                let mut offset = 0;
-                while offset + MFT_RECORD_SIZE <= to_read && current_record_id < max_records {
-                    let record_buffer = &mut run_buffer[offset..offset + MFT_RECORD_SIZE];
-                    offset += MFT_RECORD_SIZE;
+                while bytes_left > 0 && current_record_id < max_records {
+                    let to_read = (bytes_left as usize).min(CHUNK_SIZE);
+                    let active_slice = &mut run_buffer[..to_read];
 
-                    let record_id = current_record_id;
-                    current_record_id += 1;
-
-                    if !apply_fixup(record_buffer) {
-                        continue; // Skip corrupted record signatures
+                    if raw_disk_clone.read_exact(active_slice).is_err() {
+                        break;
                     }
 
-                    if record_buffer.len() < 40 {
-                        continue;
+                    let chunk = IngestionChunk {
+                        buffer: active_slice.to_vec(),
+                        start_record_id: current_record_id,
+                        bytes_read: to_read,
+                    };
+                    current_record_id += (to_read / MFT_RECORD_SIZE) as u64;
+
+                    if filled_tx.send(chunk).is_err() {
+                        break;
                     }
 
-                    let flags =
-                        u16::from_le_bytes(record_buffer[22..24].try_into().unwrap_or([0; 2]));
-                    // Skip deleted/inactive records immediately
-                    if (flags & 1) == 0 {
-                        continue;
-                    }
+                    bytes_left -= to_read as u64;
+                }
+            } else {
+                let sparse_records = (run.length_clusters * cluster_size) / MFT_RECORD_SIZE as u64;
+                current_record_id = current_record_id.saturating_add(sparse_records);
+            }
+        }
+    });
 
-                    // Read base record reference from MFT Record Header (Offset 32)
-                    let base_file_ref =
-                        u64::from_le_bytes(record_buffer[32..40].try_into().unwrap_or([0; 8]));
-                    let base_record_id = base_file_ref & 0x0000_ffff_ffff_ffff;
+    let sharded_pool = Arc::new(ShardedStringPool::new(16));
+    let side_channel_links = Arc::new(parking_lot::Mutex::new(Vec::new()));
 
-                    if base_record_id == 0 {
-                        let extracted_links = extract_all_links_from_record(record_buffer);
-                        let is_dir = (flags & 2) != 0;
+    // Parse records concurrently with Rayon
+    rayon::scope(|scope| {
+        let mft_entries_ptr = mft_entries.as_mut_ptr() as usize;
 
-                        // Extract timestamps from standard information (always resident, always first)
-                        let mut modified = 0i64;
-                        let mut created = 0i64;
-                        let mut accessed = 0i64;
+        while let Ok(chunk) = filled_rx.recv() {
+            let records_count = chunk.bytes_read / MFT_RECORD_SIZE;
+            let start_idx = chunk.start_record_id as usize;
 
-                        let attrs = parse_attributes(record_buffer);
-                        for attr in &attrs {
-                            if attr.ty == 0x10 && !attr.is_non_resident && attr.payload.len() >= 24
-                            {
-                                let val_offset = u16::from_le_bytes(
-                                    attr.payload[20..22].try_into().unwrap_or([0; 2]),
-                                ) as usize;
-                                if val_offset + 32 <= attr.payload.len() {
-                                    if let Some(std_info) =
-                                        attr.payload.get(val_offset..val_offset + 32)
-                                    {
-                                        let created_bytes: [u8; 8] =
-                                            std_info[0..8].try_into().unwrap_or([0; 8]);
-                                        created =
-                                            nt_time_to_unix(u64::from_le_bytes(created_bytes));
+            let side_channel_links_clone = side_channel_links.clone();
+            let sharded_pool_clone = sharded_pool.clone();
 
-                                        let modified_bytes: [u8; 8] =
-                                            std_info[8..16].try_into().unwrap_or([0; 8]);
-                                        modified =
-                                            nt_time_to_unix(u64::from_le_bytes(modified_bytes));
+            scope.spawn(move |_| {
+                // Assert safe slice bounds to prevent any possible memory overflow
+                let safe_records_count = records_count.min(max_records as usize - start_idx);
+                let target_slice = unsafe {
+                    std::slice::from_raw_parts_mut(
+                        (mft_entries_ptr as *mut Option<MftEntry>).add(start_idx),
+                        safe_records_count,
+                    )
+                };
 
-                                        let accessed_bytes: [u8; 8] =
-                                            std_info[24..32].try_into().unwrap_or([0; 8]);
-                                        accessed =
-                                            nt_time_to_unix(u64::from_le_bytes(accessed_bytes));
+                for i in 0..safe_records_count {
+                    let offset = i * MFT_RECORD_SIZE;
+                    if offset + MFT_RECORD_SIZE <= chunk.bytes_read {
+                        let record_buffer = &chunk.buffer[offset..offset + MFT_RECORD_SIZE];
+
+                        if record_buffer[..4] == *b"FILE" {
+                            let mut local_record = record_buffer.to_vec();
+                            if apply_fixup(&mut local_record) {
+                                let flags = u16::from_le_bytes(
+                                    local_record[22..24].try_into().unwrap_or([0; 2]),
+                                );
+                                if (flags & 1) != 0 {
+                                    let base_file_ref = u64::from_le_bytes(
+                                        local_record[32..40].try_into().unwrap_or([0; 8]),
+                                    );
+                                    let base_record_id = base_file_ref & 0x0000_ffff_ffff_ffff;
+
+                                    if base_record_id == 0 {
+                                        let extracted_links =
+                                            extract_all_links_from_record(&local_record);
+                                        let is_dir = (flags & 2) != 0;
+
+                                        let mut modified = 0i64;
+                                        let mut created = 0i64;
+                                        let mut accessed = 0i64;
+
+                                        let attrs = parse_attributes(&local_record);
+                                        for attr in &attrs {
+                                            if attr.ty == 0x10
+                                                && !attr.is_non_resident
+                                                && attr.payload.len() >= 24
+                                            {
+                                                let val_offset = u16::from_le_bytes(
+                                                    attr.payload[20..22]
+                                                        .try_into()
+                                                        .unwrap_or([0; 2]),
+                                                )
+                                                    as usize;
+                                                if val_offset + 32 <= attr.payload.len() {
+                                                    if let Some(std_info) = attr
+                                                        .payload
+                                                        .get(val_offset..val_offset + 32)
+                                                    {
+                                                        created =
+                                                            nt_time_to_unix(u64::from_le_bytes(
+                                                                std_info[0..8]
+                                                                    .try_into()
+                                                                    .unwrap_or([0; 8]),
+                                                            ));
+                                                        modified =
+                                                            nt_time_to_unix(u64::from_le_bytes(
+                                                                std_info[8..16]
+                                                                    .try_into()
+                                                                    .unwrap_or([0; 8]),
+                                                            ));
+                                                        accessed =
+                                                            nt_time_to_unix(u64::from_le_bytes(
+                                                                std_info[24..32]
+                                                                    .try_into()
+                                                                    .unwrap_or([0; 8]),
+                                                            ));
+                                                    }
+                                                    break;
+                                                }
+                                            }
+                                        }
+
+                                        if let Some(first) = extracted_links.first() {
+                                            let name_id = sharded_pool_clone
+                                                .get_or_insert(first.name.as_bytes());
+                                            let size = if is_dir { 0 } else { first.size };
+
+                                            let mut entry_flags = 0u8;
+                                            if is_dir {
+                                                entry_flags |= 1;
+                                            }
+                                            if first.has_attr_list {
+                                                entry_flags |= 4;
+                                            }
+
+                                            target_slice[i] = Some(MftEntry {
+                                                size,
+                                                parent_record_id: first.parent_ref,
+                                                modified_timestamp: modified,
+                                                created_timestamp: created,
+                                                accessed_timestamp: accessed,
+                                                name_id: name_id.0,
+                                                flags: entry_flags,
+                                                _padding: [0; 3],
+                                            });
+
+                                            if extracted_links.len() > 1 {
+                                                side_channel_links_clone
+                                                    .lock()
+                                                    .extend(extracted_links[1..].to_vec());
+                                            }
+                                        }
                                     }
-                                    break;
                                 }
                             }
                         }
-
-                        for (link_idx, link) in extracted_links.into_iter().enumerate() {
-                            let size = if is_dir { 0 } else { link.size };
-
-                            let target_id = if link_idx == 0 {
-                                record_id
-                            } else {
-                                // Allocate a virtual MFT record ID for secondary links (hardlinks)
-                                let virt_id = mft_entries.len() as u64;
-                                mft_entries.push(None); // Grow container
-                                virt_id
-                            };
-
-                            if (target_id as usize) < mft_entries.len() {
-                                mft_entries[target_id as usize] = Some(MftEntry {
-                                    name: link.name,
-                                    size,
-                                    parent_record_id: link.parent_ref,
-                                    modified_timestamp: modified,
-                                    created_timestamp: created,
-                                    accessed_timestamp: accessed,
-                                    is_dir,
-                                    is_symlink: false,
-                                    has_attr_list: link.has_attr_list,
-                                });
-
-                                children_map
-                                    .entry(link.parent_ref)
-                                    .or_default()
-                                    .push(target_id);
-                            }
-                        }
                     }
                 }
+            });
 
-                bytes_left -= to_read as u64;
-
-                // Update ingestion progress bar telemetry smoothly during sequential ingestion phase (Pass 1)
-                if current_record_id.is_multiple_of(10000) {
-                    stats
-                        .files_scanned
-                        .store(current_record_id as usize, Ordering::Relaxed);
-                    stats.bytes_scanned.store(
-                        (current_record_id * MFT_RECORD_SIZE as u64) as usize,
-                        Ordering::Relaxed,
-                    );
-                }
+            let current_id = start_idx + records_count;
+            if current_id.is_multiple_of(20000) {
+                stats.files_scanned.store(current_id, Ordering::Relaxed);
+                stats
+                    .bytes_scanned
+                    .store(current_id * MFT_RECORD_SIZE, Ordering::Relaxed);
             }
-        } else {
-            // Sparse data run - simply advance indices
-            let sparse_records = (run.length_clusters * cluster_size) / MFT_RECORD_SIZE as u64;
-            current_record_id = current_record_id.saturating_add(sparse_records);
+        }
+    });
+
+    // 1. Build children_map for the base entries
+    for (record_id, entry_opt) in mft_entries.iter().enumerate() {
+        if let Some(entry) = entry_opt {
+            children_map
+                .entry(entry.parent_record_id)
+                .or_default()
+                .push(record_id as u64);
         }
     }
 
-    // Flush final Pass 1 ingestion progress metrics
+    // 2. Append secondary virtual links safely on the single main thread
+    for link in side_channel_links.lock().drain(..) {
+        let virt_id = mft_entries.len() as u64;
+        let name_id = sharded_pool.get_or_insert(link.name.as_bytes());
+
+        mft_entries.push(Some(MftEntry {
+            size: link.size,
+            parent_record_id: link.parent_ref,
+            modified_timestamp: 0,
+            created_timestamp: 0,
+            accessed_timestamp: 0,
+            name_id: name_id.0,
+            flags: 0, // Hardlinks are files
+            _padding: [0; 3],
+        }));
+
+        children_map
+            .entry(link.parent_ref)
+            .or_default()
+            .push(virt_id);
+    }
+
     stats
         .files_scanned
-        .store(current_record_id as usize, Ordering::Relaxed);
+        .store(max_records as usize, Ordering::Relaxed);
     stats.bytes_scanned.store(
-        (current_record_id * MFT_RECORD_SIZE as u64) as usize,
+        (max_records * MFT_RECORD_SIZE as u64) as usize,
         Ordering::Relaxed,
     );
 
     // Resolve target subdirectory in-memory
-    let target_record = find_target_record_in_memory(&mft_entries, &children_map, root_path);
+    let target_record =
+        find_target_record_in_memory(&mft_entries, &children_map, root_path, &sharded_pool);
 
     // --- Reset Atomics Before Starting Traversed-Tree Resolution (Pass 2) ---
     // Clears the Pass 1 ingestion counts so that the status bar exactly matches the root directory.
@@ -1005,7 +1315,9 @@ pub fn try_scan_mft(
                 continue;
             };
 
-            if entry.is_dir {
+            let is_dir = entry.flags & 1 != 0;
+
+            if is_dir {
                 if !visited.insert(child_record) {
                     continue;
                 }
@@ -1016,17 +1328,19 @@ pub fn try_scan_mft(
                 // Safely update traversed directory atomic counters
                 stats.dirs_scanned.fetch_add(1, Ordering::Relaxed);
 
-                buffered_events.push(ScanEvent::DirDiscovered {
-                    parent_worker_id: 0,
-                    child_worker_id: 0,
-                    local_parent_id: frame.parent_local_id,
-                    local_child_id: child_local_id,
-                    name: entry.name.clone(),
-                    modified_timestamp: entry.modified_timestamp,
-                    created_timestamp: entry.created_timestamp,
-                    accessed_timestamp: entry.accessed_timestamp,
-                    no_permission: false,
-                });
+                if let Some(name_str) = sharded_pool.get_str(entry.name_id) {
+                    buffered_events.push(ScanEvent::DirDiscovered {
+                        parent_worker_id: 0,
+                        child_worker_id: 0,
+                        local_parent_id: frame.parent_local_id,
+                        local_child_id: child_local_id,
+                        name: CompactString::new(name_str),
+                        modified_timestamp: entry.modified_timestamp,
+                        created_timestamp: entry.created_timestamp,
+                        accessed_timestamp: entry.accessed_timestamp,
+                        no_permission: false,
+                    });
+                }
 
                 stack.push(TraversalFrame {
                     record_id: child_record,
@@ -1036,9 +1350,15 @@ pub fn try_scan_mft(
                 // Resolve true sizes for heavily fragmented or locked files on-demand.
                 // Triggers an OS query ONLY for files containing an Attribute List but reporting 0 size.
                 let mut file_size = entry.size;
-                if file_size == 0 && entry.has_attr_list {
-                    let full_path =
-                        reconstruct_path(&mft_entries, child_record, target_record, root_path);
+                if file_size == 0 && entry.flags & 4 != 0 {
+                    // has_attr_list check
+                    let full_path = reconstruct_path(
+                        &mft_entries,
+                        child_record,
+                        target_record,
+                        root_path,
+                        &sharded_pool,
+                    );
                     if let Ok(meta) = std::fs::metadata(&full_path) {
                         file_size = meta.len();
                     }
@@ -1050,17 +1370,19 @@ pub fn try_scan_mft(
                     .bytes_scanned
                     .fetch_add(file_size as usize, Ordering::Relaxed);
 
-                buffered_events.push(ScanEvent::FileDiscovered {
-                    parent_worker_id: 0,
-                    local_parent_id: frame.parent_local_id,
-                    name: entry.name.clone(),
-                    size: file_size,
-                    is_symlink: entry.is_symlink,
-                    modified_timestamp: entry.modified_timestamp,
-                    created_timestamp: entry.created_timestamp,
-                    accessed_timestamp: entry.accessed_timestamp,
-                    no_permission: false,
-                });
+                if let Some(name_str) = sharded_pool.get_str(entry.name_id) {
+                    buffered_events.push(ScanEvent::FileDiscovered {
+                        parent_worker_id: 0,
+                        local_parent_id: frame.parent_local_id,
+                        name: CompactString::new(name_str),
+                        size: file_size,
+                        is_symlink: entry.flags & 2 != 0,
+                        modified_timestamp: entry.modified_timestamp,
+                        created_timestamp: entry.created_timestamp,
+                        accessed_timestamp: entry.accessed_timestamp,
+                        no_permission: false,
+                    });
+                }
             }
         }
     }
