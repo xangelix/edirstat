@@ -1003,6 +1003,9 @@ impl eframe::App for GuiApp {
         // Render any active modals
         self.render_modals(&ctx, &snapshot);
 
+        // Show toast notifications
+        show_toasts(&ctx);
+
         #[cfg(feature = "profile-tracy")]
         {
             ui.ctx().request_repaint();
@@ -1629,4 +1632,45 @@ fn open_terminal_at(path: &Path) -> std::io::Result<()> {
             "Unsupported platform",
         ))
     }
+}
+
+pub static TOASTS: std::sync::LazyLock<parking_lot::Mutex<egui_notify::Toasts>> =
+    std::sync::LazyLock::new(|| {
+        parking_lot::Mutex::new(
+            egui_notify::Toasts::new()
+                .with_anchor(egui_notify::Anchor::BottomRight)
+                .with_margin(egui::vec2(10.0, 30.0)),
+        )
+    });
+
+pub fn toast_success(message: impl Into<egui::WidgetText>) {
+    TOASTS
+        .lock()
+        .success(message)
+        .duration(Some(Duration::from_secs(4)));
+}
+
+pub fn toast_info(message: impl Into<egui::WidgetText>) {
+    TOASTS
+        .lock()
+        .info(message)
+        .duration(Some(Duration::from_secs(4)));
+}
+
+pub fn toast_warning(message: impl Into<egui::WidgetText>) {
+    TOASTS
+        .lock()
+        .warning(message)
+        .duration(Some(Duration::from_secs(8)));
+}
+
+pub fn toast_error(message: impl Into<egui::WidgetText>) {
+    TOASTS
+        .lock()
+        .error(message)
+        .duration(Some(Duration::from_secs(16)));
+}
+
+pub fn show_toasts(ctx: &egui::Context) {
+    TOASTS.lock().show(ctx);
 }

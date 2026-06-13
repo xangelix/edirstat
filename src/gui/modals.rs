@@ -246,25 +246,86 @@ impl GuiApp {
         snapshot: &FileArenaSnapshot,
     ) {
         let mut successfully_deleted = Vec::new();
+        let mut failures = Vec::new();
         for &idx in target_indices {
             let path_str = snapshot.get_full_path(idx);
             let path = std::path::Path::new(&path_str);
             if path.exists() {
                 let result = if to_trash {
-                    trash::delete(path).map_err(|e| e.to_string())
+                    trash::delete(path).map_err(|e| (e.to_string(), is_permission_denied_trash(&e)))
                 } else if path.is_dir() {
-                    std::fs::remove_dir_all(path).map_err(|e| e.to_string())
+                    std::fs::remove_dir_all(path)
+                        .map_err(|e| (e.to_string(), is_permission_denied_io(&e)))
                 } else {
-                    std::fs::remove_file(path).map_err(|e| e.to_string())
+                    std::fs::remove_file(path)
+                        .map_err(|e| (e.to_string(), is_permission_denied_io(&e)))
                 };
 
-                if let Err(e) = result {
-                    println!("Failed to delete/trash path {}: {}", path.display(), e);
+                if let Err((err_msg, is_perm)) = result {
+                    println!(
+                        "Failed to delete/trash path {}: {}",
+                        path.display(),
+                        err_msg
+                    );
+                    failures.push((path_str, err_msg, is_perm));
                 } else {
                     successfully_deleted.push(idx);
                 }
             } else {
                 successfully_deleted.push(idx);
+            }
+        }
+
+        if to_trash {
+            if !successfully_deleted.is_empty() {
+                crate::gui::toast_success(format!(
+                    "Moved {} item(s) to trash",
+                    successfully_deleted.len()
+                ));
+            }
+            if !failures.is_empty() {
+                let perm_count = failures.iter().filter(|&(_, _, is_perm)| *is_perm).count();
+                if perm_count == failures.len() {
+                    crate::gui::toast_error(format!(
+                        "Failed to move {} item(s) to trash (Permission Denied). Try running with elevated privileges.",
+                        failures.len()
+                    ));
+                } else if perm_count > 0 {
+                    crate::gui::toast_error(format!(
+                        "Failed to move {} item(s) to trash ({} due to Permission Denied).",
+                        failures.len(),
+                        perm_count
+                    ));
+                } else {
+                    crate::gui::toast_error(format!(
+                        "Failed to move {} item(s) to trash",
+                        failures.len()
+                    ));
+                }
+            }
+        } else {
+            if !successfully_deleted.is_empty() {
+                crate::gui::toast_success(format!(
+                    "Permanently deleted {} item(s)",
+                    successfully_deleted.len()
+                ));
+            }
+            if !failures.is_empty() {
+                let perm_count = failures.iter().filter(|&(_, _, is_perm)| *is_perm).count();
+                if perm_count == failures.len() {
+                    crate::gui::toast_error(format!(
+                        "Failed to delete {} item(s) (Permission Denied). Try running with elevated privileges.",
+                        failures.len()
+                    ));
+                } else if perm_count > 0 {
+                    crate::gui::toast_error(format!(
+                        "Failed to delete {} item(s) ({} due to Permission Denied).",
+                        failures.len(),
+                        perm_count
+                    ));
+                } else {
+                    crate::gui::toast_error(format!("Failed to delete {} item(s)", failures.len()));
+                }
             }
         }
 
@@ -306,15 +367,26 @@ impl GuiApp {
         snapshot: &FileArenaSnapshot,
     ) {
         let mut successfully_linked = Vec::new();
+        let mut failures = Vec::new();
         let results_guard = self.deduplicator_results.read();
 
         for &idx in target_indices {
             let Some(group) = results_guard.groups.iter().find(|g| g.nodes.contains(&idx)) else {
+                failures.push((
+                    format!("Index {idx}"),
+                    "Not found in any duplicate group".to_string(),
+                    false,
+                ));
                 continue;
             };
 
             // Find a source node in the group that is NOT being replaced to link against
             let Some(&src_idx) = group.nodes.iter().find(|&&n| !target_indices.contains(&n)) else {
+                failures.push((
+                    format!("Index {idx}"),
+                    "No remaining source file in group".to_string(),
+                    false,
+                ));
                 continue;
             };
 
@@ -325,15 +397,61 @@ impl GuiApp {
 
             if src_path.exists() && dst_path.exists() {
                 let temp_dst = dst_path.with_extension("tmp_hl_bak");
-                if std::fs::rename(dst_path, &temp_dst).is_ok() {
-                    if std::fs::hard_link(src_path, dst_path).is_ok() {
-                        let _ = std::fs::remove_file(&temp_dst);
-                        successfully_linked.push(idx);
-                    } else {
-                        // Restore backup on failure
-                        let _ = std::fs::rename(&temp_dst, dst_path);
+                match std::fs::rename(dst_path, &temp_dst) {
+                    Err(e) => {
+                        failures.push((dst_path_str, e.to_string(), is_permission_denied_io(&e)));
+                    }
+                    Ok(()) => {
+                        match std::fs::hard_link(src_path, dst_path) {
+                            Ok(()) => {
+                                let _ = std::fs::remove_file(&temp_dst);
+                                successfully_linked.push(idx);
+                            }
+                            Err(e) => {
+                                // Restore backup on failure
+                                let _ = std::fs::rename(&temp_dst, dst_path);
+                                failures.push((
+                                    dst_path_str,
+                                    format!("Failed to create hard link: {e}"),
+                                    is_permission_denied_io(&e),
+                                ));
+                            }
+                        }
                     }
                 }
+            } else {
+                failures.push((
+                    dst_path_str,
+                    "Source or destination path does not exist".to_string(),
+                    false,
+                ));
+            }
+        }
+
+        if !successfully_linked.is_empty() {
+            crate::gui::toast_success(format!(
+                "Successfully replaced {} duplicate(s) with hardlinks",
+                successfully_linked.len()
+            ));
+        }
+        if !failures.is_empty() {
+            let perm_count = failures.iter().filter(|&(_, _, is_perm)| *is_perm).count();
+            if perm_count == failures.len() {
+                crate::gui::toast_error(format!(
+                    "Failed to hardlink {} duplicate(s) (Permission Denied).",
+                    failures.len()
+                ));
+            } else if perm_count > 0 {
+                crate::gui::toast_error(format!(
+                    "Failed to hardlink {} duplicate(s) ({} due to Permission Denied).",
+                    failures.len(),
+                    perm_count
+                ));
+            } else {
+                crate::gui::toast_error(format!(
+                    "Failed to hardlink {} duplicate(s)",
+                    failures.len()
+                ));
             }
         }
 
@@ -369,15 +487,26 @@ impl GuiApp {
         snapshot: &FileArenaSnapshot,
     ) {
         let mut successfully_linked = Vec::new();
+        let mut failures = Vec::new();
         let results_guard = self.deduplicator_results.read();
 
         for &idx in target_indices {
             let Some(group) = results_guard.groups.iter().find(|g| g.nodes.contains(&idx)) else {
+                failures.push((
+                    format!("Index {idx}"),
+                    "Not found in any duplicate group".to_string(),
+                    false,
+                ));
                 continue;
             };
 
             // Find a source node in the group that is NOT being replaced to link against
             let Some(&src_idx) = group.nodes.iter().find(|&&n| !target_indices.contains(&n)) else {
+                failures.push((
+                    format!("Index {idx}"),
+                    "No remaining source file in group".to_string(),
+                    false,
+                ));
                 continue;
             };
 
@@ -388,7 +517,9 @@ impl GuiApp {
 
             if src_path.exists() && dst_path.exists() {
                 let temp_dst = dst_path.with_extension("tmp_sl_bak");
-                if std::fs::rename(dst_path, &temp_dst).is_ok() {
+                if let Err(e) = std::fs::rename(dst_path, &temp_dst) {
+                    failures.push((dst_path_str, e.to_string(), is_permission_denied_io(&e)));
+                } else {
                     let symlink_result = {
                         #[cfg(unix)]
                         {
@@ -407,14 +538,55 @@ impl GuiApp {
                         }
                     };
 
-                    if symlink_result.is_ok() {
-                        let _ = std::fs::remove_file(&temp_dst);
-                        successfully_linked.push(idx);
-                    } else {
-                        // Restore backup on failure
-                        let _ = std::fs::rename(&temp_dst, dst_path);
+                    match symlink_result {
+                        Ok(()) => {
+                            let _ = std::fs::remove_file(&temp_dst);
+                            successfully_linked.push(idx);
+                        }
+                        Err(e) => {
+                            // Restore backup on failure
+                            let _ = std::fs::rename(&temp_dst, dst_path);
+                            failures.push((
+                                dst_path_str,
+                                format!("Failed to create symlink: {e}"),
+                                is_permission_denied_io(&e),
+                            ));
+                        }
                     }
                 }
+            } else {
+                failures.push((
+                    dst_path_str,
+                    "Source or destination path does not exist".to_string(),
+                    false,
+                ));
+            }
+        }
+
+        if !successfully_linked.is_empty() {
+            crate::gui::toast_success(format!(
+                "Successfully replaced {} duplicate(s) with softlinks",
+                successfully_linked.len()
+            ));
+        }
+        if !failures.is_empty() {
+            let perm_count = failures.iter().filter(|&(_, _, is_perm)| *is_perm).count();
+            if perm_count == failures.len() {
+                crate::gui::toast_error(format!(
+                    "Failed to softlink {} duplicate(s) (Permission Denied).",
+                    failures.len()
+                ));
+            } else if perm_count > 0 {
+                crate::gui::toast_error(format!(
+                    "Failed to softlink {} duplicate(s) ({} due to Permission Denied).",
+                    failures.len(),
+                    perm_count
+                ));
+            } else {
+                crate::gui::toast_error(format!(
+                    "Failed to softlink {} duplicate(s)",
+                    failures.len()
+                ));
             }
         }
 
@@ -1441,6 +1613,32 @@ pub fn relaunch_as_admin() -> std::io::Result<()> {
     }
 
     std::process::exit(0);
+}
+
+fn is_permission_denied_io(err: &std::io::Error) -> bool {
+    err.kind() == std::io::ErrorKind::PermissionDenied
+}
+
+fn is_permission_denied_trash(err: &trash::Error) -> bool {
+    match err {
+        trash::Error::CouldNotAccess { .. } => true,
+        #[cfg(all(
+            unix,
+            not(target_os = "macos"),
+            not(target_os = "ios"),
+            not(target_os = "android")
+        ))]
+        trash::Error::FileSystem { source, .. } => {
+            source.kind() == std::io::ErrorKind::PermissionDenied
+        }
+        trash::Error::Os { description, .. } | trash::Error::Unknown { description } => {
+            let desc_lower = description.to_lowercase();
+            desc_lower.contains("permission")
+                || desc_lower.contains("access is denied")
+                || desc_lower.contains("denied")
+        }
+        _ => false,
+    }
 }
 
 #[cfg(test)]

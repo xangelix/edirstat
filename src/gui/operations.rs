@@ -61,10 +61,13 @@ impl TableOperation for UpOneLevelOp {
             && (idx as usize) < snapshot.nodes.len()
         {
             let parent = snapshot.nodes[idx as usize].parent;
-            if parent != crate::arena::NO_INDEX {
+            if parent == crate::arena::NO_INDEX {
+                crate::gui::toast_warning("Already at the root level");
+            } else {
                 ctx.data.selected_rows.clear();
                 ctx.data.selected_rows.insert(parent);
                 let _ = self.command_tx.send(AppCommand::ScrollToSelected);
+                crate::gui::toast_info("Navigated up one level");
             }
         }
         Ok(())
@@ -108,6 +111,7 @@ impl TableOperation for RefreshRootOp {
         if !snapshot.nodes.is_empty() {
             // The root node is always strictly at index 0 in the arena
             let _ = self.command_tx.send(AppCommand::RefreshSubtrees(vec![0]));
+            crate::gui::toast_info("Refreshing entire scan...");
         }
 
         Ok(())
@@ -157,6 +161,7 @@ impl TableOperation for RefreshDirectoryOp {
 
         if !dirs.is_empty() {
             let _ = self.command_tx.send(AppCommand::RefreshSubtrees(dirs));
+            crate::gui::toast_info("Refreshing selected directory/directories...");
         }
         Ok(())
     }
@@ -198,7 +203,13 @@ impl TableOperation for OpenFileManagerOp {
             } else {
                 path.parent().map_or(path, |p| p)
             };
-            let _ = open::that(dir_to_open);
+            match open::that(dir_to_open) {
+                Ok(()) => crate::gui::toast_info(format!(
+                    "Opened in file manager: {}",
+                    dir_to_open.display()
+                )),
+                Err(e) => crate::gui::toast_error(format!("Failed to open in file manager: {e}")),
+            }
         }
         Ok(())
     }
@@ -237,7 +248,10 @@ impl TableOperation for OpenTerminalOp {
             && snapshot.nodes[idx as usize].is_directory()
         {
             let path_str = snapshot.get_full_path(idx);
-            let _ = super::open_terminal_at(Path::new(&path_str));
+            match super::open_terminal_at(Path::new(&path_str)) {
+                Ok(()) => crate::gui::toast_info(format!("Opened terminal at: {path_str}")),
+                Err(e) => crate::gui::toast_error(format!("Failed to open terminal: {e}")),
+            }
         }
         Ok(())
     }
@@ -278,7 +292,9 @@ impl TableOperation for CopyPathOp {
             paths.push(snapshot.get_full_path(idx));
         }
 
+        let num_paths = paths.len();
         ctx.ui.ctx().copy_text(paths.join("\n"));
+        crate::gui::toast_success(format!("Copied {num_paths} path(s) to clipboard"));
         Ok(())
     }
 }
@@ -322,7 +338,9 @@ impl TableOperation for CopyNameOp {
             }
         }
 
+        let num_names = names.len();
         ctx.ui.ctx().copy_text(names.join("\n"));
+        crate::gui::toast_success(format!("Copied {num_names} name(s) to clipboard"));
         Ok(())
     }
 }
