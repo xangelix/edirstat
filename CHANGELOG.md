@@ -11,6 +11,7 @@ All notable changes to **eDirStat** will be documented in this file.
 #### Windows & NTFS Integration
 - **🪟 Windows NTFS MFT Driver:** Integrated a new Windows-native NTFS driver utilizing the Master File Table (MFT) for near-instantaneous drive scanning on Windows.
 - **🪟 Administrator Restart Modal:** Added a prompt to restart the application as administrator to allow Master File Table (MFT) access on Windows.
+- **🪟 Windows UNC Path Stripping:** Automatically strip UNC volume prefixes (such as `\\?\`) from directory paths in all visual components.
 
 #### GUI Enhancements & Features
 - **🗂️ WinDirStat Layout Mode:** Added a brand new WinDirStat-style layout mode for a classic, familiar disk usage visualization.
@@ -18,6 +19,7 @@ All notable changes to **eDirStat** will be documented in this file.
 - **❓ "How it Works" Modal:** Added an informative explanation modal to help users understand the deduplication process.
 - **🌳 Default Root Selection:** Automatically selects the root directory node upon loading, improving the initial navigation flow.
 - **⏱️ Scan Stats Persistence:** Retained the elapsed scan time and scanning speed in the status bar even after the scan has finished.
+- **⏱️ Millisecond Scan Timing:** Switched the GUI elapsed scan time to display millisecond-level precision.
 - **📋 Clipboard Tools:** Added "Copy Name" and "Copy Path" tools to easily copy file metadata from the directory tree.
 - **🔆 Scan Button Highlight:** Added a subtle glow/highlight effect to the "Scan Directory" button when no scan has been run or directory data is empty.
 - **📊 New Table Implementation:** Switched to a robust, feature-rich table view powered by `egui-table-kit`, supporting horizontal scrolling and cleaner row selection/operations traits.
@@ -44,12 +46,21 @@ All notable changes to **eDirStat** will be documented in this file.
 #### Developer Tooling & Testing
 - **🛠️ Tracy Profiling:** Integrated basic support for Tracy-based profiling to assist in performance diagnostics.
 - **🧪 Typos Check CI/CD:** Initialized automated spelling/typos check workflow in the CI/CD pipeline.
+- **🧪 Criterion MFT Benchmarks:** Added a benchmarking suite using `criterion` to measure and track Master File Table (MFT) parsing performance.
 - **🧪 Comprehensive Test Suite:** Added 55 new unit and integration tests across the codebase, significantly expanding test coverage for charts, model arena, persistence, and directory traversal.
 
 ### Changed
 
 #### Performance & Allocations
 - **⚡ Memory & Speed Optimizations:** Dramatically reduced allocations across the board by adopting `CompactString` in engine models, precalculating directory counts, and reducing deduplicator allocations.
+- **⚡ Parallel MFT Parsing & Sharded Pool:** Parallelized MFT record processing and introduced a sharded `StringPool` to maximize multi-core CPU utilization, yielding a ~49% speedup.
+- **⚡ MFT Flat Representation:** Implemented a flat memory representation for hierarchy resolution in the MFT driver, reducing traversal times by ~9.6%.
+- **⚡ Sector-Aligned DMA Reads:** Implemented unbuffered, sector-aligned DMA read operations in the MFT driver to bypass OS caching and accelerate disk reading by ~6.9%.
+- **⚡ Manual AVX2 UTF-16 Decoder:** Implemented a manual AVX2-optimized UTF-16 decoder for rapid MFT filename parsing, improving speed by ~4.6%.
+- **⚡ MFT Allocation Reduction:** Replaced standard vectors with stack-allocated `SmallVec` in parsed MFT models, reducing heap allocations and boosting speed by ~3.7%.
+- **⚡ MFT String Interning & Cache Scaling:** Switched to CRC32-based string interning and scaled up the L1 cache size in the MFT engine for faster path/name resolutions.
+- **⚡ SIMD UTF-16 Decoder SSE Fallback:** Added SSE fallback support to the SIMD-accelerated UTF-16 filename decoder in the MFT engine.
+- **⚡ Bottom-Up Size Propagation:** Optimized size calculations in the engine coordinator by adopting a bottom-up propagation strategy.
 - **⚡ Zero-Allocation & Branchless Search:** Implemented allocation-free, branchless case-insensitive search algorithms in the directory explorer for faster filtering.
 - **⚡ Fast Traversal & SIMD:** Integrated SIMD loop optimizations and switched to stack-allocated `SmallVec` for tracking ancestors in deep directories.
 - **⚡ Alloc-Free Treemap Rendering:** Optimized the interactive treemap with allocation-free file extension mapping.
@@ -78,6 +89,8 @@ All notable changes to **eDirStat** will be documented in this file.
 - **🗂️ Platform-Native Path Slashes:** Improved cross-platform path slash handling to ensure correct directory traversal and representation.
 - **🛡️ Treemap Bounds Protection:** Added robust bounds checks and protections when selecting the root node in the interactive treemap.
 - **🛡️ NTFS MFT Driver Hardening:** Significantly hardened the Windows-native NTFS MFT driver with extra safety checks and bounds validation.
+- **🛡️ MFT Cross-Platform Separation:** Separated Windows-specific MFT APIs from non-Windows target modules to keep the core engine portable and clean.
+- **🪟 MFT Ingestion Refactoring:** Consolidated the Master File Table (MFT) ingestion loop into a dedicated helper function for cleaner, more maintainable code.
 - **🧹 Walk Context Refactoring:** Refactored the recursive directory scanner context into a unified `WalkCtx` struct for cleaner and safer code.
 - **🐧 Unix Root Scanning Improvements:** Enhanced traversal of the system root on Unix/Linux by automatically filtering out virtual/system directories (such as `/proc`, `/sys`, `/dev`, etc.) and allowing local partition crossing.
 
@@ -88,6 +101,9 @@ All notable changes to **eDirStat** will be documented in this file.
 - **🪟 Console-Free Windows Executable:** Configured the application so that the console command window does not spawn when launching the GUI on Windows.
 - **📦 Release Build Optimizations:** Enabled Link-Time Optimization (LTO thin), symbol stripping, and restricted codegen-units to 1 for release binaries to minimize executable size and improve performance.
 - **📄 Documentation & Benchmarks:** Updated the README to list speedup results for WinDirStat, include new context menu options, document positional arguments, refresh performance comparison benchmarks, clean up key feature wording, and link the license locally.
+- **⚙️ Toolchain Update:** Updated the local Rust compiler toolchain to `nightly-2026-06-13`.
+- **⚙️ Safe Exit Flow:** Avoided calls to `std::process::exit()` in the binary to ensure standard library destructors run cleanly on exit.
+- **📄 README Visual Updates:** Combined primary logo images, added a treemap screenshot under the logo, switched to a cleaner treemap-b variant logo, and replaced the drag race video with a first-frame thumbnailed version to speed up page load.
 
 ### Fixed
 
@@ -103,6 +119,7 @@ All notable changes to **eDirStat** will be documented in this file.
 - **📦 Cross-Platform Compilation:** Fixed build configurations so that the `windows` crate dependency is only compiled on Windows targets and correctly supports MSVC builds.
 - **🪟 Windows GUI Launching:** Fixed the entry point executable logic to properly apply the Windows GUI subsystem directive.
 - **🪟 UNC Volume Paths:** Resolved an issue where UNC volume paths were not handled correctly in the Windows MFT driver.
+- **🪟 UNC Visual Path Cleanups:** Fixed missing UNC path cleanups across several modals, operations, and explorer views in the GUI.
 - **🧪 Test Suite Fixes:** Updated path reconstruction unit tests for Windows drive compatibility.
 
 #### Directory Scanner & Deduplicator
@@ -113,6 +130,7 @@ All notable changes to **eDirStat** will be documented in this file.
 #### Documentation & Build Pipelines
 - **🍏 macOS Packaging:** Fixed incorrect icon paths in the macOS CI/CD release configuration.
 - **📝 Clippy Warnings in Docs:** Fixed documentation formatting and naming to eliminate Clippy lints.
+- **🧪 Clippy Lints:** Resolved new miscellaneous Clippy warnings introduced by the latest Rust nightly compiler.
 
 ---
 
