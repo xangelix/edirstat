@@ -1,5 +1,4 @@
 use std::{
-    collections::HashMap,
     fs::{File, OpenOptions},
     io::{Read, Seek, SeekFrom},
     path::{Path, PathBuf},
@@ -9,7 +8,6 @@ use std::{
 #[cfg(target_os = "windows")]
 use std::os::windows::ffi::OsStrExt as _;
 
-use ahash::HashSetExt as _;
 use compact_str::CompactString;
 use crossbeam::channel::{Sender, bounded};
 use smallvec::SmallVec;
@@ -666,10 +664,11 @@ fn reconstruct_path(
     path
 }
 
-/// Sweeps the in-memory tree starting from the Root record to locate the target directory.
-fn find_target_record_in_memory(
+/// Sweeps the in-memory tree starting from the Root record to locate the target directory using flat links.
+fn find_target_record_in_memory_flat(
     mft_entries: &[Option<MftEntry>],
-    children_map: &HashMap<u64, Vec<u64>, ahash::RandomState>,
+    first_child: &[u32],
+    next_sibling: &[u32],
     root_path: &Path,
     sharded_pool: &ShardedStringPool,
 ) -> u64 {
@@ -683,21 +682,21 @@ fn find_target_record_in_memory(
 
     for segment in components {
         let mut found = false;
-        if let Some(children) = children_map.get(&current_record) {
-            for &child_id in children {
-                if let Some(Some(entry)) = mft_entries.get(child_id as usize)
-                    && entry.flags & 1 != 0
+        let mut child_record = first_child[current_record as usize];
+        while child_record != crate::arena::NO_INDEX {
+            if let Some(Some(entry)) = mft_entries.get(child_record as usize)
+                && entry.flags & 1 != 0
+            {
+                // is_dir check
+                if let Some(name_str) = sharded_pool.get_str(entry.name_id)
+                    && name_str.to_ascii_lowercase() == segment
                 {
-                    // is_dir check
-                    if let Some(name_str) = sharded_pool.get_str(entry.name_id)
-                        && name_str.to_ascii_lowercase() == segment
-                    {
-                        current_record = child_id;
-                        found = true;
-                        break;
-                    }
+                    current_record = child_record as u64;
+                    found = true;
+                    break;
                 }
             }
+            child_record = next_sibling[child_record as usize];
         }
         if !found {
             return 5; // Fallback to root directory if the nested hierarchy cannot be mapped
@@ -726,9 +725,6 @@ fn scan_mft_file_sequential(
 
     let mut mft_entries: Vec<Option<MftEntry>> = Vec::new();
     mft_entries.resize_with(max_records as usize, || None);
-
-    let mut children_map: HashMap<u64, Vec<u64>, ahash::RandomState> =
-        HashMap::with_capacity_and_hasher(max_records as usize / 10, ahash::RandomState::new());
 
     // Spawns a background thread to read file chunks sequentially
     let (filled_tx, filled_rx) = bounded::<IngestionChunk>(4);
@@ -883,17 +879,23 @@ fn scan_mft_file_sequential(
         }
     });
 
-    // 1. Build children_map for the base entries
-    for (record_id, entry_opt) in mft_entries.iter().enumerate() {
-        if let Some(entry) = entry_opt {
-            children_map
-                .entry(entry.parent_record_id)
-                .or_default()
-                .push(record_id as u64);
+    // 1. Compile the total size of our structural mapping array (including secondary hardlinks)
+    let total_entries = mft_entries.len() + side_channel_links.lock().len();
+    let mut first_child = vec![crate::arena::NO_INDEX; total_entries];
+    let mut next_sibling = vec![crate::arena::NO_INDEX; total_entries];
+
+    // 2. Build structural child mappings sequentially on the main thread for the base entries
+    for record_id in 0..mft_entries.len() {
+        if let Some(entry) = &mft_entries[record_id] {
+            let parent_id = entry.parent_record_id as usize;
+            if parent_id < total_entries {
+                next_sibling[record_id] = first_child[parent_id];
+                first_child[parent_id] = record_id as u32;
+            }
         }
     }
 
-    // 2. Append secondary virtual links (hardlinks) safely on the single main thread
+    // 3. Append secondary virtual links (hardlinks) safely on the single main thread and build structural sibling links
     for link in side_channel_links.lock().drain(..) {
         let virt_id = mft_entries.len() as u64;
         let name_id = sharded_pool.get_or_insert(link.name.as_bytes());
@@ -909,58 +911,74 @@ fn scan_mft_file_sequential(
             _padding: [0; 3],
         }));
 
-        children_map
-            .entry(link.parent_ref)
-            .or_default()
-            .push(virt_id);
+        let parent_id = link.parent_ref as usize;
+        if parent_id < total_entries {
+            next_sibling[virt_id as usize] = first_child[parent_id];
+            first_child[parent_id] = virt_id as u32;
+        }
     }
 
-    stats
-        .files_scanned
-        .store(max_records as usize, Ordering::Relaxed);
-    stats.bytes_scanned.store(
-        (max_records * MFT_RECORD_SIZE as u64) as usize,
-        Ordering::Relaxed,
+    let target_record = find_target_record_in_memory_flat(
+        &mft_entries,
+        &first_child,
+        &next_sibling,
+        file_path,
+        &sharded_pool,
     );
-
-    let target_record =
-        find_target_record_in_memory(&mft_entries, &children_map, file_path, &sharded_pool);
     stats.reset();
 
-    let mut buffered_events = Vec::with_capacity(1024 * 1024);
+    // 4. Perform a Hierarchical Depth-First Traversal and stream event batches of 1024
     let mut local_id_counter = 1u32;
-    let mut visited = ahash::HashSet::with_capacity(max_records as usize / 5);
-    visited.insert(target_record);
-
     let mut stack = vec![TraversalFrame {
         record_id: target_record,
         parent_local_id: LocalId(0),
     }];
 
-    while let Some(frame) = stack.pop() {
-        let Some(children) = children_map.get(&frame.record_id) else {
-            continue;
-        };
+    // Allocate a compact bit-vector (1 bit per entry)
+    let mut visited = vec![0u64; mft_entries.len().div_ceil(64)];
 
-        for &child_record in children {
-            if child_record as usize >= mft_entries.len() {
+    // Mark target_record as visited
+    {
+        let idx = target_record as usize;
+        visited[idx / 64] |= 1u64 << (idx % 64);
+    }
+
+    let mut buffered_events = Vec::with_capacity(1024 * 1024);
+
+    while let Some(frame) = stack.pop() {
+        let mut child_record = first_child[frame.record_id as usize];
+        while child_record != crate::arena::NO_INDEX {
+            let child_record_idx = child_record as usize;
+            if child_record_idx >= mft_entries.len() {
+                child_record = next_sibling[child_record as usize];
                 continue;
             }
-            let Some(entry) = &mft_entries[child_record as usize] else {
+
+            let is_dir = mft_entries[child_record_idx]
+                .as_ref()
+                .is_some_and(|e| e.flags & 1 != 0);
+
+            let Some(entry) = mft_entries[child_record_idx].as_ref() else {
+                child_record = next_sibling[child_record as usize];
                 continue;
             };
 
-            let is_dir = entry.flags & 1 != 0;
-
             if is_dir {
-                if !visited.insert(child_record) {
+                // Bitset check and mark
+                let word_idx = child_record_idx / 64;
+                let bit_idx = child_record_idx % 64;
+                let bit_mask = 1u64 << bit_idx;
+
+                if (visited[word_idx] & bit_mask) != 0 {
+                    child_record = next_sibling[child_record as usize];
                     continue;
                 }
+                visited[word_idx] |= bit_mask;
+
+                stats.dirs_scanned.fetch_add(1, Ordering::Relaxed);
 
                 let child_local_id = LocalId(local_id_counter);
                 local_id_counter = local_id_counter.saturating_add(1);
-
-                stats.dirs_scanned.fetch_add(1, Ordering::Relaxed);
 
                 if let Some(name_str) = sharded_pool.get_str(entry.name_id) {
                     buffered_events.push(ScanEvent::DirDiscovered {
@@ -977,36 +995,39 @@ fn scan_mft_file_sequential(
                 }
 
                 stack.push(TraversalFrame {
-                    record_id: child_record,
+                    record_id: child_record as u64,
                     parent_local_id: child_local_id,
                 });
             } else {
-                let mut file_size = entry.size;
-                if file_size == 0 && entry.flags & 4 != 0 {
-                    // has_attr_list check
-                    let full_path = reconstruct_path(
+                // Resolve sizes for placeholder system files containing attribute lists
+                let mut actual_size = entry.size;
+                if actual_size == 0 && (entry.flags & 4) != 0 {
+                    let mut full_path = reconstruct_path(
                         &mft_entries,
-                        child_record,
+                        entry.parent_record_id,
                         target_record,
                         file_path,
                         &sharded_pool,
                     );
+                    if let Some(name_str) = sharded_pool.get_str(entry.name_id) {
+                        full_path.push(&name_str);
+                    }
                     if let Ok(meta) = std::fs::metadata(&full_path) {
-                        file_size = meta.len();
+                        actual_size = meta.len();
                     }
                 }
 
                 stats.files_scanned.fetch_add(1, Ordering::Relaxed);
                 stats
                     .bytes_scanned
-                    .fetch_add(file_size as usize, Ordering::Relaxed);
+                    .fetch_add(actual_size as usize, Ordering::Relaxed);
 
                 if let Some(name_str) = sharded_pool.get_str(entry.name_id) {
                     buffered_events.push(ScanEvent::FileDiscovered {
                         parent_worker_id: 0,
                         local_parent_id: frame.parent_local_id,
                         name: CompactString::new(name_str),
-                        size: file_size,
+                        size: actual_size,
                         is_symlink: entry.flags & 2 != 0,
                         modified_timestamp: entry.modified_timestamp,
                         created_timestamp: entry.created_timestamp,
@@ -1015,6 +1036,8 @@ fn scan_mft_file_sequential(
                     });
                 }
             }
+
+            child_record = next_sibling[child_record as usize];
         }
     }
 
@@ -1183,9 +1206,6 @@ pub fn try_scan_mft(
 
     let mut mft_entries: Vec<Option<MftEntry>> = Vec::new();
     mft_entries.resize_with(max_records as usize, || None);
-
-    let mut children_map: HashMap<u64, Vec<u64>, ahash::RandomState> =
-        HashMap::with_capacity_and_hasher(max_records as usize / 10, ahash::RandomState::new());
 
     // Setup pipelined channels with aligned page slots
     let num_buffers = 4;
@@ -1376,17 +1396,23 @@ pub fn try_scan_mft(
         }
     });
 
-    // 1. Build children_map for the base entries
-    for (record_id, entry_opt) in mft_entries.iter().enumerate() {
-        if let Some(entry) = entry_opt {
-            children_map
-                .entry(entry.parent_record_id)
-                .or_default()
-                .push(record_id as u64);
+    // 1. Compile the total size of our structural mapping array (including secondary hardlinks)
+    let total_entries = mft_entries.len() + side_channel_links.lock().len();
+    let mut first_child = vec![crate::arena::NO_INDEX; total_entries];
+    let mut next_sibling = vec![crate::arena::NO_INDEX; total_entries];
+
+    // 2. Build structural child mappings sequentially on the main thread for the base entries
+    for record_id in 0..mft_entries.len() {
+        if let Some(entry) = &mft_entries[record_id] {
+            let parent_id = entry.parent_record_id as usize;
+            if parent_id < total_entries {
+                next_sibling[record_id] = first_child[parent_id];
+                first_child[parent_id] = record_id as u32;
+            }
         }
     }
 
-    // 2. Append secondary virtual links (hardlinks) safely on the single main thread
+    // 3. Append secondary virtual links (hardlinks) safely on the single main thread and build structural sibling links
     for link in side_channel_links.lock().drain(..) {
         let virt_id = mft_entries.len() as u64;
         let name_id = sharded_pool.get_or_insert(link.name.as_bytes());
@@ -1402,67 +1428,74 @@ pub fn try_scan_mft(
             _padding: [0; 3],
         }));
 
-        children_map
-            .entry(link.parent_ref)
-            .or_default()
-            .push(virt_id);
+        let parent_id = link.parent_ref as usize;
+        if parent_id < total_entries {
+            next_sibling[virt_id as usize] = first_child[parent_id];
+            first_child[parent_id] = virt_id as u32;
+        }
     }
 
-    stats
-        .files_scanned
-        .store(max_records as usize, Ordering::Relaxed);
-    stats.bytes_scanned.store(
-        (max_records * MFT_RECORD_SIZE as u64) as usize,
-        Ordering::Relaxed,
+    let target_record = find_target_record_in_memory_flat(
+        &mft_entries,
+        &first_child,
+        &next_sibling,
+        root_path,
+        &sharded_pool,
     );
-
-    // Resolve target subdirectory in-memory
-    let target_record =
-        find_target_record_in_memory(&mft_entries, &children_map, root_path, &sharded_pool);
-
-    // --- Reset Atomics Before Starting Traversed-Tree Resolution (Pass 2) ---
-    // Clears the Pass 1 ingestion counts so that the status bar exactly matches the root directory.
     stats.reset();
 
-    // Transactional Local Event Buffer:
-    // Prevents partial event flushing on MFT scanning failures.
-    let mut buffered_events = Vec::with_capacity(1024 * 1024);
-
-    // Hierarchical streaming phase
+    // 4. Perform a Hierarchical Depth-First Traversal and stream event batches of 1024
     let mut local_id_counter = 1u32;
-    let mut visited = ahash::HashSet::with_capacity(max_records as usize / 5);
-    visited.insert(target_record);
-
     let mut stack = vec![TraversalFrame {
         record_id: target_record,
         parent_local_id: LocalId(0),
     }];
 
-    while let Some(frame) = stack.pop() {
-        let Some(children) = children_map.get(&frame.record_id) else {
-            continue;
-        };
+    // Allocate a compact bit-vector (1 bit per entry)
+    let mut visited = vec![0u64; mft_entries.len().div_ceil(64)];
 
-        for &child_record in children {
-            if child_record as usize >= mft_entries.len() {
+    // Mark target_record as visited
+    {
+        let idx = target_record as usize;
+        visited[idx / 64] |= 1u64 << (idx % 64);
+    }
+
+    let mut buffered_events = Vec::with_capacity(1024 * 1024);
+
+    while let Some(frame) = stack.pop() {
+        let mut child_record = first_child[frame.record_id as usize];
+        while child_record != crate::arena::NO_INDEX {
+            let child_record_idx = child_record as usize;
+            if child_record_idx >= mft_entries.len() {
+                child_record = next_sibling[child_record as usize];
                 continue;
             }
-            let Some(entry) = &mft_entries[child_record as usize] else {
+
+            let is_dir = mft_entries[child_record_idx]
+                .as_ref()
+                .is_some_and(|e| e.flags & 1 != 0);
+
+            let Some(entry) = mft_entries[child_record_idx].as_ref() else {
+                child_record = next_sibling[child_record as usize];
                 continue;
             };
 
-            let is_dir = entry.flags & 1 != 0;
-
             if is_dir {
-                if !visited.insert(child_record) {
+                // Bitset check and mark
+                let word_idx = child_record_idx / 64;
+                let bit_idx = child_record_idx % 64;
+                let bit_mask = 1u64 << bit_idx;
+
+                if (visited[word_idx] & bit_mask) != 0 {
+                    child_record = next_sibling[child_record as usize];
                     continue;
                 }
+                visited[word_idx] |= bit_mask;
+
+                stats.dirs_scanned.fetch_add(1, Ordering::Relaxed);
 
                 let child_local_id = LocalId(local_id_counter);
                 local_id_counter = local_id_counter.saturating_add(1);
-
-                // Safely update traversed directory atomic counters
-                stats.dirs_scanned.fetch_add(1, Ordering::Relaxed);
 
                 if let Some(name_str) = sharded_pool.get_str(entry.name_id) {
                     buffered_events.push(ScanEvent::DirDiscovered {
@@ -1479,39 +1512,39 @@ pub fn try_scan_mft(
                 }
 
                 stack.push(TraversalFrame {
-                    record_id: child_record,
+                    record_id: child_record as u64,
                     parent_local_id: child_local_id,
                 });
             } else {
-                // Resolve true sizes for heavily fragmented or locked files on-demand.
-                // Triggers an OS query ONLY for files containing an Attribute List but reporting 0 size.
-                let mut file_size = entry.size;
-                if file_size == 0 && entry.flags & 4 != 0 {
-                    // has_attr_list check
-                    let full_path = reconstruct_path(
+                // Resolve sizes for placeholder system files containing attribute lists
+                let mut actual_size = entry.size;
+                if actual_size == 0 && (entry.flags & 4) != 0 {
+                    let mut full_path = reconstruct_path(
                         &mft_entries,
-                        child_record,
+                        entry.parent_record_id,
                         target_record,
                         root_path,
                         &sharded_pool,
                     );
+                    if let Some(name_str) = sharded_pool.get_str(entry.name_id) {
+                        full_path.push(&name_str);
+                    }
                     if let Ok(meta) = std::fs::metadata(&full_path) {
-                        file_size = meta.len();
+                        actual_size = meta.len();
                     }
                 }
 
-                // Safely update traversed file and logical size atomic counters exactly once per file
                 stats.files_scanned.fetch_add(1, Ordering::Relaxed);
                 stats
                     .bytes_scanned
-                    .fetch_add(file_size as usize, Ordering::Relaxed);
+                    .fetch_add(actual_size as usize, Ordering::Relaxed);
 
                 if let Some(name_str) = sharded_pool.get_str(entry.name_id) {
                     buffered_events.push(ScanEvent::FileDiscovered {
                         parent_worker_id: 0,
                         local_parent_id: frame.parent_local_id,
                         name: CompactString::new(name_str),
-                        size: file_size,
+                        size: actual_size,
                         is_symlink: entry.flags & 2 != 0,
                         modified_timestamp: entry.modified_timestamp,
                         created_timestamp: entry.created_timestamp,
@@ -1520,6 +1553,8 @@ pub fn try_scan_mft(
                     });
                 }
             }
+
+            child_record = next_sibling[child_record as usize];
         }
     }
 
