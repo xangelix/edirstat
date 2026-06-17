@@ -187,81 +187,6 @@ fn crc32_hash(bytes: &[u8]) -> u64 {
     crc_fast::crc32_iso_hdlc(bytes) as u64
 }
 
-/// Dual-lane memory-safe UTF-16 to ASCII decoder utilizing SSE and AVX2 register channels
-#[inline]
-#[allow(clippy::cast_ptr_alignment)]
-fn decode_utf16_simd(name_raw: &[u8]) -> Option<CompactString> {
-    #[cfg(target_arch = "x86_64")]
-    {
-        let byte_len = name_raw.len();
-        let len = byte_len / 2;
-
-        if len == 0 {
-            return None;
-        }
-
-        if is_x86_feature_detected!("avx2") {
-            if byte_len >= 32 && len <= 16 {
-                // 256-bit AVX2 registers for medium-length names
-                unsafe {
-                    use std::arch::x86_64::{
-                        __m256i, _mm256_and_si256, _mm256_cmpeq_epi16, _mm256_loadu_si256,
-                        _mm256_movemask_epi8, _mm256_packus_epi16, _mm256_permute4x64_epi64,
-                        _mm256_set1_epi16, _mm256_setzero_si256, _mm256_storeu_si256,
-                    };
-                    let vec = _mm256_loadu_si256(name_raw.as_ptr().cast::<__m256i>());
-                    let mask = _mm256_set1_epi16(0xFF00u16 as i16);
-                    let test = _mm256_and_si256(vec, mask);
-
-                    let zero = _mm256_setzero_si256();
-                    let cmp = _mm256_cmpeq_epi16(test, zero);
-
-                    let move_mask = _mm256_movemask_epi8(cmp);
-                    if move_mask == -1 {
-                        let packed = _mm256_packus_epi16(vec, zero);
-                        let permuted = _mm256_permute4x64_epi64(packed, 0xD8);
-
-                        let mut ascii_buf = [0u8; 32];
-                        _mm256_storeu_si256(ascii_buf.as_mut_ptr().cast::<__m256i>(), permuted);
-
-                        return Some(CompactString::new(std::str::from_utf8_unchecked(
-                            &ascii_buf[..len],
-                        )));
-                    }
-                }
-            } else if byte_len >= 16 && len <= 8 {
-                // 128-bit SSE registers to process short file names safely
-                unsafe {
-                    use std::arch::x86_64::{
-                        __m128i, _mm_and_si128, _mm_cmpeq_epi16, _mm_loadu_si128,
-                        _mm_movemask_epi8, _mm_packus_epi16, _mm_set1_epi16, _mm_setzero_si128,
-                        _mm_storeu_si128,
-                    };
-                    let vec = _mm_loadu_si128(name_raw.as_ptr().cast::<__m128i>());
-                    let mask = _mm_set1_epi16(0xFF00u16 as i16);
-                    let test = _mm_and_si128(vec, mask);
-
-                    let zero = _mm_setzero_si128();
-                    let cmp = _mm_cmpeq_epi16(test, zero);
-
-                    let move_mask = _mm_movemask_epi8(cmp);
-                    if move_mask == 0xFFFF {
-                        let packed = _mm_packus_epi16(vec, zero);
-
-                        let mut ascii_buf = [0u8; 16];
-                        _mm_storeu_si128(ascii_buf.as_mut_ptr().cast::<__m128i>(), packed);
-
-                        return Some(CompactString::new(std::str::from_utf8_unchecked(
-                            &ascii_buf[..len],
-                        )));
-                    }
-                }
-            }
-        }
-    }
-    None
-}
-
 /// Decodes UTF-16 filenames using AVX2/SSE SIMD registers as the primary path,
 /// falling back to scalar stack buffers and wide conversion only if wide characters are present.
 #[inline]
@@ -271,32 +196,32 @@ fn decode_utf16_name_to_compact_string(name_raw: &[u8]) -> CompactString {
         return CompactString::new("");
     }
 
-    // 1. Explicit SIMD Fast Paths (Safe SSE/AVX2)
-    if let Some(s) = decode_utf16_simd(name_raw) {
-        return s;
-    }
-
-    // 2. Fallback Scalar ASCII path (Avoiding any heap allocation for short ASCII names)
-    if len <= 64 {
-        let mut ascii_buf = [0u8; 64];
-        let mut is_ascii = true;
-        for i in 0..len {
-            let c1 = name_raw[i * 2];
-            let c2 = name_raw[i * 2 + 1];
-            if c2 != 0 {
-                is_ascii = false;
-                break;
-            }
-            ascii_buf[i] = c1;
-        }
-        if is_ascii {
-            unsafe {
-                return CompactString::new(std::str::from_utf8_unchecked(&ascii_buf[..len]));
-            }
+    // 1. Safe, branchless ASCII fast-path check.
+    // LLVM easily identifies this contiguous chunk structure and compiles
+    // it to vector register tests (e.g. SSE2/AVX2) automatically.
+    let mut is_ascii = true;
+    for chunk in name_raw.chunks_exact(2) {
+        if chunk[1] != 0 {
+            is_ascii = false;
+            break;
         }
     }
 
-    // 3. Fallback wide/Unicode path
+    if is_ascii {
+        // Since NTFS filenames are strictly capped at 255 characters,
+        // we use a safe stack-allocated buffer. This avoids heap allocations
+        // entirely for the fast-path copy.
+        let mut ascii_buf = [0u8; 256];
+        let safe_len = len.min(256);
+        for i in 0..safe_len {
+            ascii_buf[i] = name_raw[i * 2];
+        }
+        if let Ok(s) = std::str::from_utf8(&ascii_buf[..safe_len]) {
+            return CompactString::new(s);
+        }
+    }
+
+    // 2. Safe wide/Unicode fallback.
     let u16_chars: Vec<u16> = name_raw
         .chunks_exact(2)
         .map(|c| u16::from_le_bytes([c[0], c[1]]))
