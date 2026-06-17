@@ -849,6 +849,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c8d4a3bb8b1e0c1050499d1815f5ab16d04f0959b233085fb31653fbfc9d98f9"
 
 [[package]]
+name = "cli-or-gui"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "60b3bc276ca23a5fe07ac18d0fa24876aedcdb246be8ed03dd98eead4bebc34e"
+dependencies = [
+ "libc",
+ "windows 0.62.2",
+]
+
+[[package]]
 name = "clipboard-win"
 version = "5.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1232,6 +1242,7 @@ dependencies = [
  "blake3",
  "bytemuck",
  "clap",
+ "cli-or-gui",
  "compact_str",
  "crc-fast",
  "criterion",

@@ -1,4 +1,3 @@
-#![windows_subsystem = "windows"]
 // -- Clippy Denies --
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 // --- Clippy Lint Groups & Specific Warnings ---
@@ -163,6 +162,10 @@ fn run_headless_scan_and_save(
 fn main() -> anyhow::Result<()> {
     #[cfg(feature = "profile-tracy")]
     let _client = tracy_client::Client::start();
+
+    if !cli_or_gui::is_launched_from_terminal() {
+        cli_or_gui::hide_console_window();
+    }
 
     let args = Args::parse();
 

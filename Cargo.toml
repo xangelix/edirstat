@@ -33,6 +33,7 @@ atomic-progress = { version = "0.1.5", default-features = false, features = [
 blake3 = "1.8.5"
 bytemuck = { version = "1.25.0", features = ["derive"] }
 clap = { version = "4.6.1", features = ["derive"] }
+cli-or-gui = "0.1.0"
 compact_str = "0.9.1"
 crc-fast = "1.10.0"
 crossbeam = "0.8.4"
