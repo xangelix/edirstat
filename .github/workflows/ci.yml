@@ -45,7 +45,7 @@ jobs:
       - name: Install Rust Toolchain
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: nightly-2026-06-13
+          toolchain: nightly-2026-06-15
 
       - name: Cache dependencies
         uses: swatinem/rust-cache@v2
@@ -95,7 +95,7 @@ jobs:
       - name: Install Rust Toolchain
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: nightly-2026-06-13
+          toolchain: nightly-2026-06-15
           target: x86_64-pc-windows-msvc
 
       - name: Cache dependencies
@@ -151,7 +151,7 @@ jobs:
       - name: Install Rust Toolchain
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: nightly-2026-06-13
+          toolchain: nightly-2026-06-15
           targets: ${{ matrix.target }}
 
       - name: Cache dependencies
