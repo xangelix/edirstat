@@ -8,7 +8,7 @@
 
 **eDirStat** is a modern, high-performance, cross-platform disk usage analyzer written in Rust. Inspired by legacy utilities like [WinDirStat](https://windirstat.net/), it leverages an immediate-mode graphical interface [`egui`](https://egui.rs/) to provide a real-time, interactive treemap visualization of your filesystem.
 
-Unlike traditional analyzers that crawl sequentially, **eDirStat** is engineered from the ground up for modern multi-core systems. It couples a highly optimized, work-stealing multithreaded directory walker with a zero-copy arena data structure. This allows you to scan millions of files, locate space-wasting files using a treemap diagram (among other plots), identify duplicate files, and save or load system snapshots in milliseconds using memory-mapped files.
+Unlike traditional analyzers that crawl sequentially, **eDirStat** is engineered from the ground up for modern multi-core systems. It couples a highly optimized, work-stealing multithreaded directory walker with a zero-copy arena data structure. This allows you to scan millions of files, locate space-wasting files using a treemap diagram (among other plots), identify duplicate files, and save or load system snapshots in milliseconds using compressed snapshots.
 
 [**26.9x speedup** vs `WinDirStat`](#benchmarks)
 
@@ -55,7 +55,7 @@ Unlike traditional analyzers that crawl sequentially, **eDirStat** is engineered
 - ⚡ **Work-Stealing Multi-threading:** Powered by a lock-free task injector queue that keeps all CPU cores saturated during scanning.
 - 🪟 **NTFS MFT Scanner (Windows):** Accesses raw NTFS physical handles to parse the Master File Table directly, bypassing OS filesystem bottlenecks for near-instantaneous drive indexing (requires administrative privileges).
 - 👥 **7-Stage Deduplication Engine:** Safely identifies byte-for-byte identical files using cryptographically secure BLAKE3 hashing. It is hardlink-aware to protect shared filesystem links.
-- 📦 **Zero-Copy Snapshot Serialization:** Writes structured tree snapshots to disk that can be instantly remapped into memory using `memmap2` and cast via `bytemuck`, eliminating parsing overhead. Cross-compatible on all Little-Endian platforms.
+- 📦 **Fast Compressed Snapshots:** Writes structured tree snapshots to disk with Zstd compression. Once loaded and decompressed, the flat binary representation is cast directly via `bytemuck`, eliminating parsing overhead. Cross-compatible on all Little-Endian platforms.
 - 📊 **Dynamic Treemap Visualization:** Features a responsive layout canvas with smooth HSL gradient scaling based on file extensions.
 - 🗂️ **Layout Modes and Plots:** Choose between the different layout modes, both featuring data visualizations that can be cycled between.
 - 📋 **Bulk Operations & Multi-Select:** Select multiple rows in the directory tree or deduplicator to execute batch trashing, deletion, or linking.
@@ -167,26 +167,27 @@ To conserve memory and avoid pointer-chasing latency, the directory tree is flat
 - **Plain Old Data (POD):** The `FileNode` struct is annotated with `bytemuck::Pod` and `bytemuck::Zeroable`, strictly aligned to 8-byte boundaries.
 - **Compact String Pool:** Directory and file names are deduplicated and stored in a contiguous byte sequence (`StringPool`). Nodes reference these names via a lightweight `StringId` wrapper.
 
-### 4. Zero-Copy Snapshot Persistence (`src/persistence.rs`)
+### 4. Zstd-Compressed Snapshot Persistence (`src/persistence.rs`)
 
-The `.edst` snapshot file layout matches the structure of the in-memory arena:
+The `.edst` snapshot file layout features a Zstd-compressed payload matched to the in-memory arena:
 
 ```text
 +-------------------------------------------------------------+
-|  Header (32 Bytes)                                          |
+|  Header (72 Bytes, Uncompressed)                            |
 |  - Magic: "EDST"                                            |
 |  - Version: u16                                             |
+|  - Uncompressed Size: u64                                   |
 |  - Node Count: u64                                          |
 |  - String Pool Offset & Length                              |
 +-------------------------------------------------------------+
-|  Array of FileNode Structs (Flat Binary Segment)            |
-+-------------------------------------------------------------+
-|  String Pool Data (Serialized Offsets + Packed UTF-8 Bytes) |
+|  Zstd Compressed Payload:                                   |
+|  - Array of FileNode Structs (Flat Binary Segment)          |
+|  - String Pool Data (Serialized Offsets + Packed UTF-8)     |
 +-------------------------------------------------------------+
 ```
 
-- **Memory-Mapped Loading:** Loading a snapshot utilizes copy-on-write virtual memory maps (`memmap2`).
-- **Zero Parsing Overhead:** Because `FileNode` is a POD structure, the loaded byte buffer is safely cast directly to a slice of `&[FileNode]`. This yields instant loading, even for files tracking millions of objects.
+- **Zstd Compression:** Minimizes the disk storage footprint of snapshot files while maintaining high read/write speeds.
+- **Zero-Parsing Deserialization:** Once decompressed into heap memory, the data is cast directly into a slice of `&[FileNode]` via `bytemuck`, avoiding costly parsing loops or node-by-node deserialization overhead.
 
 ### 5. Multi-Stage Deduplication Engine (`src/stats/deduplicator.rs`)
 

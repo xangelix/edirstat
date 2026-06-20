@@ -1243,7 +1243,7 @@ impl GuiApp {
                                         ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
                                         ui.label("A high-performance disk space analyzer and deduplication toolkit built in Rust.");
                                         ui.add_space(6.0);
-                                        ui.label("Features parallel, work-stealing directory traversal, zero-copy memory-mapped file structures, and responsive, interactive treemaps.");
+                                        ui.label("Features parallel, work-stealing directory traversal, compressed snapshots with zero-parsing layout deserialization, and responsive, interactive treemaps.");
                                         ui.add_space(6.0);
                                         ui.label("The integrated deduplicator runs a multi-stage cryptographic hashing pipeline to safely isolate duplicate groups, calculate reclaimable space, and respect system-level hardlinks.");
                                     });

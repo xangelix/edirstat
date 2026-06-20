@@ -400,9 +400,9 @@
                 <div class="feature-icon-wrapper violet-glow">
                     <i data-lucide="database"></i>
                 </div>
-                <h3 class="feature-title">Zero-Copy Snapshots</h3>
+                <h3 class="feature-title">Compressed Snapshots</h3>
                 <p class="feature-description">
-                    Serializes directory state to a contiguous byte stream (`.edst` files). Memory maps using `memmap2` and casts directly, removing parser load.
+                    Serializes directory state to a Zstd-compressed flat binary (`.edst` files). Once loaded and decompressed, casts directly via `bytemuck` to eliminate all parsing overhead.
                 </p>
             </div>
 
