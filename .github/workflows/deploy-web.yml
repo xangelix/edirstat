@@ -8,8 +8,16 @@ on:
       - "web/**"
       - ".github/workflows/deploy-web.yml"
 
+# Core permissions required for native GitHub Actions Pages deployments
 permissions:
-  contents: write
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow only one concurrent deployment
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
 
 jobs:
   deploy-web:
@@ -25,7 +33,7 @@ jobs:
 
       - name: Install System Dependencies
         run: |
-          pacman -Syu --noconfirm zola nodejs npm
+          paru -Syu --noconfirm zola nodejs npm
 
       - name: Install Node Dependencies & Build Assets
         run: |
@@ -38,12 +46,11 @@ jobs:
           cd web
           zola build
 
-      - name: Inject Custom Domain CNAME
-        run: echo "edirstat.com" > web/public/CNAME
+      - name: Upload Pages Artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: ./web/public
 
       - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./web/public
-          publish_branch: gh-pages
+        id: deployment
+        uses: actions/deploy-pages@v4
