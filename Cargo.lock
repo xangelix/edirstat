@@ -850,9 +850,9 @@ checksum = "c8d4a3bb8b1e0c1050499d1815f5ab16d04f0959b233085fb31653fbfc9d98f9"
 
 [[package]]
 name = "cli-or-gui"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "60b3bc276ca23a5fe07ac18d0fa24876aedcdb246be8ed03dd98eead4bebc34e"
+checksum = "59c11989b79fc0db6a7b1755215b3ff22ead71b0526457e3aa847642e06e8f10"
 dependencies = [
  "libc",
  "windows 0.62.2",

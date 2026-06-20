@@ -1157,7 +1157,7 @@ impl GuiApp {
                                     if ui.add(relaunch_btn).clicked() {
                                         #[cfg(target_os = "windows")]
                                         {
-                                            let _ = relaunch_as_admin();
+                                            let _ = cli_or_gui::relaunch_as_elevated();
                                         }
                                     }
                                 });
@@ -1575,33 +1575,6 @@ impl GuiApp {
             }
         }
     }
-}
-
-#[cfg(target_os = "windows")]
-pub fn relaunch_as_admin() -> std::io::Result<()> {
-    use std::os::windows::ffi::OsStrExt as _;
-
-    use windows::Win32::UI::{Shell::ShellExecuteW, WindowsAndMessaging::SW_SHOWDEFAULT};
-
-    let current_exe = std::env::current_exe()?;
-    let mut exe_path: Vec<u16> = current_exe.as_os_str().encode_wide().collect();
-    exe_path.push(0);
-
-    let mut verb_zero: Vec<u16> = std::ffi::OsStr::new("runas").encode_wide().collect();
-    verb_zero.push(0);
-
-    unsafe {
-        ShellExecuteW(
-            None,
-            windows::core::PCWSTR::from_raw(verb_zero.as_ptr()),
-            windows::core::PCWSTR::from_raw(exe_path.as_ptr()),
-            None,
-            None,
-            SW_SHOWDEFAULT,
-        );
-    }
-
-    std::process::exit(0);
 }
 
 fn is_permission_denied_io(err: &std::io::Error) -> bool {
