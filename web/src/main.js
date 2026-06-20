@@ -726,6 +726,11 @@ function initChart() {
         ctx.save();
         chart.data.datasets.forEach((dataset, datasetIndex) => {
           const meta = chart.getDatasetMeta(datasetIndex);
+          
+          // Find the slowest scan time that still finishes (maximum numeric value)
+          const validValues = dataset.data.filter(val => val !== null && val !== undefined && !isNaN(val));
+          const maxVal = validValues.length > 0 ? Math.max(...validValues) : 0;
+          
           meta.data.forEach((bar, index) => {
             const val = dataset.data[index];
             if (val === null || val === undefined || isNaN(val)) {
@@ -736,6 +741,18 @@ function initChart() {
               ctx.textBaseline = 'middle';
               const yPos = bar ? bar.y : y.getPixelForValue(index);
               ctx.fillText(text, left + 15, yPos);
+            } else {
+              // Calculate relative performance speedup factor
+              const multiplier = (maxVal > 0 && val > 0) ? (maxVal / val) : 1.0;
+              const text = multiplier.toFixed(1) + 'x';
+              
+              ctx.font = 'bold 14px "JetBrains Mono", monospace';
+              ctx.fillStyle = (Array.isArray(dataset.borderColor) ? dataset.borderColor[index] : dataset.borderColor) || '#f8fafc';
+              ctx.textAlign = 'left';
+              ctx.textBaseline = 'middle';
+              const xPos = (bar ? bar.x : left) + 10;
+              const yPos = bar ? bar.y : y.getPixelForValue(index);
+              ctx.fillText(text, xPos, yPos);
             }
           });
         });
@@ -743,6 +760,11 @@ function initChart() {
       }
     }],
     options: {
+      layout: {
+        padding: {
+          right: 60
+        }
+      },
       indexAxis: 'y', // Horizontal bars
       responsive: true,
       maintainAspectRatio: false,
