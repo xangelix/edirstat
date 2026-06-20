@@ -689,7 +689,7 @@ const benchmarkData = {
     dnfTexts: [null, null, null, "Incompatible (Not supported on Windows)"],
     datasets: [{
       label: 'Median Scan Duration (Seconds)',
-      data: [1.72, 4.41, 92.38, null],
+      data: [1.72, 4.38, 92.38, null],
       backgroundColor: [
         'rgba(124, 58, 237, 0.85)',
         'rgba(236, 72, 153, 0.6)',
