@@ -30,6 +30,7 @@ All notable changes to **eDirStat** will be documented in this file.
 - **🛡️ Restricted Permissions Handling:** Added detection and safe handling of folders with restricted access/permissions, marking them as "No Permission" in the UI rather than failing the scan.
 - **🔔 Toast Notifications:** Integrated interactive toast notifications (success, warning, error, info) for file manager operations, terminal launching, and deduplication hardlinking/softlinking.
 - **🎨 Squared Logo Asset:** Created a new subtext-less squared SVG logo variant for keyart and promotional purposes.
+- **⚖️ Dependency Licenses Modal:** Added an open source license viewing modal inside the About dialog to display packaged licenses for dependencies.
 
 #### CLI & Headless Tooling
 - **🚀 CLI / Positional Arguments:** Added support for passing a directory path as a positional command-line argument to automatically start scanning on startup.
@@ -45,11 +46,14 @@ All notable changes to **eDirStat** will be documented in this file.
 - **📊 Benchmark & Demo Media:** Added comparison benchmarks against QDirStat and WinDirStat in the README, along with high-quality demonstration videos (drag race, deduplicator demo, and WinDirStat layout mode).
 - **🛡️ Forbid Unsafe Code Directive:** Added `#![forbid(unsafe_code)]` at both binary and library crate entry points to ensure compilation-level code safety.
 - **📦 Multi-Target CPU Windows Runner:** Integrated `cargo-multivers` builder to compile distinct, target-CPU optimized Windows binaries and package them inside a single wrapper crate (`runner/`) using `multivers-runner`.
+- **⚖️ Packaged License Generation:** Integrated `cargo-about` to generate target-specific open source license lists (`assets/licenses/<target>.md`) and packaged them into the binary using `include_packed`.
 
 #### Web App & Simulator
 - **🌐 eDirStat Web V2:** Redesigned and launched the official product website (`/web`) featuring an interactive, live simulator for the cryptographic deduplication pipeline and treemap dashboard.
 - **🌐 Responsive Displays & Ratios:** Expanded CSS layout grids and flexbox viewport definitions to support a wide range of mobile and ultra-wide monitor aspect ratios without clipping.
 - **🌐 Deduplicator Simulator:** Built a fully client-side animated simulator of the eDirStat deduplication process, showing steps like size partitioning, header hashing, midpoint/suffix matching, and BLAKE3 checking.
+- **🌐 Speed Multipliers:** Added scanning speed multipliers comparison to the website simulator charts.
+- **🌐 Favicon Integration:** Added a website favicon referenced from `assets/img/`.
 
 #### Developer Tooling & Testing
 - **🛠️ Tracy Profiling:** Integrated basic support for Tracy-based profiling to assist in performance diagnostics.
@@ -93,6 +97,8 @@ All notable changes to **eDirStat** will be documented in this file.
 - **✏️ Explorer Column Renaming:** Renamed the "Last Modified" column to "Modified" for a cleaner and more compact header layout.
 - **🎨 UI Enhancements:** Improved the table operations buttons styling (removing gray backgrounds for a cleaner look) and styled warning/detail modals with stronger, higher-contrast text.
 - **🎨 Treemap Coloring:** Switched to gamma multiplication for interactive treemap color scaling, yielding smoother visual gradients.
+- **📄 Zero-Copy Documentation:** Updated website templates, README, and GUI about modals to reflect the migration from zero-copy memory mapping to safe Zstd-compressed snapshots.
+- **🌐 Web Disk Simulator Polish:** Cleaned up disk names and models in the website simulator.
 
 #### Platform Compatibility & Hardening
 - **🛡️ Persistence Hardening:** Improved overflow protection for memory-mapped persistence files.
@@ -122,6 +128,9 @@ All notable changes to **eDirStat** will be documented in this file.
 - **⚙️ Toolchain Update:** Updated Rust nightly compiler toolchain to `nightly-2026-06-15`.
 - **📦 Dependency Cleanup:** Removed the direct dependency on `libc` as it is no longer required.
 - **📦 Dependency Upgrades:** Upgraded underlying project dependencies, including bumping `bytes` and `wayland-protocols` to their latest versions.
+- **📦 Dependency Upgrades:** Upgraded the `arrayvec` crate dependency to version `0.7.7`.
+- **📄 README Benchmarks Update:** Updated README benchmarks with program versions, a WizTree drag race video comparison, and updated WinDirStat speed multipliers.
+- **📄 Benchmark Disclaimers:** Added program versions and benchmark methodology disclaimers to the README and website.
 
 ### Fixed
 
@@ -131,6 +140,7 @@ All notable changes to **eDirStat** will be documented in this file.
 - **🖱️ Treemap & Scatter Plot Bugfixes:** Truncated treemap depth past a set limit to prevent rendering overflows, resolved a block selection issue in the treemap, and improved hover text wrapping on plots.
 - **♻️ Cache Clearing on Refresh:** Fixed a bug where cached GUI elements were not cleared during a directory refresh or rescan.
 - **🌐 Web Layout Clipping:** Fixed layout clipping bugs on thin displays and small viewports by setting appropriate `overflow-x` properties and max-widths.
+- **🌐 WizTree Speed Metrics:** Corrected the WizTree benchmark time representation on the website simulator from 4.41s to 4.38s.
 
 #### Cross-Platform & Windows MFT
 - **🪟 Windows Ancestor Traversal:** Resolved a bug in the directory traverser that caused incorrect ancestor resolution on Windows.
@@ -155,6 +165,9 @@ All notable changes to **eDirStat** will be documented in this file.
 - **🧪 Safe UID Checks in Tests:** Replaced unsafe direct `libc::getuid()` calls in unit tests with a safe command execution of `id -u`.
 - **🧪 Clippy Lints:** Resolved clippy warnings around thread-local constant initializers on Windows targets.
 - **🌐 Web Deployment fixes:** Switched the automated deployment of the website to native GitHub Pages actions and ensured logo assets are properly retained in the build directories.
+- **🧪 CI/CD License Tests:** Removed non-deterministic `cargo-about` license checks from CI/CD pipeline tests.
+- **🧪 CI/CD Safe Directory:** Configured Git safe directory settings in CI/CD runner to resolve checkout permission errors.
+- **📝 Typos Whitelist:** Added the assets directory to the typos configuration whitelist.
 
 ---
 
