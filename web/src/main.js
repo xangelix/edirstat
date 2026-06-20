@@ -22,34 +22,80 @@ function formatBytes(bytes) {
 const mockData = {
   name: "Root",
   type: "directory",
-  sizeBytes: 45200000000,
+  sizeBytes: 76163000000,
   path: "/",
   children: [
     {
       name: "Games",
       type: "directory",
-      sizeBytes: 24500000000,
+      sizeBytes: 30410000000,
       path: "/Games",
       children: [
         {
           name: "Cyberpunk2077",
           type: "directory",
-          sizeBytes: 18200000000,
+          sizeBytes: 19415000000,
           path: "/Games/Cyberpunk2077",
           children: [
             { name: "archive.archive", type: "file", ext: "archive", sizeBytes: 17500000000, path: "/Games/Cyberpunk2077/archive.archive" },
             { name: "cyberpunk.exe", type: "file", ext: "code", sizeBytes: 580000000, path: "/Games/Cyberpunk2077/cyberpunk.exe" },
-            { name: "readme.txt", type: "file", ext: "other", sizeBytes: 120000000, path: "/Games/Cyberpunk2077/readme.txt" }
+            { name: "readme.txt", type: "file", ext: "other", sizeBytes: 120000000, path: "/Games/Cyberpunk2077/readme.txt" },
+            {
+              name: "mods",
+              type: "directory",
+              sizeBytes: 1215000000,
+              path: "/Games/Cyberpunk2077/mods",
+              children: [
+                { name: "cyber_hud.lua", type: "file", ext: "code", sizeBytes: 15000000, path: "/Games/Cyberpunk2077/mods/cyber_hud.lua" },
+                { name: "hd_textures.archive", type: "file", ext: "archive", sizeBytes: 1200000000, path: "/Games/Cyberpunk2077/mods/hd_textures.archive" }
+              ]
+            }
           ]
         },
         {
           name: "SteamLibrary",
           type: "directory",
-          sizeBytes: 6300000000,
+          sizeBytes: 10600000000,
           path: "/Games/SteamLibrary",
           children: [
             { name: "common_data.bin", type: "file", ext: "archive", sizeBytes: 6100000000, path: "/Games/SteamLibrary/common_data.bin" },
-            { name: "steam.ico", type: "file", ext: "image", sizeBytes: 200000000, path: "/Games/SteamLibrary/steam.ico" }
+            { name: "steam.ico", type: "file", ext: "image", sizeBytes: 200000000, path: "/Games/SteamLibrary/steam.ico" },
+            { name: "depot_cache_01.dat", type: "file", ext: "archive", sizeBytes: 2500000000, path: "/Games/SteamLibrary/depot_cache_01.dat" },
+            { name: "depot_cache_02.dat", type: "file", ext: "archive", sizeBytes: 1800000000, path: "/Games/SteamLibrary/depot_cache_02.dat" }
+          ]
+        },
+        {
+          name: "Minecraft",
+          type: "directory",
+          sizeBytes: 395000000,
+          path: "/Games/Minecraft",
+          children: [
+            {
+              name: "bin",
+              type: "directory",
+              sizeBytes: 350000000,
+              path: "/Games/Minecraft/bin",
+              children: [
+                { name: "minecraft.jar", type: "file", ext: "archive", sizeBytes: 350000000, path: "/Games/Minecraft/bin/minecraft.jar" }
+              ]
+            },
+            {
+              name: "saves",
+              type: "directory",
+              sizeBytes: 45000000,
+              path: "/Games/Minecraft/saves",
+              children: [
+                {
+                  name: "world_1",
+                  type: "directory",
+                  sizeBytes: 45000000,
+                  path: "/Games/Minecraft/saves/world_1",
+                  children: [
+                    { name: "level.dat", type: "file", ext: "other", sizeBytes: 45000000, path: "/Games/Minecraft/saves/world_1/level.dat" }
+                  ]
+                }
+              ]
+            }
           ]
         }
       ]
@@ -57,18 +103,39 @@ const mockData = {
     {
       name: "Videos",
       type: "directory",
-      sizeBytes: 12400000000,
+      sizeBytes: 17370000000,
       path: "/Videos",
       children: [
         { name: "render_final.mp4", type: "file", ext: "video", sizeBytes: 8400000000, path: "/Videos/render_final.mp4" },
         { name: "stream_record.mp4", type: "file", ext: "video", sizeBytes: 3900000000, path: "/Videos/stream_record.mp4" },
-        { name: "intro_logo.mov", type: "file", ext: "video", sizeBytes: 100000000, path: "/Videos/intro_logo.mov" }
+        { name: "intro_logo.mov", type: "file", ext: "video", sizeBytes: 100000000, path: "/Videos/intro_logo.mov" },
+        { name: "audio_track_stereo.wav", type: "file", ext: "audio", sizeBytes: 120000000, path: "/Videos/audio_track_stereo.wav" },
+        {
+          name: "Captures",
+          type: "directory",
+          sizeBytes: 3600000000,
+          path: "/Videos/Captures",
+          children: [
+            { name: "gameplay_01.mp4", type: "file", ext: "video", sizeBytes: 1500000000, path: "/Videos/Captures/gameplay_01.mp4" },
+            { name: "gameplay_02.mp4", type: "file", ext: "video", sizeBytes: 2100000000, path: "/Videos/Captures/gameplay_02.mp4" }
+          ]
+        },
+        {
+          name: "VFX_Assets",
+          type: "directory",
+          sizeBytes: 1250000000,
+          path: "/Videos/VFX_Assets",
+          children: [
+            { name: "smoke_simulation.mov", type: "file", ext: "video", sizeBytes: 800000000, path: "/Videos/VFX_Assets/smoke_simulation.mov" },
+            { name: "explosion_green.mp4", type: "file", ext: "video", sizeBytes: 450000000, path: "/Videos/VFX_Assets/explosion_green.mp4" }
+          ]
+        }
       ]
     },
     {
       name: "Projects",
       type: "directory",
-      sizeBytes: 4800000000,
+      sizeBytes: 12750000000,
       path: "/Projects",
       children: [
         {
@@ -84,11 +151,69 @@ const mockData = {
         {
           name: "edirstat",
           type: "directory",
-          sizeBytes: 1600000000,
+          sizeBytes: 1690000000,
           path: "/Projects/edirstat",
           children: [
             { name: "edirstat-binary", type: "file", ext: "code", sizeBytes: 1400000000, path: "/Projects/edirstat/edirstat-binary" },
-            { name: "arena.rs", type: "file", ext: "code", sizeBytes: 200000000, path: "/Projects/edirstat/arena.rs" }
+            { name: "arena.rs", type: "file", ext: "code", sizeBytes: 200000000, path: "/Projects/edirstat/arena.rs" },
+            { name: "Cargo.toml", type: "file", ext: "other", sizeBytes: 5000000, path: "/Projects/edirstat/Cargo.toml" },
+            {
+              name: "src",
+              type: "directory",
+              sizeBytes: 85000000,
+              path: "/Projects/edirstat/src",
+              children: [
+                { name: "walker.rs", type: "file", ext: "code", sizeBytes: 85000000, path: "/Projects/edirstat/src/walker.rs" }
+              ]
+            }
+          ]
+        },
+        {
+          name: "machine-learning",
+          type: "directory",
+          sizeBytes: 7200000000,
+          path: "/Projects/machine-learning",
+          children: [
+            { name: "dataset_v4.bin", type: "file", ext: "archive", sizeBytes: 4200000000, path: "/Projects/machine-learning/dataset_v4.bin" },
+            { name: "model_weights.bin", type: "file", ext: "archive", sizeBytes: 2800000000, path: "/Projects/machine-learning/model_weights.bin" },
+            { name: "train.py", type: "file", ext: "code", sizeBytes: 120000000, path: "/Projects/machine-learning/train.py" },
+            { name: "loss_plot.png", type: "file", ext: "image", sizeBytes: 80000000, path: "/Projects/machine-learning/loss_plot.png" }
+          ]
+        },
+        {
+          name: "web-frontend",
+          type: "directory",
+          sizeBytes: 660000000,
+          path: "/Projects/web-frontend",
+          children: [
+            {
+              name: "node_modules",
+              type: "directory",
+              sizeBytes: 200000000,
+              path: "/Projects/web-frontend/node_modules",
+              children: [
+                { name: "vite.js", type: "file", ext: "code", sizeBytes: 90000000, path: "/Projects/web-frontend/node_modules/vite.js" },
+                { name: "react.js", type: "file", ext: "code", sizeBytes: 110000000, path: "/Projects/web-frontend/node_modules/react.js" }
+              ]
+            },
+            {
+              name: "dist",
+              type: "directory",
+              sizeBytes: 320000000,
+              path: "/Projects/web-frontend/dist",
+              children: [
+                { name: "bundle.js", type: "file", ext: "code", sizeBytes: 320000000, path: "/Projects/web-frontend/dist/bundle.js" }
+              ]
+            },
+            {
+              name: "public",
+              type: "directory",
+              sizeBytes: 140000000,
+              path: "/Projects/web-frontend/public",
+              children: [
+                { name: "background.png", type: "file", ext: "image", sizeBytes: 140000000, path: "/Projects/web-frontend/public/background.png" }
+              ]
+            }
           ]
         }
       ]
@@ -96,12 +221,55 @@ const mockData = {
     {
       name: "Downloads",
       type: "directory",
-      sizeBytes: 3500000000,
+      sizeBytes: 4035000000,
       path: "/Downloads",
       children: [
         { name: "ubuntu-26.04-desktop.iso", type: "file", ext: "archive", sizeBytes: 2800000000, path: "/Downloads/ubuntu-26.04-desktop.iso" },
         { name: "wallpaper.png", type: "file", ext: "image", sizeBytes: 450000000, path: "/Downloads/wallpaper.png" },
-        { name: "music_album.zip", type: "file", ext: "archive", sizeBytes: 250000000, path: "/Downloads/music_album.zip" }
+        { name: "music_album.zip", type: "file", ext: "archive", sizeBytes: 250000000, path: "/Downloads/music_album.zip" },
+        { name: "blender-4.1.msi", type: "file", ext: "archive", sizeBytes: 410000000, path: "/Downloads/blender-4.1.msi" },
+        { name: "album_lossless.flac", type: "file", ext: "audio", sizeBytes: 95000000, path: "/Downloads/album_lossless.flac" },
+        { name: "invoice_receipt.pdf", type: "file", ext: "other", sizeBytes: 12000000, path: "/Downloads/invoice_receipt.pdf" },
+        { name: "setup_guide.epub", type: "file", ext: "other", sizeBytes: 18000000, path: "/Downloads/setup_guide.epub" }
+      ]
+    },
+    {
+      name: "System_Backup",
+      type: "directory",
+      sizeBytes: 11598000000,
+      path: "/System_Backup",
+      children: [
+        { name: "database_backup.sql", type: "file", ext: "other", sizeBytes: 3500000000, path: "/System_Backup/database_backup.sql" },
+        {
+          name: "docker_volumes",
+          type: "directory",
+          sizeBytes: 4800000000,
+          path: "/System_Backup/docker_volumes",
+          children: [
+            {
+              name: "postgres",
+              type: "directory",
+              sizeBytes: 4800000000,
+              path: "/System_Backup/docker_volumes/postgres",
+              children: [
+                { name: "data.bin", type: "file", ext: "archive", sizeBytes: 4800000000, path: "/System_Backup/docker_volumes/postgres/data.bin" }
+              ]
+            }
+          ]
+        },
+        { name: "registry_dump.reg", type: "file", ext: "other", sizeBytes: 250000000, path: "/System_Backup/registry_dump.reg" },
+        { name: "config_recovery.json", type: "file", ext: "other", sizeBytes: 18000000, path: "/System_Backup/config_recovery.json" },
+        {
+          name: "Photos_2025",
+          type: "directory",
+          sizeBytes: 3030000000,
+          path: "/System_Backup/Photos_2025",
+          children: [
+            { name: "family_photo.jpg", type: "file", ext: "image", sizeBytes: 450000000, path: "/System_Backup/Photos_2025/family_photo.jpg" },
+            { name: "vacation_group.jpg", type: "file", ext: "image", sizeBytes: 380000000, path: "/System_Backup/Photos_2025/vacation_group.jpg" },
+            { name: "trip_recap.mp4", type: "file", ext: "video", sizeBytes: 2200000000, path: "/System_Backup/Photos_2025/trip_recap.mp4" }
+          ]
+        }
       ]
     }
   ]
@@ -378,7 +546,8 @@ function removeBlockHighlight(path) {
 function highlightTreeNode(path) {
   const treeEl = document.querySelector(`.tree-node[data-path="${path}"]`);
   if (treeEl) {
-    treeEl.querySelector('.tree-node-row').classList.add('hovered');
+    const row = treeEl.querySelector('.tree-node-row');
+    if (row) row.classList.add('hovered');
   }
 }
 
@@ -391,6 +560,8 @@ function updateFooter(path, size, isPermanent = false) {
   const sizeEl = document.getElementById('sim-footer-size');
   const iconEl = document.getElementById('sim-footer-icon');
   
+  if (!pathEl || !sizeEl || !iconEl) return;
+
   pathEl.textContent = path;
   pathEl.classList.add('active');
   sizeEl.textContent = formatBytes(size);
@@ -416,9 +587,11 @@ function resetFooterToSelected() {
   
   const pathEl = document.getElementById('sim-footer-path');
   const sizeEl = document.getElementById('sim-footer-size');
-  pathEl.textContent = "Hover or click a block above to inspect...";
-  pathEl.classList.remove('active');
-  sizeEl.textContent = "";
+  if (pathEl && sizeEl) {
+    pathEl.textContent = "Hover or click a block above to inspect...";
+    pathEl.classList.remove('active');
+    sizeEl.textContent = "";
+  }
 }
 
 function findNodeByPath(node, path) {
@@ -539,7 +712,9 @@ const benchmarkData = {
 let benchmarkChart = null;
 
 function initChart() {
-  const ctx = document.getElementById('benchmarkChart').getContext('2d');
+  const chartEl = document.getElementById('benchmarkChart');
+  if (!chartEl) return;
+  const ctx = chartEl.getContext('2d');
   
   benchmarkChart = new Chart(ctx, {
     type: 'bar',
@@ -639,6 +814,7 @@ function initChart() {
 }
 
 function updateChart(driveKey) {
+  if (!benchmarkChart) return;
   const currentData = benchmarkData[driveKey];
   
   // Update header text
@@ -862,8 +1038,12 @@ async function runDeduplicationPipeline() {
     updateStageUi(s, "Idle", "");
   }
   
-  document.getElementById('dedup-table-view').classList.add('collapsed');
-  document.getElementById('sim-dedup-rows').innerHTML = "";
+  const tableView = document.getElementById('dedup-table-view');
+  if (tableView) tableView.classList.add('collapsed');
+  
+  const tbody = document.getElementById('sim-dedup-rows');
+  if (tbody) tbody.innerHTML = "";
+  
   selectedDuplicates.clear();
   foundGroups = [];
   
@@ -1050,7 +1230,7 @@ async function runDeduplicationPipeline() {
     ];
     foundGroups = foundGroups.filter(g => g.size >= minSizeLimit);
 
-    // Rearrange survivors into beautiful duplicate groups side-by-side
+    // Rearrange survivors into duplicate groups side-by-side
     arrangeFilesGrid(activeCandidates, "groups");
     
     await sleep(1000);
@@ -1216,7 +1396,8 @@ function resetDeduplicatorSimulator() {
   }
   
   selectedDuplicates.clear();
-  document.getElementById('reclaim-amount').textContent = "0 Bytes";
+  const reclaimAmtEl = document.getElementById('reclaim-amount');
+  if (reclaimAmtEl) reclaimAmtEl.textContent = "0 Bytes";
   writeConsole("[SYSTEM] Pipeline simulator reset to clean state.");
 }
 
@@ -1265,7 +1446,8 @@ function triggerReclaimAnimation(actionType) {
 
   // Reset counters
   selectedDuplicates.clear();
-  document.getElementById('reclaim-amount').textContent = "0 Bytes";
+  const reclaimAmtEl = document.getElementById('reclaim-amount');
+  if (reclaimAmtEl) reclaimAmtEl.textContent = "0 Bytes";
 }
 
 // Hook actions into simulator controls on load
@@ -1320,7 +1502,8 @@ document.addEventListener('DOMContentLoaded', () => {
       
       tab.classList.add('active');
       const target = tab.getAttribute('data-target');
-      document.getElementById(target).classList.add('active');
+      const targetPane = document.getElementById(target);
+      if (targetPane) targetPane.classList.add('active');
     });
   });
 
@@ -1370,7 +1553,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Polyfill Toast interface natively to ensure sandbox actions display alerts correctly
 function toast_success(message) {
-  // Create beautiful temporary HTML toast element
+  // Create temporary toast element
   const container = document.body;
   const toast = document.createElement('div');
   toast.className = 'glass-card';
