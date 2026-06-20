@@ -421,4 +421,4 @@ This project is licensed under the [MIT License](LICENSE).
 
 ---
 
-_Disclaimer: WinDirStat, WizTree, and QDirStat are trademarks of their respective owners. eDirStat is an independent open-source project and is not affiliated with, sponsored by, or endorsed by the trademark holders._
+_Disclaimer: `WinDirStat`, `WizTree`, and `QDirStat` are trademarks of their respective owners. eDirStat is an independent open-source project and is not affiliated with, sponsored by, or endorsed by the trademark holders._
