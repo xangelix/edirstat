@@ -5,15 +5,9 @@ use std::{
     sync::{Arc, atomic::Ordering},
 };
 
-#[cfg(target_os = "windows")]
-use std::os::windows::ffi::OsStrExt as _;
-
 use compact_str::CompactString;
 use crossbeam::channel::{Sender, bounded};
 use smallvec::SmallVec;
-
-#[cfg(target_os = "windows")]
-use windows::{Win32::Storage::FileSystem::GetVolumeInformationW, core::PCWSTR};
 
 use super::traversal::{LocalId, ScanEvent, TraversalStats};
 
@@ -1317,42 +1311,23 @@ fn get_volume_path(path: &Path) -> Option<String> {
 }
 
 /// Checks the root of the specified directory path to verify if the file system is NTFS.
-#[cfg(target_os = "windows")]
 #[must_use]
 pub fn get_fs_type(path: &Path) -> Option<String> {
-    let root_path = path.ancestors().last()?;
-    let mut root_w: Vec<u16> = root_path.as_os_str().encode_wide().collect();
-    if !root_w.ends_with(&[0]) {
-        root_w.push(0);
-    }
+    // 1. Retrieve the list of active system disks and mount points safely.
+    let disks = sysinfo::Disks::new_with_refreshed_list();
 
-    let mut fs_name_buf = [0u16; 256];
+    // 2. Resolve the path.
+    let target_path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
 
-    let success = unsafe {
-        GetVolumeInformationW(
-            PCWSTR::from_raw(root_w.as_ptr()),
-            None,
-            None,
-            None,
-            None,
-            Some(&mut fs_name_buf),
-        )
-    };
+    // 3. Strip Windows UNC prefixes so the path matches sysinfo's mount points (e.g. C:\)
+    let target_path_string = target_path.to_string_lossy();
+    let cleaned_str = crate::model::arena::clean_unc_path(&target_path_string);
+    let final_path = Path::new(cleaned_str.as_ref()).to_path_buf();
 
-    if success.is_ok() {
-        let len = fs_name_buf
-            .iter()
-            .position(|&c| c == 0)
-            .unwrap_or(fs_name_buf.len());
-        String::from_utf16(&fs_name_buf[..len]).ok()
-    } else {
-        None
-    }
-}
-
-/// Fallback fs type check for non-Windows systems.
-#[cfg(not(target_os = "windows"))]
-#[must_use]
-pub const fn get_fs_type(_path: &Path) -> Option<String> {
-    None
+    // 4. Find the disk with the most specific match (the longest matching prefix).
+    disks
+        .iter()
+        .filter(|disk| final_path.starts_with(disk.mount_point()))
+        .max_by_key(|disk| disk.mount_point().as_os_str().len())
+        .map(|disk| disk.file_system().to_string_lossy().into_owned())
 }
