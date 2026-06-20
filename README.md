@@ -18,7 +18,7 @@ Unlike traditional analyzers that crawl sequentially, **eDirStat** is engineered
 
 ## 🏁 Drag Race vs `WinDirStat` 🏁 (`ntfs`, `NVMe PCIe Gen3`)
 
-<https://github.com/user-attachments/assets/b48ece08-a163-4bc7-b039-06effaeaeaaf>
+<https://github.com/user-attachments/assets/72ab0f7a-0dac-48ae-886c-f3f8cb22ad49>
 
 **`eDirStat` is 27x faster than `WinDirStat`.** And, no, that's not "time to first data"-- that's a complete and equivalent scan. `eDirStat` uses a modern multi-threaded work-stealing algorithm paired with custom disk drivers. `eDirStat` really is that much faster. While the effect is exaggerated on an SSD, you'll still experience dramatic (usually >10x faster) speedups on traditional hard drives too.
 
@@ -217,7 +217,7 @@ A dense Windows primary drive.
 
 **26.9x speedup**
 
-<https://github.com/user-attachments/assets/b48ece08-a163-4bc7-b039-06effaeaeaaf>
+<https://github.com/user-attachments/assets/72ab0f7a-0dac-48ae-886c-f3f8cb22ad49>
 
 ### Vs `QDirStat`
 
