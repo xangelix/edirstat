@@ -1,2 +1,5 @@
+[files]
+extend-exclude = ["assets"]
+
 [default.extend-words]
 INDX = "INDX"
