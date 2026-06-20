@@ -192,6 +192,7 @@ a {
 .logo-img {
   height: 68px;
   width: auto;
+  max-width: 100%;
   display: block;
 }
 
@@ -250,16 +251,21 @@ a {
   margin-bottom: 36px;
   display: flex;
   justify-content: center;
+  width: 100%;
+  max-width: 100%;
 }
 
 .hero-logo {
-  height: 300px;
+  height: auto;
+  max-height: 300px;
   width: auto;
+  max-width: 100%;
   display: block;
 }
 
 .hero-content {
   max-width: 800px;
+  width: 100%;
 }
 
 .version-badge {
@@ -398,7 +404,7 @@ a {
 .simulator-container {
   display: grid;
   grid-template-columns: 350px 1fr;
-  height: 600px; /* Synchronized +15% height expansion to eliminate inner scrollbars */
+  height: 600px;
   overflow: hidden;
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
 }
@@ -619,12 +625,12 @@ a {
 }
 
 /* ==========================================================================
-   Simulator 2: Cryptographic Deduplicator
+   Simulator 2: Cryptographic Deduplicator (Grid-Aligned 600px Height)
    ========================================================================== */
 .dedup-simulator-container {
   display: grid;
   grid-template-columns: 440px 1fr;
-  height: 600px; /* Precise height coordination matches Treemap */
+  height: 600px;
   overflow: hidden;
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
 }
@@ -923,7 +929,7 @@ a {
 /* Fixed Width Streaming File Node Blocks */
 .sim-streaming-file {
   position: absolute;
-  width: 130px; /* Slightly compacted to increase spacing */
+  width: 130px;
   padding: 6px 10px;
   background: rgba(15, 17, 26, 0.95);
   border: 1.2px solid var(--border-color);
@@ -967,30 +973,6 @@ a {
   font-size: 0.62rem;
   color: var(--color-secondary);
   font-weight: 600;
-}
-
-.dedup-display-panel {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  max-height: 100%;
-  min-height: 0;
-}
-
-.dedup-display-content {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-
-.dedup-animation-canvas {
-  height: 250px;
-  background-color: #08090d;
-  position: relative;
-  overflow: hidden;
-  border-bottom: 1px solid var(--border-color);
-  flex-shrink: 0;
 }
 
 /* Reduced height slightly to avoid scrolling elements inside the wrapper */
@@ -1071,6 +1053,9 @@ a {
   flex: 1;
   overflow-y: auto;
   min-height: 0;
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .sim-dedup-table {
@@ -1507,11 +1492,24 @@ code {
   .header-container {
     padding: 12px 16px;
   }
+  .logo-img {
+    height: 48px;
+  }
   .nav {
     display: none;
   }
+  .hero-section {
+    padding: 60px 0 40px 0;
+  }
+  .hero-logo {
+    max-height: 220px;
+  }
   .hero-title {
-    font-size: 2.5rem;
+    font-size: 2.4rem;
+  }
+  .hero-subtitle {
+    font-size: 1.05rem;
+    margin-bottom: 28px;
   }
   .hero-buttons {
     flex-direction: column;
@@ -1526,30 +1524,49 @@ code {
   
   /* Treemap Simulator Compact Layout */
   .simulator-container {
-    grid-template-columns: 1fr;
+    display: flex;
+    flex-direction: column;
     height: auto;
   }
   .simulator-tree {
     border-right: none;
     border-bottom: 1px solid var(--border-color);
+    height: 250px;
     max-height: 250px;
+    flex: none;
+  }
+  .simulator-visualization {
+    height: 380px;
+    max-height: 380px;
+    flex: none;
   }
   .treemap-canvas {
-    height: 300px;
+    height: 100%;
   }
   
   /* Deduplicator Simulator Compact Layout */
   .dedup-simulator-container {
-    grid-template-columns: 1fr;
+    display: flex;
+    flex-direction: column;
     height: auto;
   }
   .dedup-control-panel {
     border-right: none;
     border-bottom: 1px solid var(--border-color);
-    max-height: 400px;
+    height: 420px;
+    max-height: 420px;
+    flex: none;
+  }
+  .dedup-display-panel {
+    height: 480px;
+    max-height: 480px;
+    flex: none;
   }
   .dedup-animation-canvas {
-    height: 240px;
+    height: 200px;
+  }
+  .virtual-console {
+    height: 60px;
   }
   
   /* Benchmarks Compact Layout */
@@ -1562,9 +1579,14 @@ code {
     flex-direction: row;
     overflow-x: auto;
     padding: 12px;
+    -webkit-overflow-scrolling: touch;
   }
   .benchmark-tab {
     flex: 0 0 auto;
+    padding: 8px 12px;
+  }
+  .chart-canvas-container {
+    min-height: 260px;
   }
   .features-grid {
     grid-template-columns: 1fr;
@@ -1584,5 +1606,36 @@ code {
   .footer-links {
     flex-direction: column;
     gap: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .logo-img {
+    height: 36px;
+  }
+  .hero-logo {
+    max-height: 160px;
+  }
+  .hero-title {
+    font-size: 1.95rem;
+  }
+  .section-title {
+    font-size: 1.65rem;
+  }
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+  .table-actions-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .table-action-buttons {
+    width: 100%;
+  }
+  .table-action-buttons .btn {
+    flex: 1;
+    font-size: 0.72rem;
+    padding: 6px 8px;
   }
 }

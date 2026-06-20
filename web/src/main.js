@@ -655,64 +655,7 @@ function updateChart(driveKey) {
   benchmarkChart.update();
 }
 
-// --- DOM READY INITIALIZATION ---
-document.addEventListener('DOMContentLoaded', () => {
-  // Initialize Lucide Icons
-  createIcons({
-    icons: {
-      Folder, File, Zap, Cpu, Shield, Layers, Image, HardDrive, Download, 
-      ChevronRight, ChevronDown, Trash2, BarChart2, Eye, Copy, ExternalLink,
-      Database
-    }
-  });
-  
-  // Render Simulator components
-  const treeContainer = document.getElementById('sim-tree-root');
-  if (treeContainer) {
-    treeContainer.appendChild(createTreeDOM(mockData));
-  }
-  
-  const treemapCanvas = document.getElementById('sim-treemap-canvas');
-  if (treemapCanvas) {
-    renderTreemap(mockData, treemapCanvas, 0, 0, 100, 100, true);
-  }
-  
-  // Re-run icon parser for generated elements
-  createIcons({ icons: { Folder, File } });
-  
-  // Setup Benchmark Tabs
-  const benchmarkTabs = document.querySelectorAll('.benchmark-tab');
-  benchmarkTabs.forEach(tab => {
-    tab.addEventListener('click', () => {
-      benchmarkTabs.forEach(t => t.classList.remove('active'));
-      tab.classList.add('active');
-      
-      const target = tab.getAttribute('data-target');
-      updateChart(target);
-    });
-  });
-  
-  // Init Chart.js
-  if (document.getElementById('benchmarkChart')) {
-    initChart();
-  }
-  
-  // Setup Guide Tabs
-  const guideTabs = document.querySelectorAll('.guide-tab');
-  const guidePanes = document.querySelectorAll('.guide-pane');
-  guideTabs.forEach(tab => {
-    tab.addEventListener('click', () => {
-      guideTabs.forEach(t => t.classList.remove('active'));
-      guidePanes.forEach(p => p.classList.remove('active'));
-      
-      tab.classList.add('active');
-      const target = tab.getAttribute('data-target');
-      document.getElementById(target).classList.add('active');
-    });
-  });
-});
-
-// --- DEDUPLICATOR PIPELINE SIMULATOR ---
+// --- DEDUPLICATOR PIPELINE SIMULATOR DATA ---
 const mockFilePool = [
   { id: 1, name: "core_engine.rs", size: 1048576, ext: "code", duplicateGroup: "group_a", prefix: "b3a7", mid: "cd90", suf: "8f12" },
   { id: 2, name: "core_engine_backup.rs", size: 1048576, ext: "code", duplicateGroup: "group_a", prefix: "b3a7", mid: "cd90", suf: "8f12" },
@@ -817,7 +760,7 @@ function arrangeFilesGrid(files, alignMode = "grid") {
       borderEl.style.left = `${sectionX + 10}px`;
       borderEl.style.width = `${sectionW - 20}px`;
       borderEl.style.top = '15px';
-      borderEl.style.height = '215px';
+      borderEl.style.height = '175px';
       
       const label = document.createElement('span');
       label.className = 'sim-group-box-label';
@@ -831,7 +774,7 @@ function arrangeFilesGrid(files, alignMode = "grid") {
         if (!el) return;
         
         const x = sectionX + (sectionW - cardW) / 2;
-        const y = 35 + fIdx * 56;
+        const y = 30 + fIdx * 48;
         
         el.style.transition = 'all 0.6s cubic-bezier(0.4, 0, 0.2, 1)';
         el.style.left = `${x}px`;
@@ -1099,6 +1042,14 @@ async function runDeduplicationPipeline() {
       }
     }
     
+    // Format results groups before rearranging
+    foundGroups = [
+      { size: 1048576, nodes: [1, 2], name: "group_a" },
+      { size: 5242880, nodes: [3, 4, 5], name: "group_b" },
+      { size: 141557760, nodes: [7, 8], name: "group_c" }
+    ];
+    foundGroups = foundGroups.filter(g => g.size >= minSizeLimit);
+
     // Rearrange survivors into beautiful duplicate groups side-by-side
     arrangeFilesGrid(activeCandidates, "groups");
     
@@ -1121,15 +1072,6 @@ async function runDeduplicationPipeline() {
 
     writeConsole("[ENGINE] Deduplication scan finalized successfully! Building result table...", "success");
     
-    // Format results groups
-    foundGroups = [
-      { size: 1048576, nodes: [1, 2], name: "group_a" },
-      { size: 5242880, nodes: [3, 4, 5], name: "group_b" },
-      { size: 141557760, nodes: [7, 8], name: "group_c" }
-    ];
-    
-    foundGroups = foundGroups.filter(g => g.size >= minSizeLimit);
-    
     buildDeduplicatorTable();
     
     pipelineState = "idle";
@@ -1137,7 +1079,6 @@ async function runDeduplicationPipeline() {
     
   } catch (err) {
     if (err.message === "ResetInterrupt") {
-      // Gracefully exit without triggering unhandled exceptions
       console.log("[SYSTEM] Active scan interrupted via Reset command.");
     } else {
       console.error(err);
@@ -1329,6 +1270,60 @@ function triggerReclaimAnimation(actionType) {
 
 // Hook actions into simulator controls on load
 document.addEventListener('DOMContentLoaded', () => {
+  // Initialize Lucide Icons
+  createIcons({
+    icons: {
+      Folder, File, Zap, Cpu, Shield, Layers, Image, HardDrive, Download, 
+      ChevronRight, ChevronDown, Trash2, BarChart2, Eye, Copy, ExternalLink,
+      Database
+    }
+  });
+  
+  // Render Simulator components
+  const treeContainer = document.getElementById('sim-tree-root');
+  if (treeContainer) {
+    treeContainer.appendChild(createTreeDOM(mockData));
+  }
+  
+  const treemapCanvas = document.getElementById('sim-treemap-canvas');
+  if (treemapCanvas) {
+    renderTreemap(mockData, treemapCanvas, 0, 0, 100, 100, true);
+  }
+  
+  // Re-run icon parser for generated elements
+  createIcons({ icons: { Folder, File } });
+  
+  // Setup Benchmark Tabs
+  const benchmarkTabs = document.querySelectorAll('.benchmark-tab');
+  benchmarkTabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      benchmarkTabs.forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      
+      const target = tab.getAttribute('data-target');
+      updateChart(target);
+    });
+  });
+  
+  // Init Chart.js
+  if (document.getElementById('benchmarkChart')) {
+    initChart();
+  }
+  
+  // Setup Guide Tabs
+  const guideTabs = document.querySelectorAll('.guide-tab');
+  const guidePanes = document.querySelectorAll('.guide-pane');
+  guideTabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      guideTabs.forEach(t => t.classList.remove('active'));
+      guidePanes.forEach(p => p.classList.remove('active'));
+      
+      tab.classList.add('active');
+      const target = tab.getAttribute('data-target');
+      document.getElementById(target).classList.add('active');
+    });
+  });
+
   const startBtn = document.getElementById('btn-start-dedup');
   if (startBtn) {
     startBtn.addEventListener('click', runDeduplicationPipeline);
@@ -1348,6 +1343,29 @@ document.addEventListener('DOMContentLoaded', () => {
   if (deleteBtn) {
     deleteBtn.addEventListener('click', () => triggerReclaimAnimation('delete'));
   }
+
+  // --- WINDOW RESIZE ENGINE COORDINATOR ---
+  let resizeTimeout;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimeout);
+    resizeTimeout = setTimeout(() => {
+      // Re-arrange elements matching current layout grid state
+      const canvas = document.getElementById('dedup-canvas');
+      if (!canvas) return;
+
+      const streamingFiles = Array.from(canvas.querySelectorAll('.sim-streaming-file'));
+      if (streamingFiles.length === 0) return;
+
+      const activeIds = streamingFiles.map(el => parseInt(el.id.replace('sim-file-', ''))).filter(Boolean);
+      const files = mockFilePool.filter(f => activeIds.includes(f.id));
+
+      if (foundGroups.length > 0) {
+        arrangeFilesGrid(files, "groups");
+      } else {
+        arrangeFilesGrid(files, "grid");
+      }
+    }, 250);
+  });
 });
 
 // Polyfill Toast interface natively to ensure sandbox actions display alerts correctly
