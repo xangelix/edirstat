@@ -711,3 +711,669 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 });
+
+// --- DEDUPLICATOR PIPELINE SIMULATOR ---
+const mockFilePool = [
+  { id: 1, name: "core_engine.rs", size: 1048576, ext: "code", duplicateGroup: "group_a", prefix: "b3a7", mid: "cd90", suf: "8f12" },
+  { id: 2, name: "core_engine_backup.rs", size: 1048576, ext: "code", duplicateGroup: "group_a", prefix: "b3a7", mid: "cd90", suf: "8f12" },
+  { id: 3, name: "shader_renderer.cpp", size: 5242880, ext: "code", duplicateGroup: "group_b", prefix: "e91a", mid: "21bf", suf: "aa55" },
+  { id: 4, name: "shader_copy.cpp", size: 5242880, ext: "code", duplicateGroup: "group_b", prefix: "e91a", mid: "21bf", suf: "aa55" },
+  { id: 5, name: "test_shader_backup.cpp", size: 5242880, ext: "code", duplicateGroup: "group_b", prefix: "e91a", mid: "21bf", suf: "aa55" },
+  { id: 6, name: "background_audio.wav", size: 24117248, ext: "audio", duplicateGroup: null, prefix: "4a2b", mid: "1c2f", suf: "ff00" },
+  { id: 7, name: "intro_sequence.mp4", size: 141557760, ext: "video", duplicateGroup: "group_c", prefix: "9a2f", mid: "33ff", suf: "cda1" },
+  { id: 8, name: "intro_copy_raw.mp4", size: 141557760, ext: "video", duplicateGroup: "group_c", prefix: "9a2f", mid: "33ff", suf: "cda1" },
+  { id: 9, name: "manifest_config.toml", size: 4096, ext: "config", duplicateGroup: null, prefix: "f1c1", mid: "00a2", suf: "1234" },
+  { id: 10, name: "profile_avatar.png", size: 5242880, ext: "image", duplicateGroup: null, prefix: "e91a", mid: "0000", suf: "99aa" }
+];
+
+let pipelineState = "idle";
+let selectedDuplicates = new Set();
+let foundGroups = [];
+let activeTimeouts = [];
+
+function writeConsole(text, type = "info") {
+  const consoleEl = document.getElementById('virtual-console');
+  if (!consoleEl) return;
+  
+  const line = document.createElement('div');
+  line.className = `console-line text-${type}`;
+  line.textContent = `[${new Date().toLocaleTimeString()}] ${text}`;
+  consoleEl.appendChild(line);
+  consoleEl.scrollTop = consoleEl.scrollHeight;
+}
+
+function updateStageUi(stepNum, statusText, className) {
+  const stepEl = document.getElementById(`step-${stepNum}`);
+  const statusEl = document.getElementById(`status-${stepNum}`);
+  if (!stepEl || !statusEl) return;
+  
+  stepEl.className = 'stage-step';
+  if (className) {
+    stepEl.classList.add(className);
+  }
+  statusEl.textContent = statusText;
+}
+
+// Programmatic Width-Aware Grid Spacing Engine
+function arrangeFilesGrid(files, alignMode = "grid") {
+  const canvas = document.getElementById('dedup-canvas');
+  if (!canvas) return;
+  
+  const width = canvas.clientWidth;
+  const cardW = 130;
+  const cardH = 46;
+
+  // Clear any previously existing grouping boxes
+  document.querySelectorAll('.sim-group-box').forEach(el => el.remove());
+
+  if (alignMode === "grid") {
+    const colGap = 16;
+    const rowGap = 12;
+    const colWidth = cardW + colGap;
+    
+    // Dynamically calculate columns based on actual client resolution width
+    const cols = Math.max(2, Math.floor((width - 20) / colWidth));
+    
+    const totalGridWidth = cols * colWidth - colGap;
+    const startX = (width - totalGridWidth) / 2;
+    const startY = 16;
+
+    files.forEach((file, idx) => {
+      const el = document.getElementById(`sim-file-${file.id}`);
+      if (!el) return;
+      
+      const col = idx % cols;
+      const row = Math.floor(idx / cols);
+      const x = startX + col * colWidth;
+      const y = startY + row * (cardH + rowGap);
+      
+      el.style.transition = 'all 0.6s cubic-bezier(0.4, 0, 0.2, 1)';
+      el.style.left = `${x}px`;
+      el.style.top = `${y}px`;
+      el.classList.remove('grouped-active');
+    });
+  } else if (alignMode === "groups") {
+    // Isolate survivor groups
+    const groups = {};
+    files.forEach(f => {
+      if (f.duplicateGroup) {
+        if (!groups[f.duplicateGroup]) groups[f.duplicateGroup] = [];
+        groups[f.duplicateGroup].push(f);
+      }
+    });
+
+    const groupKeys = Object.keys(groups);
+    const numGroups = groupKeys.length;
+    const sectionW = width / Math.max(1, numGroups);
+
+    groupKeys.forEach((groupKey, gIdx) => {
+      const groupFiles = groups[groupKey];
+      const sectionX = gIdx * sectionW;
+      
+      // Draw enclosing box
+      const borderEl = document.createElement('div');
+      borderEl.id = `sim-group-box-${groupKey}`;
+      borderEl.className = 'sim-group-box';
+      borderEl.style.left = `${sectionX + 10}px`;
+      borderEl.style.width = `${sectionW - 20}px`;
+      borderEl.style.top = '15px';
+      borderEl.style.height = '215px';
+      
+      const label = document.createElement('span');
+      label.className = 'sim-group-box-label';
+      label.textContent = `GROUP: ${groupKey.replace('_', ' ').toUpperCase()}`;
+      borderEl.appendChild(label);
+      canvas.appendChild(borderEl);
+
+      // Stack duplicate file nodes vertically inside the box
+      groupFiles.forEach((file, fIdx) => {
+        const el = document.getElementById(`sim-file-${file.id}`);
+        if (!el) return;
+        
+        const x = sectionX + (sectionW - cardW) / 2;
+        const y = 35 + fIdx * 56;
+        
+        el.style.transition = 'all 0.6s cubic-bezier(0.4, 0, 0.2, 1)';
+        el.style.left = `${x}px`;
+        el.style.top = `${y}px`;
+        el.classList.add('grouped-active');
+      });
+    });
+  }
+}
+
+function renderFileBlock(file, container, x, y) {
+  const card = document.createElement('div');
+  card.className = `sim-streaming-file ext-${file.ext}`;
+  card.id = `sim-file-${file.id}`;
+  card.style.left = `${x}px`;
+  card.style.top = `${y}px`;
+  
+  const topRow = document.createElement('div');
+  topRow.className = 'sim-file-top';
+  
+  const title = document.createElement('span');
+  title.className = 'sim-file-title';
+  title.textContent = file.name;
+  topRow.appendChild(title);
+  
+  card.appendChild(topRow);
+  
+  const subRow = document.createElement('div');
+  subRow.className = 'sim-file-top';
+  
+  const hashLabel = document.createElement('span');
+  hashLabel.className = 'sim-file-hash';
+  hashLabel.id = `sim-hash-${file.id}`;
+  hashLabel.textContent = "---";
+  subRow.appendChild(hashLabel);
+  
+  const sizeLabel = document.createElement('span');
+  sizeLabel.className = 'sim-file-size';
+  sizeLabel.textContent = formatBytes(file.size);
+  subRow.appendChild(sizeLabel);
+  
+  card.appendChild(subRow);
+  container.appendChild(card);
+  return card;
+}
+
+function clearAnimationCanvas() {
+  const canvas = document.getElementById('dedup-canvas');
+  if (!canvas) return;
+  
+  const instruction = document.getElementById('canvas-instructions');
+  if (instruction) instruction.style.display = 'none';
+  
+  document.querySelectorAll('.sim-streaming-file').forEach(el => el.remove());
+  document.querySelectorAll('.sim-group-box').forEach(el => el.remove());
+}
+
+// Managed sleep wrapper targeting an interrupt-friendly registry
+const sleep = (ms) => {
+  return new Promise((resolve, reject) => {
+    const handle = setTimeout(resolve, ms);
+    activeTimeouts.push({ handle, reject });
+  });
+};
+
+function clearRunningTimeouts() {
+  activeTimeouts.forEach(t => {
+    clearTimeout(t.handle);
+    t.reject(new Error("ResetInterrupt"));
+  });
+  activeTimeouts = [];
+}
+
+async function runDeduplicationPipeline() {
+  if (pipelineState === "scanning") return;
+  pipelineState = "scanning";
+  
+  const minSizeSelect = document.getElementById('dedup-sim-size');
+  const minSizeLimit = parseInt(minSizeSelect ? minSizeSelect.value : 1024);
+  
+  const startBtn = document.getElementById('btn-start-dedup');
+  if (startBtn) startBtn.disabled = true;
+  
+  for (let s = 1; s <= 7; s++) {
+    updateStageUi(s, "Idle", "");
+  }
+  
+  document.getElementById('dedup-table-view').classList.add('collapsed');
+  document.getElementById('sim-dedup-rows').innerHTML = "";
+  selectedDuplicates.clear();
+  foundGroups = [];
+  
+  clearAnimationCanvas();
+  const canvas = document.getElementById('dedup-canvas');
+  
+  writeConsole("[ENGINE] Initializing sector-aligned I/O and preparing file buffers...");
+  
+  try {
+    await sleep(600);
+
+    // Initial render using the programmatic grid spacing layout
+    let activeCandidates = [...mockFilePool];
+    activeCandidates.forEach((file) => {
+      renderFileBlock(file, canvas, 0, 0);
+    });
+    arrangeFilesGrid(activeCandidates, "grid");
+    
+    await sleep(1000);
+
+    // --- STAGE 1: Size Partitioning ---
+    updateStageUi(1, "Active", "active");
+    writeConsole("[P-1] Scanning directory layout for matching byte footprints...");
+    await sleep(400);
+    
+    const tooSmallFiles = activeCandidates.filter(f => f.size < minSizeLimit);
+    tooSmallFiles.forEach(file => {
+      const el = document.getElementById(`sim-file-${file.id}`);
+      if (el) {
+        el.style.animation = 'file-mismatch-out 0.8s ease forwards';
+        writeConsole(`[P-1] Discarded below minimum size threshold: ${file.name}`, "warning");
+      }
+    });
+    activeCandidates = activeCandidates.filter(f => f.size >= minSizeLimit);
+    await sleep(800);
+    document.querySelectorAll('.sim-streaming-file[style*="animation"]').forEach(el => el.remove());
+
+    const sizeMap = {};
+    activeCandidates.forEach(f => {
+      sizeMap[f.size] = (sizeMap[f.size] || 0) + 1;
+    });
+    
+    const singletons = activeCandidates.filter(f => sizeMap[f.size] === 1);
+    singletons.forEach(file => {
+      const el = document.getElementById(`sim-file-${file.id}`);
+      if (el) {
+        el.style.animation = 'file-mismatch-out 0.8s ease forwards';
+        writeConsole(`[P-1] Discarded non-duplicate (unique size): ${file.name}`);
+      }
+    });
+    activeCandidates = activeCandidates.filter(f => sizeMap[f.size] > 1);
+    await sleep(800);
+    document.querySelectorAll('.sim-streaming-file[style*="animation"]').forEach(el => el.remove());
+    
+    arrangeFilesGrid(activeCandidates, "grid");
+    updateStageUi(1, "Complete", "complete");
+
+    if (activeCandidates.length === 0) {
+      writeConsole("[ENGINE] Scanning complete. No duplicate candidates cleared Phase 1.", "success");
+      pipelineState = "idle";
+      if (startBtn) startBtn.disabled = false;
+      return;
+    }
+
+    // --- STAGE 2: Prefix Hashing ---
+    await sleep(800);
+    updateStageUi(2, "Active", "active");
+    writeConsole("[P-2] Computing 4KB cryptographic header checksums...");
+    
+    activeCandidates.forEach(file => {
+      const hashEl = document.getElementById(`sim-hash-${file.id}`);
+      if (hashEl) {
+        hashEl.textContent = `Pre: ${file.prefix}`;
+        hashEl.style.color = '#a855f7';
+      }
+    });
+    await sleep(1000);
+
+    const prefixMap = {};
+    activeCandidates.forEach(f => {
+      prefixMap[f.prefix] = (prefixMap[f.prefix] || 0) + 1;
+    });
+    
+    const prefixMismatches = activeCandidates.filter(f => prefixMap[f.prefix] === 1);
+    prefixMismatches.forEach(file => {
+      const el = document.getElementById(`sim-file-${file.id}`);
+      if (el) {
+        el.style.animation = 'file-mismatch-out 0.8s ease forwards';
+        writeConsole(`[P-2] Discarded mismatching prefix: ${file.name}`, "warning");
+      }
+    });
+    activeCandidates = activeCandidates.filter(f => prefixMap[f.prefix] > 1);
+    await sleep(800);
+    document.querySelectorAll('.sim-streaming-file[style*="animation"]').forEach(el => el.remove());
+    
+    arrangeFilesGrid(activeCandidates, "grid");
+    updateStageUi(2, "Complete", "complete");
+
+    // --- STAGE 3: Midpoint Hashing ---
+    await sleep(800);
+    updateStageUi(3, "Active", "active");
+    writeConsole("[P-3] Querying central file clusters (Midpoint hashing)...");
+    
+    activeCandidates.forEach(file => {
+      const hashEl = document.getElementById(`sim-hash-${file.id}`);
+      if (hashEl) {
+        hashEl.textContent = `Mid: ${file.mid}`;
+        hashEl.style.color = '#3b82f6';
+      }
+    });
+    await sleep(1000);
+
+    const midMap = {};
+    activeCandidates.forEach(f => {
+      midMap[f.mid] = (midMap[f.mid] || 0) + 1;
+    });
+    
+    const midMismatches = activeCandidates.filter(f => midMap[f.mid] === 1);
+    midMismatches.forEach(file => {
+      const el = document.getElementById(`sim-file-${file.id}`);
+      if (el) {
+        el.style.animation = 'file-mismatch-out 0.8s ease forwards';
+        writeConsole(`[P-3] Discarded mismatching midpoint: ${file.name}`, "warning");
+      }
+    });
+    activeCandidates = activeCandidates.filter(f => midMap[f.mid] > 1);
+    await sleep(800);
+    document.querySelectorAll('.sim-streaming-file[style*="animation"]').forEach(el => el.remove());
+    
+    arrangeFilesGrid(activeCandidates, "grid");
+    updateStageUi(3, "Complete", "complete");
+
+    // --- STAGE 4: Suffix Hashing ---
+    await sleep(800);
+    updateStageUi(4, "Active", "active");
+    writeConsole("[P-4] Examining final boundary sectors (Suffix Hashing)...");
+    
+    activeCandidates.forEach(file => {
+      const hashEl = document.getElementById(`sim-hash-${file.id}`);
+      if (hashEl) {
+        hashEl.textContent = `Suf: ${file.suf}`;
+        hashEl.style.color = '#10b981';
+      }
+    });
+    await sleep(1000);
+    updateStageUi(4, "Complete", "complete");
+
+    // --- STAGE 5: Multi-Range Hashing ---
+    await sleep(800);
+    updateStageUi(5, "Active", "active");
+    writeConsole("[P-5] Initiating multi-range block sampling on files exceeding 100MB...");
+    
+    activeCandidates.forEach(file => {
+      const el = document.getElementById(`sim-file-${file.id}`);
+      if (el && file.size >= 104857600) {
+        el.style.borderColor = '#eab308';
+        writeConsole(`[P-5] Periodic checking applied across 100MB boundaries: ${file.name}`);
+      }
+    });
+    await sleep(1200);
+    updateStageUi(5, "Complete", "complete");
+
+    // --- STAGE 6: Full BLAKE3 Hashing ---
+    await sleep(800);
+    updateStageUi(6, "Active", "active");
+    writeConsole("[P-6] Hashing candidates via full BLAKE3 256-bit cryptographic loops...");
+    
+    for (let file of activeCandidates) {
+      const hashEl = document.getElementById(`sim-hash-${file.id}`);
+      if (hashEl) {
+        const mockHash = Math.random().toString(16).substring(2, 10).toUpperCase();
+        hashEl.textContent = `B3: ${mockHash}`;
+        hashEl.style.color = '#ef4444';
+        writeConsole(`[P-6] Full hash computed for ${file.name}: ${mockHash}`);
+        await sleep(200);
+      }
+    }
+    
+    // Rearrange survivors into beautiful duplicate groups side-by-side
+    arrangeFilesGrid(activeCandidates, "groups");
+    
+    await sleep(1000);
+    updateStageUi(6, "Complete", "complete");
+
+    // --- STAGE 7: Timestamp Validation ---
+    updateStageUi(7, "Active", "active");
+    writeConsole("[P-7] Interrogating filesystem journal registers to validate timestamps...");
+    
+    activeCandidates.forEach(file => {
+      const el = document.getElementById(`sim-file-${file.id}`);
+      if (el) {
+        el.style.borderColor = '#10b981';
+        el.style.boxShadow = '0 0 15px rgba(16, 185, 129, 0.3)';
+      }
+    });
+    await sleep(800);
+    updateStageUi(7, "Complete", "complete");
+
+    writeConsole("[ENGINE] Deduplication scan finalized successfully! Building result table...", "success");
+    
+    // Format results groups
+    foundGroups = [
+      { size: 1048576, nodes: [1, 2], name: "group_a" },
+      { size: 5242880, nodes: [3, 4, 5], name: "group_b" },
+      { size: 141557760, nodes: [7, 8], name: "group_c" }
+    ];
+    
+    foundGroups = foundGroups.filter(g => g.size >= minSizeLimit);
+    
+    buildDeduplicatorTable();
+    
+    pipelineState = "idle";
+    if (startBtn) startBtn.disabled = false;
+    
+  } catch (err) {
+    if (err.message === "ResetInterrupt") {
+      // Gracefully exit without triggering unhandled exceptions
+      console.log("[SYSTEM] Active scan interrupted via Reset command.");
+    } else {
+      console.error(err);
+    }
+  }
+}
+
+function buildDeduplicatorTable() {
+  const tbody = document.getElementById('sim-dedup-rows');
+  const tableView = document.getElementById('dedup-table-view');
+  if (!tbody || !tableView) return;
+  
+  tbody.innerHTML = "";
+  
+  foundGroups.forEach(group => {
+    group.nodes.forEach((nodeId, idx) => {
+      const file = mockFilePool.find(f => f.id === nodeId);
+      if (!file) return;
+      
+      const isOriginal = idx === 0;
+      const tr = document.createElement('tr');
+      tr.className = isOriginal ? 'original-row' : 'duplicate-row';
+      tr.id = `row-file-${file.id}`;
+      
+      // Checkbox cell
+      const tdCheck = document.createElement('td');
+      if (!isOriginal) {
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.setAttribute('data-id', file.id);
+        checkbox.setAttribute('data-size', file.size);
+        checkbox.addEventListener('change', (e) => {
+          toggleDuplicateSelection(file.id, e.target.checked);
+        });
+        tdCheck.appendChild(checkbox);
+      } else {
+        tdCheck.innerHTML = `<span style="color: #eab308; font-size: 0.8rem;">★</span>`;
+      }
+      tr.appendChild(tdCheck);
+      
+      // Filename
+      const tdName = document.createElement('td');
+      tdName.textContent = isOriginal ? `⭐ ${file.name}` : `     >> ${file.name}`;
+      tdName.style.whiteSpace = 'pre';
+      tr.appendChild(tdName);
+      
+      // Folder path
+      const tdFolder = document.createElement('td');
+      const slashIdx = file.path ? file.path.lastIndexOf('/') : 1;
+      const folderVal = file.path ? file.path.substring(0, slashIdx || 1) : "/Root/MockPath";
+      tdFolder.textContent = folderVal;
+      tr.appendChild(tdFolder);
+      
+      // Size
+      const tdSize = document.createElement('td');
+      tdSize.textContent = formatBytes(file.size);
+      tr.appendChild(tdSize);
+      
+      // Reclaimable
+      const tdReclaim = document.createElement('td');
+      tdReclaim.textContent = isOriginal ? "Original Header" : formatBytes(file.size);
+      tdReclaim.className = isOriginal ? 'text-dim' : 'text-success';
+      tr.appendChild(tdReclaim);
+      
+      tbody.appendChild(tr);
+    });
+  });
+  
+  tableView.classList.remove('collapsed');
+}
+
+function toggleDuplicateSelection(fileId, isChecked) {
+  if (isChecked) {
+    selectedDuplicates.add(fileId);
+  } else {
+    selectedDuplicates.delete(fileId);
+  }
+  
+  calculateReclaimableStorage();
+}
+
+function calculateReclaimableStorage() {
+  let totalBytes = 0;
+  selectedDuplicates.forEach(id => {
+    const file = mockFilePool.find(f => f.id === id);
+    if (file) {
+      totalBytes += file.size;
+    }
+  });
+  
+  const reclaimEl = document.getElementById('reclaim-amount');
+  if (reclaimEl) {
+    reclaimEl.textContent = formatBytes(totalBytes);
+  }
+}
+
+function resetDeduplicatorSimulator() {
+  // 1. Terminate all running intervals and async timeout streams
+  clearRunningTimeouts();
+  pipelineState = "idle";
+  
+  // 2. Re-enable start button
+  const startBtn = document.getElementById('btn-start-dedup');
+  if (startBtn) startBtn.disabled = false;
+  
+  // 3. Reset 7 pipeline stage indicators to Idle state
+  for (let s = 1; s <= 7; s++) {
+    updateStageUi(s, "Idle", "");
+  }
+  
+  // 4. Restore original Instructions display to canvas
+  const canvas = document.getElementById('dedup-canvas');
+  if (canvas) {
+    document.querySelectorAll('.sim-streaming-file').forEach(el => el.remove());
+    document.querySelectorAll('.sim-group-box').forEach(el => el.remove());
+    const instruction = document.getElementById('canvas-instructions');
+    if (instruction) instruction.style.display = 'block';
+  }
+  
+  // 5. Restore Virtual Console to startup baseline message
+  const consoleEl = document.getElementById('virtual-console');
+  if (consoleEl) {
+    consoleEl.innerHTML = '<div class="console-line text-dim">[SYSTEM] Engine online. Awaiting control signal.</div>';
+  }
+  
+  // 6. Reset duplicate rows table back to its initial collapsed state
+  const tableView = document.getElementById('dedup-table-view');
+  if (tableView) {
+    tableView.classList.add('collapsed');
+  }
+  
+  const tbody = document.getElementById('sim-dedup-rows');
+  if (tbody) {
+    tbody.innerHTML = "";
+  }
+  
+  selectedDuplicates.clear();
+  document.getElementById('reclaim-amount').textContent = "0 Bytes";
+  writeConsole("[SYSTEM] Pipeline simulator reset to clean state.");
+}
+
+function triggerReclaimAnimation(actionType) {
+  if (selectedDuplicates.size === 0) return;
+  
+  const selectedCount = selectedDuplicates.size;
+  
+  toast_success(
+    actionType === 'hardlink'
+      ? `Successfully replaced ${selectedCount} duplicate(s) with hardlinks!`
+      : `Permanently deleted ${selectedCount} duplicate file(s) from system buffers.`
+  );
+
+  const tbody = document.getElementById('sim-dedup-rows');
+  if (tbody) {
+    tbody.classList.add('reclaim-flash');
+    setTimeout(() => {
+      tbody.classList.remove('reclaim-flash');
+    }, 800);
+  }
+
+  // Remove matching elements from DOM with a sliding transition
+  selectedDuplicates.forEach(id => {
+    const row = document.getElementById(`row-file-${id}`);
+    if (row) {
+      row.style.transition = 'all 0.4s ease';
+      row.style.opacity = '0';
+      row.style.transform = 'translateX(-20px)';
+      setTimeout(() => {
+        row.remove();
+      }, 400);
+    }
+    
+    // Clear matches on canvas
+    const canvasEl = document.getElementById(`sim-file-${id}`);
+    if (canvasEl) {
+      canvasEl.style.transition = 'all 0.4s ease';
+      canvasEl.style.opacity = '0';
+      canvasEl.style.transform = 'scale(0.8)';
+      setTimeout(() => {
+        canvasEl.remove();
+      }, 400);
+    }
+  });
+
+  // Reset counters
+  selectedDuplicates.clear();
+  document.getElementById('reclaim-amount').textContent = "0 Bytes";
+}
+
+// Hook actions into simulator controls on load
+document.addEventListener('DOMContentLoaded', () => {
+  const startBtn = document.getElementById('btn-start-dedup');
+  if (startBtn) {
+    startBtn.addEventListener('click', runDeduplicationPipeline);
+  }
+  
+  const resetBtn = document.getElementById('btn-reset-dedup');
+  if (resetBtn) {
+    resetBtn.addEventListener('click', resetDeduplicatorSimulator);
+  }
+  
+  const linkBtn = document.getElementById('btn-reclaim-hardlink');
+  if (linkBtn) {
+    linkBtn.addEventListener('click', () => triggerReclaimAnimation('hardlink'));
+  }
+  
+  const deleteBtn = document.getElementById('btn-reclaim-delete');
+  if (deleteBtn) {
+    deleteBtn.addEventListener('click', () => triggerReclaimAnimation('delete'));
+  }
+});
+
+// Polyfill Toast interface natively to ensure sandbox actions display alerts correctly
+function toast_success(message) {
+  // Create beautiful temporary HTML toast element
+  const container = document.body;
+  const toast = document.createElement('div');
+  toast.className = 'glass-card';
+  toast.style.position = 'fixed';
+  toast.style.bottom = '20px';
+  toast.style.right = '20px';
+  toast.style.zIndex = '9999';
+  toast.style.padding = '12px 24px';
+  toast.style.borderLeft = '4px solid #22c55e';
+  toast.style.backgroundColor = '#0d0f18';
+  toast.style.boxShadow = '0 10px 25px rgba(0,0,0,0.5)';
+  toast.style.fontFamily = 'Outfit, sans-serif';
+  toast.style.fontSize = '0.9rem';
+  toast.style.color = '#f8fafc';
+  toast.innerHTML = `✨ ${message}`;
+  
+  container.appendChild(toast);
+  setTimeout(() => {
+    toast.style.transition = 'all 0.5s ease';
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateY(10px)';
+    setTimeout(() => toast.remove(), 500);
+  }, 3500);
+}

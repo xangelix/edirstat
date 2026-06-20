@@ -1,4 +1,7 @@
-/* Custom Design System & CSS Reset */
+/* ==========================================================================
+   eDirStat Custom Dark Design System & Global Styles
+   ========================================================================== */
+
 :root {
   --bg-color: #050609;
   --bg-card: rgba(13, 15, 24, 0.6);
@@ -66,21 +69,21 @@ body {
 
 /* Scrollbar styles */
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
 }
 ::-webkit-scrollbar-track {
   background: var(--bg-color);
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.18);
 }
 
-/* Global Typography & Headings */
+/* Typography */
 h1, h2, h3, h4 {
   font-family: var(--font-display);
   font-weight: 700;
@@ -149,7 +152,7 @@ a {
   border-radius: 8px;
 }
 
-/* Glassmorphism Card Style */
+/* Glassmorphic Core Container */
 .glass-card {
   background: var(--bg-card);
   backdrop-filter: blur(12px);
@@ -159,7 +162,7 @@ a {
   transition: border-color var(--transition-medium), box-shadow var(--transition-medium);
 }
 
-/* Header */
+/* Header & Navigation */
 .header {
   position: sticky;
   top: 0;
@@ -214,7 +217,7 @@ a {
   gap: 12px;
 }
 
-/* Main Content Area */
+/* Main Container */
 .main-content {
   max-width: 1200px;
   margin: 0 auto;
@@ -331,7 +334,7 @@ a {
   color: var(--text-dim);
 }
 
-/* Stats Section */
+/* Stats Row */
 .stats-section {
   padding: 40px 0;
   border-top: 1px solid var(--border-color);
@@ -367,7 +370,7 @@ a {
   margin-top: 4px;
 }
 
-/* Generic Section Layout */
+/* Section Header Standards */
 .section {
   padding: 80px 0;
   scroll-margin-top: 80px;
@@ -389,11 +392,13 @@ a {
   font-size: 1.05rem;
 }
 
-/* Simulator Section (Treemap Mockup) */
+/* ==========================================================================
+   Simulator 1: Interactive Treemap Dashboard (Symmetric 600px Height)
+   ========================================================================== */
 .simulator-container {
   display: grid;
   grid-template-columns: 350px 1fr;
-  height: 520px;
+  height: 600px; /* Synchronized +15% height expansion to eliminate inner scrollbars */
   overflow: hidden;
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
 }
@@ -411,6 +416,7 @@ a {
   color: var(--text-main);
   text-transform: uppercase;
   letter-spacing: 0.05em;
+  flex-shrink: 0;
 }
 
 .panel-header-icon {
@@ -436,7 +442,7 @@ a {
   font-size: 0.85rem;
 }
 
-/* Tree Nodes */
+/* Explorer Tree Nodes */
 .tree-node {
   margin-bottom: 6px;
   cursor: pointer;
@@ -467,12 +473,6 @@ a {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.tree-indent {
-  display: inline-block;
-  width: 16px;
-  height: 100%;
 }
 
 .tree-icon {
@@ -549,31 +549,31 @@ a {
   filter: brightness(1.15);
 }
 
-/* Color Coding extension categories - Softened gradients with subtle inset glow */
+/* Category Extension Coloring mapping (Restored Linear Gradients) */
 .ext-code {
   background: linear-gradient(135deg, rgba(6, 182, 212, 0.75) 0%, rgba(13, 148, 136, 0.75) 100%);
   box-shadow: inset 0 0 0 1px rgba(34, 211, 238, 0.35);
-} /* Cyan to Teal */
+}
 .ext-video {
   background: linear-gradient(135deg, rgba(236, 72, 153, 0.75) 0%, rgba(185, 28, 86, 0.75) 100%);
   box-shadow: inset 0 0 0 1px rgba(244, 114, 182, 0.35);
-} /* Pink to Magenta */
+}
 .ext-archive {
   background: linear-gradient(135deg, rgba(245, 158, 11, 0.75) 0%, rgba(217, 119, 6, 0.75) 100%);
   box-shadow: inset 0 0 0 1px rgba(251, 191, 36, 0.35);
-} /* Amber to Orange */
+}
 .ext-image {
   background: linear-gradient(135deg, rgba(16, 185, 129, 0.75) 0%, rgba(5, 150, 105, 0.75) 100%);
   box-shadow: inset 0 0 0 1px rgba(52, 211, 153, 0.35);
-} /* Green to Emerald */
+}
 .ext-audio {
   background: linear-gradient(135deg, rgba(139, 92, 246, 0.75) 0%, rgba(109, 40, 217, 0.75) 100%);
   box-shadow: inset 0 0 0 1px rgba(167, 139, 250, 0.35);
-} /* Violet to Purple */
+}
 .ext-other {
   background: linear-gradient(135deg, rgba(100, 116, 139, 0.6) 0%, rgba(71, 85, 105, 0.6) 100%);
   box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.25);
-} /* Muted Slate */
+}
 
 .selection-footer {
   background-color: rgba(255, 255, 255, 0.01);
@@ -584,6 +584,7 @@ a {
   justify-content: space-between;
   font-family: var(--font-mono);
   font-size: 0.85rem;
+  flex-shrink: 0;
 }
 
 .selection-info {
@@ -616,6 +617,533 @@ a {
   font-weight: 600;
   flex-shrink: 0;
 }
+
+/* ==========================================================================
+   Simulator 2: Cryptographic Deduplicator
+   ========================================================================== */
+.dedup-simulator-container {
+  display: grid;
+  grid-template-columns: 440px 1fr;
+  height: 600px; /* Precise height coordination matches Treemap */
+  overflow: hidden;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+}
+
+.dedup-control-panel {
+  border-right: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  max-height: 100%;
+  min-height: 0;
+  background-color: rgba(13, 15, 24, 0.2);
+}
+
+.dedup-panel-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dedup-config-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background-color: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-color);
+  padding: 12px;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.controller-actions {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
+
+.controller-actions .btn {
+  flex: 1;
+  padding: 8px 12px;
+  font-size: 0.85rem;
+}
+
+.config-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.config-item label {
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.sim-select {
+  background: #0f111a;
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-family: var(--font-sans);
+  font-size: 0.9rem;
+  outline: none;
+  cursor: pointer;
+  transition: border-color var(--transition-fast);
+}
+
+.sim-select:hover, .sim-select:focus {
+  border-color: var(--color-primary);
+}
+
+/* 7-Stage Process Steps List */
+.pipeline-stages-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+}
+
+.stage-step {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background-color: rgba(255, 255, 255, 0.01);
+  border: 1px solid transparent;
+  transition: all var(--transition-medium);
+}
+
+.stage-step-num {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background-color: rgba(255, 255, 255, 0.04);
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.8rem;
+  flex-shrink: 0;
+  transition: all var(--transition-medium);
+}
+
+.stage-step-info {
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+  overflow: hidden;
+}
+
+.stage-step-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  transition: color var(--transition-medium);
+}
+
+.stage-step-desc {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  line-height: 1.3;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
+.stage-step-status {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  padding: 1px 6px;
+  border-radius: 4px;
+  background-color: rgba(255, 255, 255, 0.02);
+  flex-shrink: 0;
+  transition: all var(--transition-medium);
+}
+
+/* Active and Complete states matching eDirStat's design */
+.stage-step.active {
+  background-color: rgba(124, 58, 237, 0.05);
+  border-color: rgba(124, 58, 237, 0.2);
+  box-shadow: 0 0 15px rgba(124, 58, 237, 0.05);
+}
+
+.stage-step.active .stage-step-num {
+  background-color: var(--color-primary);
+  color: #fff;
+  box-shadow: 0 0 8px rgba(124, 58, 237, 0.6);
+}
+
+.stage-step.active .stage-step-title {
+  color: var(--text-main);
+}
+
+.stage-step.active .stage-step-status {
+  background-color: rgba(124, 58, 237, 0.15);
+  color: #c084fc;
+}
+
+.stage-step.complete {
+  background-color: rgba(16, 185, 129, 0.02);
+  border-color: rgba(16, 185, 129, 0.1);
+}
+
+.stage-step.complete .stage-step-num {
+  background-color: rgba(16, 185, 129, 0.15);
+  color: var(--color-success);
+}
+
+.stage-step.complete .stage-step-title {
+  color: var(--text-muted);
+}
+
+.stage-step.complete .stage-step-status {
+  background-color: rgba(16, 185, 129, 0.1);
+  color: var(--color-success);
+}
+
+/* Sandbox Processing Display Screen */
+.dedup-display-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  max-height: 100%;
+  min-height: 0;
+}
+
+.dedup-display-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.dedup-animation-canvas {
+  height: 250px;
+  background-color: #08090d;
+  position: relative;
+  overflow: hidden;
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.canvas-grid-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image: 
+    linear-gradient(rgba(255, 255, 255, 0.008) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.008) 1px, transparent 1px);
+  background-size: 20px 20px;
+  pointer-events: none;
+}
+
+.sandbox-instructions {
+  text-align: center;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 5;
+  width: 100%;
+  max-width: 400px;
+}
+
+.instruction-glow {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 180px;
+  height: 180px;
+  background: radial-gradient(circle, rgba(124, 58, 237, 0.08) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.instruction-icon {
+  width: 32px;
+  height: 32px;
+  color: var(--color-primary);
+  margin-bottom: 12px;
+  animation: pulse-slow 3s infinite;
+}
+
+@keyframes pulse-slow {
+  0%, 100% { opacity: 0.6; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.08); }
+}
+
+/* Dynamic CSS-Based Group Enclosure box */
+.sim-group-box {
+  position: absolute;
+  border: 1.5px dashed rgba(168, 85, 247, 0.4);
+  background-color: rgba(168, 85, 247, 0.01);
+  border-radius: 6px;
+  z-index: 2;
+  pointer-events: none;
+  transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: fadeIn 0.4s ease forwards;
+}
+
+.sim-group-box-label {
+  position: absolute;
+  top: -9px;
+  left: 10px;
+  background-color: #08090d;
+  padding: 0 6px;
+  font-family: var(--font-display);
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #c084fc;
+  border: 1px solid rgba(168, 85, 247, 0.3);
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: scale(0.98); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* Fixed Width Streaming File Node Blocks */
+.sim-streaming-file {
+  position: absolute;
+  width: 130px; /* Slightly compacted to increase spacing */
+  padding: 6px 10px;
+  background: rgba(15, 17, 26, 0.95);
+  border: 1.2px solid var(--border-color);
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  z-index: 10;
+}
+
+/* Glowing purple core when matched in identical groups */
+.sim-streaming-file.grouped-active {
+  border-color: rgba(168, 85, 247, 0.6);
+  box-shadow: 0 0 10px rgba(168, 85, 247, 0.3);
+}
+
+.sim-file-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  overflow: hidden;
+}
+
+.sim-file-title {
+  color: var(--text-main);
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.sim-file-hash {
+  font-size: 0.6rem;
+  color: var(--text-dim);
+  font-weight: 600;
+}
+
+.sim-file-size {
+  font-size: 0.62rem;
+  color: var(--color-secondary);
+  font-weight: 600;
+}
+
+.dedup-display-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  max-height: 100%;
+  min-height: 0;
+}
+
+.dedup-display-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.dedup-animation-canvas {
+  height: 250px;
+  background-color: #08090d;
+  position: relative;
+  overflow: hidden;
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+/* Reduced height slightly to avoid scrolling elements inside the wrapper */
+.virtual-console {
+  height: 80px;
+  background-color: #050608;
+  border-bottom: 1px solid var(--border-color);
+  overflow-y: auto;
+  padding: 8px 12px;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.console-line {
+  line-height: 1.4;
+  word-break: break-all;
+}
+
+.console-line.text-success { color: var(--color-success); }
+.console-line.text-warning { color: var(--color-warning); }
+.console-line.text-error { color: var(--color-error); }
+.console-line.text-primary { color: #a855f7; }
+
+/* Live Deduplicator Results table */
+.dedup-table-view {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background-color: rgba(5, 6, 9, 0.2);
+  transition: opacity 0.4s ease, transform 0.4s ease;
+}
+
+.dedup-table-view.collapsed {
+  opacity: 0.15;
+  pointer-events: none;
+}
+
+.table-actions-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background-color: rgba(255, 255, 255, 0.01);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.action-summary {
+  font-family: var(--font-display);
+  font-size: 0.88rem;
+}
+
+.summary-label {
+  color: var(--text-muted);
+}
+
+.summary-value {
+  font-weight: 700;
+  padding-left: 6px;
+}
+
+.table-action-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 0.8rem;
+  border-radius: 6px;
+}
+
+.dedup-table-container {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.sim-dedup-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+  text-align: left;
+}
+
+.sim-dedup-table th {
+  position: sticky;
+  top: 0;
+  background-color: #0b0c10;
+  border-bottom: 1px solid var(--border-color);
+  padding: 8px 12px;
+  color: var(--text-muted);
+  font-family: var(--font-display);
+  font-weight: 600;
+  z-index: 5;
+}
+
+.sim-dedup-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.02);
+  font-family: var(--font-sans);
+}
+
+.sim-dedup-table tbody tr:hover {
+  background-color: rgba(255, 255, 255, 0.02);
+}
+
+.sim-dedup-table tbody tr.duplicate-row {
+  color: var(--color-warning);
+}
+
+.sim-dedup-table tbody tr.original-row {
+  color: var(--text-main);
+  background-color: rgba(16, 185, 129, 0.01);
+}
+
+.sim-dedup-table input[type="checkbox"] {
+  cursor: pointer;
+  accent-color: var(--color-primary);
+}
+
+/* Animations and transitions for files inside the pipeline */
+@keyframes slide-in-bottom {
+  0% { transform: translateY(30px); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes file-mismatch-out {
+  0% { transform: scale(1) translateY(0); opacity: 1; }
+  100% { transform: scale(0.85) translateY(-25px); opacity: 0; filter: blur(2px); }
+}
+
+@keyframes flash-reclaim {
+  0% { background-color: rgba(16, 185, 129, 0.15); }
+  100% { background-color: transparent; }
+}
+
+.reclaim-flash {
+  animation: flash-reclaim 0.8s ease-out;
+}
+
+.btn-icon-svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* ==========================================================================
+   General Framework Layout Components
+   ========================================================================== */
 
 /* Benchmarks Section */
 .benchmarks-container {
@@ -692,40 +1220,39 @@ a {
 }
 
 .chart-header {
-  margin-bottom: 24px;
+  margin-bottom: 16px;
 }
 
 .chart-title {
-  font-size: 1.25rem;
-  margin-bottom: 4px;
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-main);
 }
 
 .chart-subtitle {
-  color: var(--text-muted);
   font-size: 0.85rem;
+  color: var(--text-muted);
 }
 
 .chart-canvas-container {
   flex: 1;
+  min-height: 0;
   position: relative;
-  min-height: 220px;
 }
 
-/* Features Grid */
+/* Key Features Grid */
 .features-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap: 24px;
 }
 
 .feature-card {
   padding: 32px;
-  transition: transform var(--transition-fast), border-color var(--transition-fast);
-}
-
-.feature-card:hover {
-  transform: translateY(-4px);
-  border-color: var(--border-hover);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 .feature-icon-wrapper {
@@ -761,7 +1288,7 @@ a {
   line-height: 1.5;
 }
 
-/* Guide Container */
+/* Build & Run Guide Container */
 .guide-container {
   overflow: hidden;
   box-shadow: 0 15px 30px rgba(0, 0, 0, 0.3);
@@ -899,7 +1426,7 @@ code {
   flex: 1;
 }
 
-/* Footer */
+/* Footer Section */
 .footer {
   border-top: 1px solid var(--border-color);
   padding: 60px 0 30px 0;
@@ -956,11 +1483,17 @@ code {
   font-size: 0.8rem;
 }
 
-/* Responsiveness adjustments */
+/* ==========================================================================
+   Responsive Adaptability & Media Queries
+   ========================================================================== */
 @media (max-width: 1024px) {
   .simulator-container {
     grid-template-columns: 280px 1fr;
-    height: 480px;
+    height: 600px;
+  }
+  .dedup-simulator-container {
+    grid-template-columns: 360px 1fr;
+    height: 600px;
   }
   .benchmarks-container {
     grid-template-columns: 240px 1fr;
@@ -990,6 +1523,8 @@ code {
     grid-template-columns: repeat(2, 1fr);
     gap: 16px;
   }
+  
+  /* Treemap Simulator Compact Layout */
   .simulator-container {
     grid-template-columns: 1fr;
     height: auto;
@@ -1002,6 +1537,22 @@ code {
   .treemap-canvas {
     height: 300px;
   }
+  
+  /* Deduplicator Simulator Compact Layout */
+  .dedup-simulator-container {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+  .dedup-control-panel {
+    border-right: none;
+    border-bottom: 1px solid var(--border-color);
+    max-height: 400px;
+  }
+  .dedup-animation-canvas {
+    height: 240px;
+  }
+  
+  /* Benchmarks Compact Layout */
   .benchmarks-container {
     grid-template-columns: 1fr;
   }

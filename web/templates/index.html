@@ -133,6 +133,170 @@
         </div>
     </section>
 
+    <!-- Deduplicator Simulator Section -->
+    <section id="dedup-simulator" class="section">
+        <div class="section-header">
+            <h2 class="section-title">Cryptographic Deduplication</h2>
+            <p class="section-subtitle">Visualize how eDirStat's 7-stage pipeline isolates duplicate files and calculates reclaimable space without unnecessary disk reads.</p>
+        </div>
+        
+        <div class="dedup-simulator-container glass-card">
+            <!-- Left Column: Controls & Pipeline Stages -->
+            <div class="dedup-control-panel">
+                <div class="panel-header">
+                    <i data-lucide="activity" class="panel-header-icon"></i>
+                    <span>Pipeline Controller</span>
+                </div>
+                <div class="dedup-panel-content">
+                    <div class="dedup-config-row">
+                        <div class="config-item">
+                            <label for="dedup-sim-size">Min File Size</label>
+                            <select id="dedup-sim-size" class="sim-select">
+                                <option value="1024">1 KB (Default)</option>
+                                <option value="1048576">1 MB</option>
+                                <option value="104857600">100 MB</option>
+                            </select>
+                        </div>
+                        <div class="controller-actions">
+                            <button id="btn-start-dedup" class="btn btn-primary btn-glow">
+                                <i data-lucide="play" class="btn-icon-svg"></i>
+                                <span>Start Scan</span>
+                            </button>
+                            <button id="btn-reset-dedup" class="btn btn-secondary">
+                                <i data-lucide="rotate-ccw" class="btn-icon-svg"></i>
+                                <span>Reset</span>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- 7-Stage Process List -->
+                    <div class="pipeline-stages-list">
+                        <div class="stage-step" id="step-1">
+                            <div class="stage-step-num">1</div>
+                            <div class="stage-step-info">
+                                <span class="stage-step-title">Size Partitioning</span>
+                                <span class="stage-step-desc">Grouping files by exact byte count. Singletons are discarded.</span>
+                            </div>
+                            <div class="stage-step-status" id="status-1">Idle</div>
+                        </div>
+                        <div class="stage-step" id="step-2">
+                            <div class="stage-step-num">2</div>
+                            <div class="stage-step-info">
+                                <span class="stage-step-title">Prefix Hashing</span>
+                                <span class="stage-step-desc">Hashing first 4KB to catch header or container differences.</span>
+                            </div>
+                            <div class="stage-step-status" id="status-2">Idle</div>
+                        </div>
+                        <div class="stage-step" id="step-3">
+                            <div class="stage-step-num">3</div>
+                            <div class="stage-step-info">
+                                <span class="stage-step-title">Midpoint Hashing</span>
+                                <span class="stage-step-desc">Hashing a 4KB chunk in the center of remaining files.</span>
+                            </div>
+                            <div class="stage-step-status" id="status-3">Idle</div>
+                        </div>
+                        <div class="stage-step" id="step-4">
+                            <div class="stage-step-num">4</div>
+                            <div class="stage-step-info">
+                                <span class="stage-step-title">Suffix Hashing</span>
+                                <span class="stage-step-desc">Hashing trailing 4KB to isolate tail metadata differences.</span>
+                            </div>
+                            <div class="stage-step-status" id="status-4">Idle</div>
+                        </div>
+                        <div class="stage-step" id="step-5">
+                            <div class="stage-step-num">5</div>
+                            <div class="stage-step-info">
+                                <span class="stage-step-title">Multi-Range Hashing</span>
+                                <span class="stage-step-desc">Periodic block sampling across files larger than 100MB.</span>
+                            </div>
+                            <div class="stage-step-status" id="status-5">Idle</div>
+                        </div>
+                        <div class="stage-step" id="step-6">
+                            <div class="stage-step-num">6</div>
+                            <div class="stage-step-info">
+                                <span class="stage-step-title">Full BLAKE3 Hashing</span>
+                                <span class="stage-step-desc">Full 256-bit cryptographic verification on remaining candidates.</span>
+                            </div>
+                            <div class="stage-step-status" id="status-6">Idle</div>
+                        </div>
+                        <div class="stage-step" id="step-7">
+                            <div class="stage-step-num">7</div>
+                            <div class="stage-step-info">
+                                <span class="stage-step-title">Timestamp Validation</span>
+                                <span class="stage-step-desc">Confirming last modified timestamps to protect against changes.</span>
+                            </div>
+                            <div class="stage-step-status" id="status-7">Idle</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Right Column: Interactive Sandbox Stream & Live Results Table -->
+            <div class="dedup-display-panel">
+                <div class="panel-header">
+                    <i data-lucide="terminal" class="panel-header-icon"></i>
+                    <span>Active Sandbox Processing Stream & Live Logs</span>
+                </div>
+                
+                <div class="dedup-display-content">
+                    <!-- Sandbox file animation screen -->
+                    <div class="dedup-animation-canvas" id="dedup-canvas">
+                        <div class="canvas-grid-bg"></div>
+                        <div class="sandbox-instructions" id="canvas-instructions">
+                            <div class="instruction-glow"></div>
+                            <i data-lucide="activity" class="instruction-icon"></i>
+                            <h3>Deduplication Stream Ready</h3>
+                            <p>Click "Start Scan" to watch candidate files flow through our 7-stage filter system.</p>
+                        </div>
+                        <!-- Animated files and lanes are generated here -->
+                    </div>
+                    
+                    <!-- Live Console Logger -->
+                    <div class="virtual-console" id="virtual-console">
+                        <div class="console-line text-dim">[SYSTEM] Engine online. Awaiting control signal.</div>
+                    </div>
+                    
+                    <!-- Live Deduplicator Results View (Mimicking actual eDirStat table view) -->
+                    <div class="dedup-table-view collapsed" id="dedup-table-view">
+                        <div class="table-actions-header">
+                            <div class="action-summary">
+                                <span class="summary-label">Potential Reclaimable Space:</span>
+                                <span class="summary-value text-success" id="reclaim-amount">0 Bytes</span>
+                            </div>
+                            <div class="table-action-buttons">
+                                <button class="btn btn-secondary btn-sm" id="btn-reclaim-hardlink">
+                                    <i data-lucide="link2"></i>
+                                    <span>Replace with Hardlinks</span>
+                                </button>
+                                <button class="btn btn-secondary btn-sm" id="btn-reclaim-delete">
+                                    <i data-lucide="trash2"></i>
+                                    <span>Delete Permanently</span>
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div class="dedup-table-container">
+                            <table class="sim-dedup-table">
+                                <thead>
+                                    <tr>
+                                        <th width="30"></th>
+                                        <th>Filename</th>
+                                        <th>Folder Path</th>
+                                        <th>Size</th>
+                                        <th>Reclaimable</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="sim-dedup-rows">
+                                    <!-- Populated dynamically after animation finishes -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
     <!-- Benchmarks Section -->
     <section id="benchmarks" class="section">
         <div class="section-header">
