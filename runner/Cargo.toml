@@ -1,0 +1,24 @@
+[package]
+name = "edirstat-runner"
+version = "1.1.0"
+edition = "2024"
+publish = false
+
+[package.metadata.winresource]
+ProductName = "edirstat"
+ProductVersion = "1.1.0"
+OriginalFilename = "edirstat.exe"
+FileDescription = "A fast, cross-platform disk usage analyzer with work-stealing multithreading, zero-copy snapshots, deduplication, and an interactive treemap GUI."
+CompanyName = "Cody Wyatt Neiman (xangelix) <neiman@cody.to>"
+LegalCopyright = "Copyright © 2026 Cody Wyatt Neiman (xangelix) <neiman@cody.to>"
+
+[dependencies]
+multivers-runner = { git = "https://github.com/Xangelix/cargo-multivers.git", branch = "dll-patches" }
+
+[build-dependencies]
+winresource = "0.1.31"
+
+[profile.release]
+lto = true
+strip = true
+panic = "abort"
