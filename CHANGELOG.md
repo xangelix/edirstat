@@ -29,6 +29,7 @@ All notable changes to **eDirStat** will be documented in this file.
 - **📊 Item and Directory Count Sorting:** Added full support for sorting the directory explorer view by item and subdirectory counts.
 - **🛡️ Restricted Permissions Handling:** Added detection and safe handling of folders with restricted access/permissions, marking them as "No Permission" in the UI rather than failing the scan.
 - **🔔 Toast Notifications:** Integrated interactive toast notifications (success, warning, error, info) for file manager operations, terminal launching, and deduplication hardlinking/softlinking.
+- **🎨 Squared Logo Asset:** Created a new subtext-less squared SVG logo variant for keyart and promotional purposes.
 
 #### CLI & Headless Tooling
 - **🚀 CLI / Positional Arguments:** Added support for passing a directory path as a positional command-line argument to automatically start scanning on startup.
@@ -42,6 +43,13 @@ All notable changes to **eDirStat** will be documented in this file.
 - **💖 GitHub Sponsors:** Added sponsor/funding configuration pointing to `xangelix` to support the project.
 - **📄 Changelog:** Created a clean, practical, and exciting changelog documenting all previous releases.
 - **📊 Benchmark & Demo Media:** Added comparison benchmarks against QDirStat and WinDirStat in the README, along with high-quality demonstration videos (drag race, deduplicator demo, and WinDirStat layout mode).
+- **🛡️ Forbid Unsafe Code Directive:** Added `#![forbid(unsafe_code)]` at both binary and library crate entry points to ensure compilation-level code safety.
+- **📦 Multi-Target CPU Windows Runner:** Integrated `cargo-multivers` builder to compile distinct, target-CPU optimized Windows binaries and package them inside a single wrapper crate (`runner/`) using `multivers-runner`.
+
+#### Web App & Simulator
+- **🌐 eDirStat Web V2:** Redesigned and launched the official product website (`/web`) featuring an interactive, live simulator for the cryptographic deduplication pipeline and treemap dashboard.
+- **🌐 Responsive Displays & Ratios:** Expanded CSS layout grids and flexbox viewport definitions to support a wide range of mobile and ultra-wide monitor aspect ratios without clipping.
+- **🌐 Deduplicator Simulator:** Built a fully client-side animated simulator of the eDirStat deduplication process, showing steps like size partitioning, header hashing, midpoint/suffix matching, and BLAKE3 checking.
 
 #### Developer Tooling & Testing
 - **🛠️ Tracy Profiling:** Integrated basic support for Tracy-based profiling to assist in performance diagnostics.
@@ -74,6 +82,8 @@ All notable changes to **eDirStat** will be documented in this file.
 - **⚡ Deduplicator Optimizations:** Deferred path string allocations in the deduplicator to minimize heap usage during search.
 - **⚡ Zero-Copy Node Storage:** Restored true zero-copy node storage in the file arena to reduce latency and memory overhead.
 - **⚡ Lowercase Extension Helper:** Switched to a shared, stack-allocated `with_lowercase_ext` helper for file extension mappings to avoid heap allocations.
+- **⚡ Zstd Compression for Persisted Snapshots:** Migrated the snapshot persistence format to a compressed Zstd payload, replacing unsafe copy-on-write memory mapping (`memmap2`) with safe heap allocations during decompression to improve file safety and reliability.
+- **⚡ Safe UTF-16 Decoder Optimization:** Replaced unsafe SIMD AVX2/SSE implementations with safe Rust iterators and boundary checks that optimize down to SIMD via LLVM.
 
 #### UI, UX & Visual Polish
 - **🎨 Rebranded Visuals:** Replaced existing logos and icons across the GUI and documentation with modern, high-quality SVG/raster variants, and added a utility script for icon generation.
@@ -93,6 +103,11 @@ All notable changes to **eDirStat** will be documented in this file.
 - **🪟 MFT Ingestion Refactoring:** Consolidated the Master File Table (MFT) ingestion loop into a dedicated helper function for cleaner, more maintainable code.
 - **🧹 Walk Context Refactoring:** Refactored the recursive directory scanner context into a unified `WalkCtx` struct for cleaner and safer code.
 - **🐧 Unix Root Scanning Improvements:** Enhanced traversal of the system root on Unix/Linux by automatically filtering out virtual/system directories (such as `/proc`, `/sys`, `/dev`, etc.) and allowing local partition crossing.
+- **🛡️ Safe User & Group Resolution:** Replaced unsafe `libc` calls for retrieving Unix usernames and group names with safe APIs from the `uzers` crate.
+- **🛡️ Windows Subsystem Execution:** Adopted the `cli-or-gui` crate to dynamically check privileges and run commands, replacing custom platform-specific elevation blocks.
+- **🛡️ Elevation Helpers Refactoring:** Cleaned up custom Windows elevation and admin restart APIs by adopting a unified implementation from the `cli-or-gui` crate.
+- **🛡️ Safe MFT Chunk Ingestion:** Refactored the MFT ingestion Rayon thread boundaries to split mutable slices safely, completely avoiding unsafe raw pointer calls to `from_raw_parts_mut`.
+- **🛡️ Safe Windows FS Type Check:** Replaced unsafe Win32 calls to `GetVolumeInformationW` with safe cross-platform drive inspection APIs from the `sysinfo` crate.
 
 #### Project Maintenance & Build Configuration
 - **📦 Dependency Updates:** Bumped project dependencies to their latest versions for improved security and stability.
@@ -104,6 +119,9 @@ All notable changes to **eDirStat** will be documented in this file.
 - **⚙️ Toolchain Update:** Updated the local Rust compiler toolchain to `nightly-2026-06-13`.
 - **⚙️ Safe Exit Flow:** Avoided calls to `std::process::exit()` in the binary to ensure standard library destructors run cleanly on exit.
 - **📄 README Visual Updates:** Combined primary logo images, added a treemap screenshot under the logo, switched to a cleaner treemap-b variant logo, and replaced the drag race video with a first-frame thumbnailed version to speed up page load.
+- **⚙️ Toolchain Update:** Updated Rust nightly compiler toolchain to `nightly-2026-06-15`.
+- **📦 Dependency Cleanup:** Removed the direct dependency on `libc` as it is no longer required.
+- **📦 Dependency Upgrades:** Upgraded underlying project dependencies, including bumping `bytes` and `wayland-protocols` to their latest versions.
 
 ### Fixed
 
@@ -112,6 +130,7 @@ All notable changes to **eDirStat** will be documented in this file.
 - **🔘 Dropdown Interactivity:** Fixed the click hitbox for dropdown buttons in the directory explorer.
 - **🖱️ Treemap & Scatter Plot Bugfixes:** Truncated treemap depth past a set limit to prevent rendering overflows, resolved a block selection issue in the treemap, and improved hover text wrapping on plots.
 - **♻️ Cache Clearing on Refresh:** Fixed a bug where cached GUI elements were not cleared during a directory refresh or rescan.
+- **🌐 Web Layout Clipping:** Fixed layout clipping bugs on thin displays and small viewports by setting appropriate `overflow-x` properties and max-widths.
 
 #### Cross-Platform & Windows MFT
 - **🪟 Windows Ancestor Traversal:** Resolved a bug in the directory traverser that caused incorrect ancestor resolution on Windows.
@@ -121,6 +140,7 @@ All notable changes to **eDirStat** will be documented in this file.
 - **🪟 UNC Volume Paths:** Resolved an issue where UNC volume paths were not handled correctly in the Windows MFT driver.
 - **🪟 UNC Visual Path Cleanups:** Fixed missing UNC path cleanups across several modals, operations, and explorer views in the GUI.
 - **🧪 Test Suite Fixes:** Updated path reconstruction unit tests for Windows drive compatibility.
+- **📦 Unix-only Dependencies:** Restricted the `uzers` dependency compilation to Unix/Linux targets to avoid MSVC/Windows compile failures.
 
 #### Directory Scanner & Deduplicator
 - **🧹 Deduplication Group Validation:** Fixed a bug in the deduplicator where error-prone groups were not disqualified properly.
@@ -132,6 +152,9 @@ All notable changes to **eDirStat** will be documented in this file.
 - **🧪 CI/CD Toolchain Pinning:** Updated CI/CD test and release workflows to compile with `nightly-2026-06-13` to match the local toolchain.
 - **📝 Clippy Warnings in Docs:** Fixed documentation formatting and naming to eliminate Clippy lints.
 - **🧪 Clippy Lints:** Resolved new miscellaneous Clippy warnings introduced by the latest Rust nightly compiler.
+- **🧪 Safe UID Checks in Tests:** Replaced unsafe direct `libc::getuid()` calls in unit tests with a safe command execution of `id -u`.
+- **🧪 Clippy Lints:** Resolved clippy warnings around thread-local constant initializers on Windows targets.
+- **🌐 Web Deployment fixes:** Switched the automated deployment of the website to native GitHub Pages actions and ensured logo assets are properly retained in the build directories.
 
 ---
 
