@@ -209,7 +209,7 @@ The engine remains hardlink-aware, allowing it to accurately differentiate betwe
 
 ## Benchmarks
 
-### Vs `WinDirStat` (same video as above)
+### Vs `WinDirStat` (v1.1.2.80) (same video as above)
 
 A dense Windows primary drive.
 
@@ -219,7 +219,7 @@ A dense Windows primary drive.
 
 <https://github.com/user-attachments/assets/72ab0f7a-0dac-48ae-886c-f3f8cb22ad49>
 
-### Vs `WizTree`
+### Vs `WizTree` (v4.31)
 
 A dense Windows primary drive.
 
@@ -229,7 +229,7 @@ A dense Windows primary drive.
 
 <https://github.com/user-attachments/assets/2190e1d1-51ac-4b5e-89e6-80dfd1d9c8de>
 
-### Vs `QDirStat`
+### Vs `QDirStat` (v2.0.01)
 
 To evaluate traversal performance, `edirstat` includes a custom comparison benchmark target comparing it against `qdirstat-cache-writer` (the official headless command-line crawler shipped with `QDirStat` for background scanning).
 
