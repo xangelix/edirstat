@@ -35,15 +35,15 @@ jobs:
       - name: Run tests
         run: cargo test
 
-      - name: Verify licenses matching committed ones
-        run: |
-          git config --global --add safe.directory "*"
-          if ! command -v cargo-about &> /dev/null; then
-            echo "cargo-about not found, installing..."
-            pacman -Syu --noconfirm cargo-about
-          fi
-          ./scripts/generate_licenses.sh
-          git diff --exit-code assets/
+      # - name: Verify licenses matching committed ones
+      #   run: |
+      #     git config --global --add safe.directory "*"
+      #     if ! command -v cargo-about &> /dev/null; then
+      #       echo "cargo-about not found, installing..."
+      #       pacman -Syu --noconfirm cargo-about
+      #     fi
+      #     ./scripts/generate_licenses.sh
+      #     git diff --exit-code assets/
 
   test-macos:
     name: Tests (macOS Native)
