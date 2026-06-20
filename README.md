@@ -408,6 +408,7 @@ Speedup (QDirStat / eDirStat): 6.60x
 ```
 
 > **Benchmark Disclaimer & Configuration:**
+>
 > - Comparisons were conducted against **WinDirStat v1.1.2.80**, **WizTree v4.31**, and **QDirStat v2.0.01** under equivalent, controlled testing conditions with primed system caches.
 > - eDirStat is an independent open-source utility and is not associated with, sponsored by, or endorsed by the trademark holders of those projects.
 > - Performance measurements depend heavily on hardware setup, filesystem fragmentation, operating system scheduling, and disk caching behavior; individual test results may vary.
@@ -420,4 +421,4 @@ This project is licensed under the [MIT License](LICENSE).
 
 ---
 
-*Disclaimer: WinDirStat, WizTree, and QDirStat are trademarks of their respective owners. eDirStat is an independent open-source project and is not affiliated with, sponsored by, or endorsed by the trademark holders.*
+_Disclaimer: WinDirStat, WizTree, and QDirStat are trademarks of their respective owners. eDirStat is an independent open-source project and is not affiliated with, sponsored by, or endorsed by the trademark holders._
