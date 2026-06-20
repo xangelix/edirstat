@@ -42,6 +42,7 @@ egui-notify = "0.22.0"
 egui-table-kit = "0.2.1"
 egui_extras = { version = "0.34.3", features = ["svg_text"] }
 egui_plot = "0.35.0"
+include_packed = "0.1.6"
 mimalloc-rspack = { version = "0.2.4", features = ["v3"] }
 open = "5.3.5"
 parking_lot = { version = "0.12.5", features = ["hardware-lock-elision"] }
@@ -70,6 +71,7 @@ sysinfo = { version = "0.39.3", default-features = false, features = ["disk"] }
 uzers = "0.12.2"
 
 [build-dependencies]
+include_packed = { version = "0.1.6", features = ["build"] }
 winresource = "0.1.31"
 
 [profile.release]

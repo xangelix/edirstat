@@ -1,0 +1,33 @@
+# Third Party Open Source Licenses
+
+This page lists the licenses of the projects used in eDirStat.
+
+---
+
+## Overview of licenses
+
+{{#each overview}}
+* [{{name}}](https://spdx.org/licenses/{{id}}.html) ({{count}})
+{{/each}}
+
+---
+
+## All license text
+
+{{#each licenses}}
+### {{name}}
+**Used by:**
+{{#each used_by}}
+* [{{crate.name}}]({{#if crate.repository}}{{crate.repository}}{{else}}https://crates.io/crates/{{crate.name}}{{/if}})
+{{#if crate.license_file}}
+License file contents available in packaged source.
+{{/if}}
+{{/each}}
+
+```text
+{{{text}}}
+```
+
+-----
+
+{{/each}}

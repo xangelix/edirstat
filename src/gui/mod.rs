@@ -98,6 +98,7 @@ pub struct GuiApp {
     pub(crate) delete_confirm_checked: bool,
     pub(crate) delete_node_idx: Option<u32>,
     pub(crate) active_modal: Option<ActiveModal>,
+    pub(crate) show_licenses: bool,
 
     // Saved scan parameters
     pub(crate) current_scan_path: Option<PathBuf>,
@@ -228,6 +229,7 @@ impl GuiApp {
             delete_confirm_checked: false,
             delete_node_idx: None,
             active_modal,
+            show_licenses: false,
             current_scan_path: None,
             scan_start_time: None,
             total_scan_duration: None,
@@ -291,6 +293,7 @@ impl GuiApp {
         self.delete_confirm_checked = false;
         self.delete_node_idx = None;
         self.active_modal = None;
+        self.show_licenses = false;
         self.selected_duplicates.clear();
         self.delete_duplicates_indices.clear();
         self.deduplicator_dir_filter.clear();

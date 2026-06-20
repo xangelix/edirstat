@@ -1249,8 +1249,9 @@ impl GuiApp {
                                     });
 
                                 ui.add_space(16.0);
-                                if ui.button("Close").clicked() {
-                                    self.active_modal = None;
+
+                                if ui.button("View Open Source Licenses").clicked() {
+                                    self.show_licenses = true;
                                 }
                             });
                         });
@@ -1374,6 +1375,94 @@ impl GuiApp {
                 });
             if !open {
                 self.active_modal = None;
+            }
+        }
+
+        if self.show_licenses {
+            let mut open = true;
+            egui::Window::new("📜 Open Source Licenses")
+                .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+                .collapsible(false)
+                .resizable(true)
+                .default_width(650.0)
+                .default_height(500.0)
+                .open(&mut open)
+                .title_bar(false)
+                .frame(
+                    egui::Frame::window(&ctx.global_style())
+                        .fill(theme::BG_WINDOW_SLATE)
+                        .stroke(egui::Stroke::new(1.2f32, egui::Color32::from_rgb(74, 85, 104)))
+                        .inner_margin(egui::Margin::ZERO)
+                        .corner_radius(8.0),
+                )
+                .show(ctx, |ui| {
+                    // Custom Header Area
+                    egui::Frame::new()
+                        .inner_margin(egui::Margin::symmetric(16, 12))
+                        .show(ui, |ui| {
+                            ui.horizontal(|ui| {
+                                ui.heading(
+                                    egui::RichText::new("📜 Open Source Licenses")
+                                        .color(ui.visuals().strong_text_color())
+                                        .strong(),
+                                );
+                                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                    let close_btn = ui.button("❌");
+                                    if close_btn.clicked() {
+                                        self.show_licenses = false;
+                                    }
+                                });
+                            });
+                        });
+
+                    // Thin, subtle separator line matching normal panels
+                    let (rect, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 1.0), egui::Sense::hover());
+                    ui.painter().hline(rect.left()..=rect.right(), rect.center().y, egui::Stroke::new(1.0f32, theme::STROKE_BORDER_SLATE));
+
+                    // Modal Content Frame
+                    egui::Frame::new()
+                        .inner_margin(egui::Margin::same(16))
+                        .show(ui, |ui| {
+                            ui.vertical(|ui| {
+                                ui.label("The following third-party libraries and crates are used in this application:");
+                                ui.add_space(8.0);
+
+                                let mut licenses_text = {
+                                    #[cfg(target_os = "linux")]
+                                    let bytes = include_packed::include_packed!("assets/licenses/linux.md");
+                                    #[cfg(target_os = "windows")]
+                                    let bytes = include_packed::include_packed!("assets/licenses/windows.md");
+                                    #[cfg(target_os = "macos")]
+                                    let bytes = include_packed::include_packed!("assets/licenses/macos.md");
+                                    #[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
+                                    let bytes = include_packed::include_packed!("assets/licenses/linux.md");
+
+                                    String::from_utf8(bytes).unwrap_or_default()
+                                };
+
+                                egui::ScrollArea::vertical()
+                                    .max_height(350.0)
+                                    .show(ui, |ui| {
+                                        ui.add(
+                                            egui::TextEdit::multiline(&mut licenses_text)
+                                                .font(egui::TextStyle::Monospace)
+                                                .desired_width(f32::INFINITY)
+                                                .desired_rows(18)
+                                                .interactive(true)
+                                        );
+                                    });
+
+                                ui.add_space(16.0);
+                                ui.horizontal(|ui| {
+                                    if ui.button("Close").clicked() {
+                                        self.show_licenses = false;
+                                    }
+                                });
+                            });
+                        });
+                });
+            if !open {
+                self.show_licenses = false;
             }
         }
     }

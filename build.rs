@@ -10,5 +10,11 @@ fn main() -> std::io::Result<()> {
         res.compile()?;
     }
 
+    // Pack assets (licenses subdirectory only)
+    include_packed::Config::new("assets/licenses")
+        .level(15)
+        .build()
+        .map_err(std::io::Error::other)?;
+
     Ok(())
 }
