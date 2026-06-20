@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>eDirStat</title>
+    <meta name="description" content="Modern, high-performance, cross-platform disk usage analyzer written in Rust.">
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="eDirStat">
+    <meta property="og:description" content="Modern, high-performance, cross-platform disk usage analyzer written in Rust.">
+    
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:title" content="eDirStat">
+    <meta property="twitter:description" content="Modern, high-performance, cross-platform disk usage analyzer written in Rust.">
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=Outfit:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+    <!-- Stylesheets -->
+    <link rel="stylesheet" href="https://edirstat.com/assets/main.css?h=355cebc13975b863d297">
+</head>
+<body>
+    
+<!-- Grid Background -->
+<div class="grid-bg"></div>
+
+<!-- Header -->
+<header class="header">
+    <div class="header-container">
+        <a href="#" class="logo">
+            <img src="https://edirstat.com/assets/logo-nosubtext-transparent.svg" alt="eDirStat Logo" class="logo-img">
+        </a>
+        <nav class="nav">
+            <a href="#features" class="nav-link">Features</a>
+            <a href="#simulator" class="nav-link">Simulator</a>
+            <a href="#benchmarks" class="nav-link">Benchmarks</a>
+            <a href="#guide" class="nav-link">Guide</a>
+        </nav>
+        <div class="header-actions">
+            <a href="https:&#x2F;&#x2F;github.com&#x2F;xangelix&#x2F;edirstat" target="_blank" class="btn btn-secondary btn-icon" aria-label="GitHub">
+                <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"></path><path d="M9 18c-4.51 2-5-2-7-2"></path></svg>
+            </a>
+            <a href="https:&#x2F;&#x2F;xangelix.itch.io&#x2F;edirstat" target="_blank" class="btn btn-primary btn-glow">
+                <i data-lucide="download"></i>
+                <span>Download</span>
+            </a>
+        </div>
+    </div>
+</header>
+
+<!-- Main Container -->
+<main class="main-content">
+    
+    <!-- Hero Section -->
+    <section class="hero-section">
+        <div class="hero-glow"></div>
+        <div class="hero-content">
+            <div class="hero-logo-wrapper">
+                <img src="https://edirstat.com/assets/logo-nosubtext-transparent.svg" alt="eDirStat Logo" class="hero-logo">
+            </div>
+            <div class="version-badge">
+                <span class="badge-dot"></span>
+                <span>v2.0.0 Out Now</span>
+            </div>
+            
+            <h1 class="hero-title">
+                Reclaim Your Disk Space <br>
+                <span class="gradient-text">At Warp Speed</span>
+            </h1>
+            
+            <p class="hero-subtitle">
+                A modern, high-performance, cross-platform disk usage analyzer written in Rust. 
+                Coupling a work-stealing multithreaded directory walker with a zero-copy arena data structure 
+                to scan millions of files in milliseconds.
+            </p>
+            
+            <div class="hero-buttons">
+                <a href="https:&#x2F;&#x2F;xangelix.itch.io&#x2F;edirstat" target="_blank" class="btn btn-primary btn-lg btn-glow">
+                    <i data-lucide="download"></i>
+                    <span>Download Precompiled Binaries</span>
+                </a>
+                <a href="https:&#x2F;&#x2F;github.com&#x2F;xangelix&#x2F;edirstat" target="_blank" class="btn btn-secondary btn-lg">
+                    <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px;"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"></path><path d="M9 18c-4.51 2-5-2-7-2"></path></svg>
+                    <span>View Source Code</span>
+                </a>
+            </div>
+            
+            <div class="hero-note">
+                <i data-lucide="shield" class="note-icon"></i>
+                <span>eDirStat is 100% open-source under the MIT license. Pre-compiled binaries are provided exclusively through itch.io.</span>
+            </div>
+        </div>
+    </section>
+
+    <!-- Stats Section -->
+    <section class="stats-section">
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value">26.9x</div>
+                <div class="stat-label">Faster than WinDirStat</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">9.6x</div>
+                <div class="stat-label">Faster than QDirStat</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">Zero</div>
+                <div class="stat-label">Copy Snapshot Parsing</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">100%</div>
+                <div class="stat-label">Safe & Native Rust</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Simulator Section (Treemap Mockup) -->
+    <section id="simulator" class="section">
+        <div class="section-header">
+            <h2 class="section-title">Experience the Speed</h2>
+            <p class="section-subtitle">Interact with this real-time simulator showing how eDirStat maps and visualizes disk space.</p>
+        </div>
+        
+        <div class="simulator-container glass-card">
+            <!-- Left panel: File Tree -->
+            <div class="simulator-tree">
+                <div class="panel-header">
+                    <i data-lucide="folder" class="panel-header-icon"></i>
+                    <span>Directory Explorer</span>
+                </div>
+                <div class="tree-content" id="sim-tree-root">
+                    <!-- Loaded dynamically via JS -->
+                </div>
+            </div>
+            
+            <!-- Right panel: Treemap & Details -->
+            <div class="simulator-visualization">
+                <div class="panel-header">
+                    <i data-lucide="eye" class="panel-header-icon"></i>
+                    <span>Treemap Diagram</span>
+                </div>
+                <div class="treemap-canvas" id="sim-treemap-canvas">
+                    <!-- Rendered dynamically via JS -->
+                </div>
+                <div class="selection-footer" id="sim-selection-footer">
+                    <div class="selection-info">
+                        <i data-lucide="file" class="file-icon" id="sim-footer-icon"></i>
+                        <span class="file-path" id="sim-footer-path">Hover or click a block above to inspect...</span>
+                    </div>
+                    <div class="selection-size" id="sim-footer-size"></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Benchmarks Section -->
+    <section id="benchmarks" class="section">
+        <div class="section-header">
+            <h2 class="section-title">Market-Leading Performance for <br> All Platforms</h2>
+            <p class="section-subtitle">Real benchmarks comparing directory traversal times. Select a device drive to see the results.</p>
+        </div>
+        
+        <div class="benchmarks-container glass-card">
+            <div class="benchmarks-sidebar">
+                <button class="benchmark-tab active" data-target="mzvlb">
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M0 3.449L9.75 2.1v9.451H0V3.449zM0 12.45h9.75v9.45L0 20.551v-8.101zM11.25 1.899L24 0v11.55H11.25V1.899zM11.25 12.45H24v11.55l-12.75-1.9v-9.65z"/>
+                    </svg>
+                    <div class="tab-info">
+                        <span class="tab-title">NVMe PCIe SSD (Windows)</span>
+                        <span class="tab-desc">Samsung MZVLB512HBJQ [ntfs]</span>
+                    </div>
+                </button>
+                <button class="benchmark-tab" data-target="nvme">
+                    <svg viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M8.996 4.497c.104-.076.1-.168.186-.158s.022.102-.098.207c-.12.104-.308.243-.46.323-.291.152-.631.336-.993.336s-.647-.167-.853-.33c-.102-.082-.186-.162-.248-.221-.11-.086-.096-.207-.052-.204.075.01.087.109.134.153.064.06.144.137.241.214.195.154.454.304.778.304s.702-.19.932-.32c.13-.073.297-.204.433-.304M7.34 3.781c.055-.02.123-.031.174-.003.011.006.024.021.02.034-.012.038-.074.032-.11.05-.032.017-.057.052-.093.054-.034 0-.086-.012-.09-.046-.007-.044.058-.072.1-.089m.581-.003c.05-.028.119-.018.173.003.041.017.106.045.1.09-.004.033-.057.046-.09.045-.036-.002-.062-.037-.093-.053-.036-.019-.098-.013-.11-.051-.004-.013.008-.028.02-.034"/>
+                        <path fill-rule="evenodd" d="M8.446.019c2.521.003 2.38 2.66 2.364 4.093-.01.939.509 1.574 1.04 2.244.474.56 1.095 1.38 1.45 2.32.29.765.402 1.613.115 2.465a.8.8 0 0 1 .254.152l.001.002c.207.175.271.447.329.698.058.252.112.488.224.615.344.382.494.667.48.922-.015.254-.203.43-.435.57-.465.28-1.164.491-1.586 1.002-.443.527-.99.83-1.505.871a1.25 1.25 0 0 1-1.256-.716v-.001a1 1 0 0 1-.078-.21c-.67.038-1.252-.165-1.718-.128-.687.038-1.116.204-1.506.206-.151.331-.445.547-.808.63-.5.114-1.126 0-1.743-.324-.577-.306-1.31-.278-1.85-.39-.27-.057-.51-.157-.626-.384-.116-.226-.095-.538.07-.988.051-.16.012-.398-.026-.648a2.5 2.5 0 0 1-.037-.369c0-.133.022-.265.087-.386v-.002c.14-.266.368-.377.577-.451s.397-.125.53-.258c.143-.15.27-.374.443-.56q.036-.037.073-.07c-.081-.538.007-1.105.192-1.662.393-1.18 1.223-2.314 1.811-3.014.502-.713.65-1.287.701-2.016.042-.997-.705-3.974 2.112-4.2q.168-.015.321-.013m2.596 10.866-.03.016c-.223.121-.348.337-.427.656-.08.32-.107.733-.13 1.206v.001c-.023.37-.192.824-.31 1.267s-.176.862-.036 1.128v.002c.226.452.608.636 1.051.601s.947-.304 1.36-.795c.474-.576 1.218-.796 1.638-1.05.21-.126.324-.242.333-.4.009-.157-.097-.403-.425-.767-.17-.192-.217-.462-.274-.71-.056-.247-.122-.468-.26-.585l-.001-.001c-.18-.157-.356-.17-.565-.164q-.069.001-.14.005c-.239.275-.805.612-1.197.508-.359-.09-.562-.508-.587-.918m-7.204.03H3.83c-.189.002-.314.09-.44.225-.149.158-.276.382-.445.56v.002h-.002c-.183.184-.414.239-.61.31-.195.069-.353.143-.46.35v.002c-.085.155-.066.378-.029.624.038.245.096.507.018.746v.002l-.001.002c-.157.42-.516.64-.91.564-.383-.075-.615-.47-.68-.873v-.002c-.042-.25-.098-.466-.23-.585C.283 14.866.11 14.85-.1 14.856q-.06.002-.12.008c.196-.282.684-.666 1.096-.612.39.052.627.424.71.838.077.387.214.544.384.629.17.086.38.033.565-.072z"/>
+                    </svg>
+                    <div class="tab-info">
+                        <span class="tab-title">NVMe PCIe Gen 4 SSD</span>
+                        <span class="tab-desc">Samsung 990 Pro [btrfs]</span>
+                    </div>
+                </button>
+                <button class="benchmark-tab" data-target="sata">
+                    <svg viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M8.996 4.497c.104-.076.1-.168.186-.158s.022.102-.098.207c-.12.104-.308.243-.46.323-.291.152-.631.336-.993.336s-.647-.167-.853-.33c-.102-.082-.186-.162-.248-.221-.11-.086-.096-.207-.052-.204.075.01.087.109.134.153.064.06.144.137.241.214.195.154.454.304.778.304s.702-.19.932-.32c.13-.073.297-.204.433-.304M7.34 3.781c.055-.02.123-.031.174-.003.011.006.024.021.02.034-.012.038-.074.032-.11.05-.032.017-.057.052-.093.054-.034 0-.086-.012-.09-.046-.007-.044.058-.072.1-.089m.581-.003c.05-.028.119-.018.173.003.041.017.106.045.1.09-.004.033-.057.046-.09.045-.036-.002-.062-.037-.093-.053-.036-.019-.098-.013-.11-.051-.004-.013.008-.028.02-.034"/>
+                        <path fill-rule="evenodd" d="M8.446.019c2.521.003 2.38 2.66 2.364 4.093-.01.939.509 1.574 1.04 2.244.474.56 1.095 1.38 1.45 2.32.29.765.402 1.613.115 2.465a.8.8 0 0 1 .254.152l.001.002c.207.175.271.447.329.698.058.252.112.488.224.615.344.382.494.667.48.922-.015.254-.203.43-.435.57-.465.28-1.164.491-1.586 1.002-.443.527-.99.83-1.505.871a1.25 1.25 0 0 1-1.256-.716v-.001a1 1 0 0 1-.078-.21c-.67.038-1.252-.165-1.718-.128-.687.038-1.116.204-1.506.206-.151.331-.445.547-.808.63-.5.114-1.126 0-1.743-.324-.577-.306-1.31-.278-1.85-.39-.27-.057-.51-.157-.626-.384-.116-.226-.095-.538.07-.988.051-.16.012-.398-.026-.648a2.5 2.5 0 0 1-.037-.369c0-.133.022-.265.087-.386v-.002c.14-.266.368-.377.577-.451s.397-.125.53-.258c.143-.15.27-.374.443-.56q.036-.037.073-.07c-.081-.538.007-1.105.192-1.662.393-1.18 1.223-2.314 1.811-3.014.502-.713.65-1.287.701-2.016.042-.997-.705-3.974 2.112-4.2q.168-.015.321-.013m2.596 10.866-.03.016c-.223.121-.348.337-.427.656-.08.32-.107.733-.13 1.206v.001c-.023.37-.192.824-.31 1.267s-.176.862-.036 1.128v.002c.226.452.608.636 1.051.601s.947-.304 1.36-.795c.474-.576 1.218-.796 1.638-1.05.21-.126.324-.242.333-.4.009-.157-.097-.403-.425-.767-.17-.192-.217-.462-.274-.71-.056-.247-.122-.468-.26-.585l-.001-.001c-.18-.157-.356-.17-.565-.164q-.069.001-.14.005c-.239.275-.805.612-1.197.508-.359-.09-.562-.508-.587-.918m-7.204.03H3.83c-.189.002-.314.09-.44.225-.149.158-.276.382-.445.56v.002h-.002c-.183.184-.414.239-.61.31-.195.069-.353.143-.46.35v.002c-.085.155-.066.378-.029.624.038.245.096.507.018.746v.002l-.001.002c-.157.42-.516.64-.91.564-.383-.075-.615-.47-.68-.873v-.002c-.042-.25-.098-.466-.23-.585C.283 14.866.11 14.85-.1 14.856q-.06.002-.12.008c.196-.282.684-.666 1.096-.612.39.052.627.424.71.838.077.387.214.544.384.629.17.086.38.033.565-.072z"/>
+                    </svg>
+                    <div class="tab-info">
+                        <span class="tab-title">SATA SSD (8TB)</span>
+                        <span class="tab-desc">Samsung 870 QVO [btrfs]</span>
+                    </div>
+                </button>
+                <button class="benchmark-tab" data-target="hdd">
+                    <svg viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M8.996 4.497c.104-.076.1-.168.186-.158s.022.102-.098.207c-.12.104-.308.243-.46.323-.291.152-.631.336-.993.336s-.647-.167-.853-.33c-.102-.082-.186-.162-.248-.221-.11-.086-.096-.207-.052-.204.075.01.087.109.134.153.064.06.144.137.241.214.195.154.454.304.778.304s.702-.19.932-.32c.13-.073.297-.204.433-.304M7.34 3.781c.055-.02.123-.031.174-.003.011.006.024.021.02.034-.012.038-.074.032-.11.05-.032.017-.057.052-.093.054-.034 0-.086-.012-.09-.046-.007-.044.058-.072.1-.089m.581-.003c.05-.028.119-.018.173.003.041.017.106.045.1.09-.004.033-.057.046-.09.045-.036-.002-.062-.037-.093-.053-.036-.019-.098-.013-.11-.051-.004-.013.008-.028.02-.034"/>
+                        <path fill-rule="evenodd" d="M8.446.019c2.521.003 2.38 2.66 2.364 4.093-.01.939.509 1.574 1.04 2.244.474.56 1.095 1.38 1.45 2.32.29.765.402 1.613.115 2.465a.8.8 0 0 1 .254.152l.001.002c.207.175.271.447.329.698.058.252.112.488.224.615.344.382.494.667.48.922-.015.254-.203.43-.435.57-.465.28-1.164.491-1.586 1.002-.443.527-.99.83-1.505.871a1.25 1.25 0 0 1-1.256-.716v-.001a1 1 0 0 1-.078-.21c-.67.038-1.252-.165-1.718-.128-.687.038-1.116.204-1.506.206-.151.331-.445.547-.808.63-.5.114-1.126 0-1.743-.324-.577-.306-1.31-.278-1.85-.39-.27-.057-.51-.157-.626-.384-.116-.226-.095-.538.07-.988.051-.16.012-.398-.026-.648a2.5 2.5 0 0 1-.037-.369c0-.133.022-.265.087-.386v-.002c.14-.266.368-.377.577-.451s.397-.125.53-.258c.143-.15.27-.374.443-.56q.036-.037.073-.07c-.081-.538.007-1.105.192-1.662.393-1.18 1.223-2.314 1.811-3.014.502-.713.65-1.287.701-2.016.042-.997-.705-3.974 2.112-4.2q.168-.015.321-.013m2.596 10.866-.03.016c-.223.121-.348.337-.427.656-.08.32-.107.733-.13 1.206v.001c-.023.37-.192.824-.31 1.267s-.176.862-.036 1.128v.002c.226.452.608.636 1.051.601s.947-.304 1.36-.795c.474-.576 1.218-.796 1.638-1.05.21-.126.324-.242.333-.4.009-.157-.097-.403-.425-.767-.17-.192-.217-.462-.274-.71-.056-.247-.122-.468-.26-.585l-.001-.001c-.18-.157-.356-.17-.565-.164q-.069.001-.14.005c-.239.275-.805.612-1.197.508-.359-.09-.562-.508-.587-.918m-7.204.03H3.83c-.189.002-.314.09-.44.225-.149.158-.276.382-.445.56v.002h-.002c-.183.184-.414.239-.61.31-.195.069-.353.143-.46.35v.002c-.085.155-.066.378-.029.624.038.245.096.507.018.746v.002l-.001.002c-.157.42-.516.64-.91.564-.383-.075-.615-.47-.68-.873v-.002c-.042-.25-.098-.466-.23-.585C.283 14.866.11 14.85-.1 14.856q-.06.002-.12.008c.196-.282.684-.666 1.096-.612.39.052.627.424.71.838.077.387.214.544.384.629.17.086.38.033.565-.072z"/>
+                    </svg>
+                    <div class="tab-info">
+                        <span class="tab-title">16TB Mechanical HDD</span>
+                        <span class="tab-desc">Toshiba MG09SACA [btrfs]</span>
+                    </div>
+                </button>
+            </div>
+            <div class="benchmarks-chart-wrapper">
+                <div class="chart-header">
+                    <h3 class="chart-title" id="benchmark-title">SAMSUNG MZVLB512HBJQ PCIe SSD</h3>
+                    <span class="chart-subtitle" id="benchmark-desc">Scanning Windows system directories containing deep system libraries and DLLs.</span>
+                </div>
+                <div class="chart-canvas-container">
+                    <canvas id="benchmarkChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Key Features Section -->
+    <section id="features" class="section">
+        <div class="section-header">
+            <h2 class="section-title">Architected for Extreme Performance</h2>
+            <p class="section-subtitle">Every stage of eDirStat is optimized to eliminate bottlenecks and fully exploit modern hardware.</p>
+        </div>
+        
+        <div class="features-grid">
+            <div class="feature-card glass-card">
+                <div class="feature-icon-wrapper purple-glow">
+                    <i data-lucide="cpu"></i>
+                </div>
+                <h3 class="feature-title">Work-Stealing Walker</h3>
+                <p class="feature-description">
+                    Powered by a lock-free queue that saturates all available CPU cores. Idle threads steal directory branches to guarantee zero idle core overhead.
+                </p>
+            </div>
+
+            <div class="feature-card glass-card">
+                <div class="feature-icon-wrapper blue-glow">
+                    <i data-lucide="zap"></i>
+                </div>
+                <h3 class="feature-title">NTFS MFT Scanner</h3>
+                <p class="feature-description">
+                    Directly accesses raw Windows NTFS handles to parse the Master File Table. Bypasses the OS filesystem abstraction layers for near-instant scanning.
+                </p>
+            </div>
+
+            <div class="feature-card glass-card">
+                <div class="feature-icon-wrapper cyan-glow">
+                    <i data-lucide="shield"></i>
+                </div>
+                <h3 class="feature-title">7-Stage Deduplication</h3>
+                <p class="feature-description">
+                    Deduplicates byte-for-byte identical files with minimal disk reads. Filters via size, hashes (prefix, midpoint, suffix), and validates in real-time.
+                </p>
+            </div>
+
+            <div class="feature-card glass-card">
+                <div class="feature-icon-wrapper violet-glow">
+                    <i data-lucide="database"></i>
+                </div>
+                <h3 class="feature-title">Zero-Copy Snapshots</h3>
+                <p class="feature-description">
+                    Serializes directory state to a contiguous byte stream (`.edst` files). Memory maps using `memmap2` and casts directly, removing parser load.
+                </p>
+            </div>
+
+            <div class="feature-card glass-card">
+                <div class="feature-icon-wrapper indigo-glow">
+                    <i data-lucide="eye"></i>
+                </div>
+                <h3 class="feature-title">Dynamic Visualizations</h3>
+                <p class="feature-description">
+                    Cycles between layout modes, including interactive treemaps, directory composition charts, duplicate file composition, and timelines.
+                </p>
+            </div>
+
+            <div class="feature-card glass-card">
+                <div class="feature-icon-wrapper green-glow">
+                    <i data-lucide="trash-2"></i>
+                </div>
+                <h3 class="feature-title">Bulk Operations</h3>
+                <p class="feature-description">
+                    Select multiple nodes at once in the directory trees or the deduplicator to execute batch trashing, permanent deletions, or folder link creation.
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Installation & Usage Guide -->
+    <section id="guide" class="section">
+        <div class="section-header">
+            <h2 class="section-title">Getting Started</h2>
+            <p class="section-subtitle">Set up, compile from source, or run eDirStat directly on your operating system.</p>
+        </div>
+        
+        <div class="guide-container glass-card">
+            <div class="guide-tabs">
+                <button class="guide-tab active" data-target="guide-run">
+                    <span>Running eDirStat</span>
+                </button>
+                <button class="guide-tab" data-target="guide-build">
+                    <span>Build from Source</span>
+                </button>
+            </div>
+            <div class="guide-content-wrapper">
+                <div class="guide-pane active" id="guide-run">
+                    <p class="guide-text">Run the graphical user interface from your terminal. You can pass a directory path as a positional argument to start scanning immediately:</p>
+                    <pre><code class="language-bash"># Run GUI with default setup
+./edirstat
+
+# Run GUI and immediately scan a directory
+./edirstat /path/to/scan</code></pre>
+                    <div class="tip-box">
+                        <i data-lucide="zap" class="tip-icon"></i>
+                        <div>
+                            <strong>Windows Tip:</strong> You can just double-click the executable on Windows, but run eDirStat as an Administrator to unlock maximum performance.
+                        </div>
+                    </div>
+                </div>
+                <div class="guide-pane" id="guide-build">
+                    <p class="guide-text">To compile eDirStat from source, make sure you have the Rust compiler and cargo nightly toolchain installed:</p>
+                    <pre><code class="language-bash"># Clone the repository
+git clone https://github.com/xangelix/edirstat.git
+cd edirstat
+
+# Compile optimized release binary
+cargo build --release</code></pre>
+                    <div class="tip-box">
+                        <i data-lucide="shield" class="tip-icon"></i>
+                        <div>
+                            <strong>Platform Support:</strong> Fully supported on Linux, macOS, and Windows (requires nightly toolchain on Windows for `windows_by_handle`).
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA Section -->
+    <section class="cta-section">
+        <div class="cta-glow"></div>
+        <div class="cta-grid">
+            <!-- Card 1: Download -->
+            <div class="cta-card glass-card">
+                <h2 class="cta-title">Ready to Scan?</h2>
+                <p class="cta-subtitle">Get the official binaries pre-compiled for your platform directly on our itch.io page.</p>
+                <a href="https:&#x2F;&#x2F;xangelix.itch.io&#x2F;edirstat" target="_blank" class="btn btn-primary btn-lg btn-glow">
+                    <i data-lucide="download"></i>
+                    <span>Get Binaries on itch.io</span>
+                </a>
+            </div>
+            
+            <!-- Card 2: Contribute -->
+            <div class="cta-card glass-card">
+                <h2 class="cta-title">Want to Contribute?</h2>
+                <p class="cta-subtitle">eDirStat is fully open-source. Report issues, request features, or submit pull requests on GitHub.</p>
+                <a href="https:&#x2F;&#x2F;github.com&#x2F;xangelix&#x2F;edirstat" target="_blank" class="btn btn-secondary btn-lg">
+                    <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px;"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"></path><path d="M9 18c-4.51 2-5-2-7-2"></path></svg>
+                    <span>Visit GitHub Repository</span>
+                </a>
+            </div>
+        </div>
+    </section>
+
+</main>
+
+<!-- Footer -->
+<footer class="footer">
+    <div class="footer-container">
+        <div class="footer-left">
+            <div class="logo">
+                <img src="https://edirstat.com/assets/logo-nosubtext-transparent.svg" alt="eDirStat Logo" class="logo-img">
+            </div>
+            <p class="footer-desc">Fast, modern disk usage analyzer built in safe, native Rust.</p>
+        </div>
+        <div class="footer-right">
+            <div class="footer-links">
+                <a href="https:&#x2F;&#x2F;github.com&#x2F;xangelix&#x2F;edirstat" target="_blank" class="footer-link">
+                    <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"></path><path d="M9 18c-4.51 2-5-2-7-2"></path></svg> GitHub
+                </a>
+                <a href="https:&#x2F;&#x2F;xangelix.itch.io&#x2F;edirstat" target="_blank" class="footer-link">
+                    <i data-lucide="download"></i> itch.io
+                </a>
+                <a href="https:&#x2F;&#x2F;github.com&#x2F;xangelix&#x2F;edirstat/blob/main/LICENSE" target="_blank" class="footer-link">
+                    Licensed under MIT
+                </a>
+            </div>
+        </div>
+    </div>
+    <div class="footer-bottom">
+        <p>&copy; 2026 eDirStat. Released under the MIT License.</p>
+    </div>
+</footer>
+
+    
+    <!-- Scripts -->
+    <script type="module" src="https://edirstat.com/assets/main.js?h=30fa9a2a3076f2502c2a"></script>
+</body>
+</html>
