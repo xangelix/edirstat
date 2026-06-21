@@ -16,7 +16,18 @@ categories = [
 ]
 keywords = ["disk-usage", "treemap", "egui", "dirstat", "zero-copy"]
 
-exclude = ["docs/videos/*", "*.mp4"]
+include = [
+    "/Cargo.toml",
+    "/src/**/*",
+    "/assets/licenses/**/*",
+    "/assets/img/icon.ico",
+    "/assets/img/icon_512x.png",
+    "/assets/img/logo-nosubtext-transparent.svg",
+    "/assets/img/icon-transparent.svg",
+    "/build.rs",
+    "/LICENSE",
+    "/README.md",
+]
 
 [features]
 default = ["online"]

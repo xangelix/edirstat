@@ -141,6 +141,7 @@ All notable changes to **eDirStat** will be documented in this file.
 - **📦 Dependency Upgrades:** Upgraded the `arrayvec` crate dependency to version `0.7.7`.
 - **📄 README Benchmarks Update:** Updated README benchmarks with program versions, a WizTree drag race video comparison, and updated WinDirStat speed multipliers.
 - **📄 Benchmark Disclaimers:** Added program versions and benchmark methodology disclaimers to the README and website.
+- **📦 Minimum Cargo Package Files:** Add `include` to `Cargo.toml` to include only necessary files in the package.
 
 ### Fixed
 
