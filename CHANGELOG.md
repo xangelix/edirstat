@@ -4,7 +4,7 @@ All notable changes to **eDirStat** will be documented in this file.
 
 ---
 
-## [Unreleased]
+## [v2.0.0] - 2026-06-21
 
 ### Added
 
