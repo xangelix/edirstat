@@ -9,11 +9,13 @@ All notable changes to **eDirStat** will be documented in this file.
 ### Added
 
 #### Windows & NTFS Integration
+
 - **🪟 Windows NTFS MFT Driver:** Integrated a new Windows-native NTFS driver utilizing the Master File Table (MFT) for near-instantaneous drive scanning on Windows.
 - **🪟 Administrator Restart Modal:** Added a prompt to restart the application as administrator to allow Master File Table (MFT) access on Windows.
 - **🪟 Windows UNC Path Stripping:** Automatically strip UNC volume prefixes (such as `\\?\`) from directory paths in all visual components.
 
 #### GUI Enhancements & Features
+
 - **🗂️ WinDirStat Layout Mode:** Added a brand new WinDirStat-style layout mode for a classic, familiar disk usage visualization.
 - **☑️ Multi-Select & Multi-Operations:** Added support for selecting multiple items and performing bulk operations in the GUI.
 - **❓ "How it Works" Modal:** Added an informative explanation modal to help users understand the deduplication process.
@@ -33,10 +35,12 @@ All notable changes to **eDirStat** will be documented in this file.
 - **⚖️ Dependency Licenses Modal:** Added an open source license viewing modal inside the About dialog to display packaged licenses for dependencies.
 
 #### CLI & Headless Tooling
+
 - **🚀 CLI / Positional Arguments:** Added support for passing a directory path as a positional command-line argument to automatically start scanning on startup.
 - **🚀 Headless Snapshot Mode:** Added a headless command-line mode to run directory scans and automatically save results to a `.edst` snapshot file, bypassing the GUI.
 
 #### Project Infrastructure & Packaging
+
 - **🍏 macOS Sandboxing Entitlements:** Packaged the macOS app with proper sandboxing entitlements for improved security and smoother OS integration.
 - **📦 Windows Installer (Inno Setup):** Added support for building proper Windows setup/installer binaries (`.exe` via Inno Setup) in the CI/CD pipeline on every commit.
 - **⚙️ EditorConfig:** Added an `.editorconfig` file to establish and enforce consistent coding styles across different editors.
@@ -49,6 +53,7 @@ All notable changes to **eDirStat** will be documented in this file.
 - **⚖️ Packaged License Generation:** Integrated `cargo-about` to generate target-specific open source license lists (`assets/licenses/<target>.md`) and packaged them into the binary using `include_packed`.
 
 #### Web App & Simulator
+
 - **🌐 eDirStat Web V2:** Redesigned and launched the official product website (`/web`) featuring an interactive, live simulator for the cryptographic deduplication pipeline and treemap dashboard.
 - **🌐 Responsive Displays & Ratios:** Expanded CSS layout grids and flexbox viewport definitions to support a wide range of mobile and ultra-wide monitor aspect ratios without clipping.
 - **🌐 Deduplicator Simulator:** Built a fully client-side animated simulator of the eDirStat deduplication process, showing steps like size partitioning, header hashing, midpoint/suffix matching, and BLAKE3 checking.
@@ -56,6 +61,7 @@ All notable changes to **eDirStat** will be documented in this file.
 - **🌐 Favicon Integration:** Added a website favicon referenced from `assets/img/`.
 
 #### Developer Tooling & Testing
+
 - **🛠️ Tracy Profiling:** Integrated basic support for Tracy-based profiling to assist in performance diagnostics.
 - **🧪 Typos Check CI/CD:** Initialized automated spelling/typos check workflow in the CI/CD pipeline.
 - **🧪 Criterion MFT Benchmarks:** Added a benchmarking suite using `criterion` to measure and track Master File Table (MFT) parsing performance.
@@ -64,6 +70,7 @@ All notable changes to **eDirStat** will be documented in this file.
 ### Changed
 
 #### Performance & Allocations
+
 - **⚡ Memory & Speed Optimizations:** Dramatically reduced allocations across the board by adopting `CompactString` in engine models, precalculating directory counts, and reducing deduplicator allocations.
 - **⚡ Parallel MFT Parsing & Sharded Pool:** Parallelized MFT record processing and introduced a sharded `StringPool` to maximize multi-core CPU utilization, yielding a ~49% speedup.
 - **⚡ MFT Flat Representation:** Implemented a flat memory representation for hierarchy resolution in the MFT driver, reducing traversal times by ~9.6%.
@@ -90,6 +97,7 @@ All notable changes to **eDirStat** will be documented in this file.
 - **⚡ Safe UTF-16 Decoder Optimization:** Replaced unsafe SIMD AVX2/SSE implementations with safe Rust iterators and boundary checks that optimize down to SIMD via LLVM.
 
 #### UI, UX & Visual Polish
+
 - **🎨 Rebranded Visuals:** Replaced existing logos and icons across the GUI and documentation with modern, high-quality SVG/raster variants, and added a utility script for icon generation.
 - **🎨 UI & Layout Refinements:** Polished the user interface by organizing bottom panel controls, improving center panel padding, adjusting column spacing, and enhancing modal layouts with higher contrast.
 - **🧹 Deduplicator Cleanup:** Disabled the file extensions panel while viewing the Deduplicator tab to reduce visual clutter, and cleaned up tab headings.
@@ -101,6 +109,7 @@ All notable changes to **eDirStat** will be documented in this file.
 - **🌐 Web Disk Simulator Polish:** Cleaned up disk names and models in the website simulator.
 
 #### Platform Compatibility & Hardening
+
 - **🛡️ Persistence Hardening:** Improved overflow protection for memory-mapped persistence files.
 - **🗂️ Platform-Native Path Slashes:** Improved cross-platform path slash handling to ensure correct directory traversal and representation.
 - **🛡️ Treemap Bounds Protection:** Added robust bounds checks and protections when selecting the root node in the interactive treemap.
@@ -116,6 +125,7 @@ All notable changes to **eDirStat** will be documented in this file.
 - **🛡️ Safe Windows FS Type Check:** Replaced unsafe Win32 calls to `GetVolumeInformationW` with safe cross-platform drive inspection APIs from the `sysinfo` crate.
 
 #### Project Maintenance & Build Configuration
+
 - **📦 Dependency Updates:** Bumped project dependencies to their latest versions for improved security and stability.
 - **💾 Persistence Format V2:** Bumped the snapshot persistence header to `v2` to support new metadata features.
 - **📦 Dependency Upgrades:** Upgraded underlying project dependencies, including updating `egui-table-kit` to version `0.2.1` and integrating `egui-notify`.
@@ -135,6 +145,7 @@ All notable changes to **eDirStat** will be documented in this file.
 ### Fixed
 
 #### GUI & Interactive Elements
+
 - **🖱️ Selection Behavior:** Restored the ability to de-select nodes in both the directory explorer and the interactive treemap.
 - **🔘 Dropdown Interactivity:** Fixed the click hitbox for dropdown buttons in the directory explorer.
 - **🖱️ Treemap & Scatter Plot Bugfixes:** Truncated treemap depth past a set limit to prevent rendering overflows, resolved a block selection issue in the treemap, and improved hover text wrapping on plots.
@@ -143,6 +154,7 @@ All notable changes to **eDirStat** will be documented in this file.
 - **🌐 WizTree Speed Metrics:** Corrected the WizTree benchmark time representation on the website simulator from 4.41s to 4.38s.
 
 #### Cross-Platform & Windows MFT
+
 - **🪟 Windows Ancestor Traversal:** Resolved a bug in the directory traverser that caused incorrect ancestor resolution on Windows.
 - **🪟 Windows Drive Resolution:** Fixed a path-resolution issue for Windows root drives in the directory allocator arena.
 - **📦 Cross-Platform Compilation:** Fixed build configurations so that the `windows` crate dependency is only compiled on Windows targets and correctly supports MSVC builds.
@@ -153,11 +165,13 @@ All notable changes to **eDirStat** will be documented in this file.
 - **📦 Unix-only Dependencies:** Restricted the `uzers` dependency compilation to Unix/Linux targets to avoid MSVC/Windows compile failures.
 
 #### Directory Scanner & Deduplicator
+
 - **🧹 Deduplication Group Validation:** Fixed a bug in the deduplicator where error-prone groups were not disqualified properly.
 - **🌀 Directory Cycling Prevention:** Fixed a potential infinite loop or dir cycling bug during recursive `walk_dir` scanning.
 - **⏱️ Epoch Formatting Overflow Protection:** Added checks to prevent year overflow in Unix timestamp date/time conversion.
 
 #### Documentation & Build Pipelines
+
 - **🍏 macOS Packaging:** Fixed incorrect icon paths in the macOS CI/CD release configuration.
 - **🧪 CI/CD Toolchain Pinning:** Updated CI/CD test and release workflows to compile with `nightly-2026-06-13` to match the local toolchain.
 - **📝 Clippy Warnings in Docs:** Fixed documentation formatting and naming to eliminate Clippy lints.
