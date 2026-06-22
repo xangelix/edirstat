@@ -8,10 +8,24 @@ set -Eeuo pipefail
 TARGET_CPUS="${TARGET_CPUS:-x86-64-v2 x86-64-v3 x86-64-v4 znver3 znver4 znver5 skylake alderlake}"
 MULTIVERS_ZSTD_LEVEL="${MULTIVERS_ZSTD_LEVEL:-20}"
 
-TARGET="x86_64-pc-windows-gnu"
+TARGET="${TARGET:-x86_64-unknown-linux-gnu}"
 PKG_NAME="edirstat"
 BIN_NAME="edirstat"
 CRATE_SUBDIR="runner"
+
+# Determine executable extension and static linking flags based on target
+EXE_EXT=""
+STATIC_FLAG=""
+
+if [[ "$TARGET" == *"windows"* ]]; then
+    EXE_EXT=".exe"
+    STATIC_FLAG="-C target-feature=+crt-static"
+elif [[ "$TARGET" == *"musl"* ]]; then
+    STATIC_FLAG="-C target-feature=+crt-static"
+else
+    # Default GNU Linux or other targets where static glibc is problematic
+    STATIC_FLAG=""
+fi
 
 PROJECT_DIR="$(pwd)"
 BIN_PATH="${TARGET}/release/${BIN_NAME}"
@@ -21,6 +35,7 @@ echo "==========================================================="
 echo "🚀 Building local NON-FIPS multivers binary"
 echo "🎯 Target: $TARGET"
 echo "🧠 CPUs:   $TARGET_CPUS"
+echo "🔗 Static: $([ -n "$STATIC_FLAG" ] && echo "Enabled" || echo "Disabled (GNU/Dynamic)")"
 echo "==========================================================="
 
 # 1. Ensure target is installed
@@ -35,15 +50,19 @@ for CPU in $TARGET_CPUS; do
     echo "🔨 Compiling for CPU: $CPU"
     echo "-----------------------------------------------------------"
     
+    # Remove any existing binaries or symlinks to prevent same-file/override errors
+    rm -f "${OUT_DIR}/${BIN_NAME}${EXE_EXT}"
+    rm -f "${OUT_DIR}/${BIN_NAME}-${CPU}${EXE_EXT}"
+    
     # Build with default features so update checks and egui features work fully
-    RUSTFLAGS="--cfg reqwest_unstable -C target-cpu=${CPU} -C target-feature=+crt-static" \
+    RUSTFLAGS="--cfg reqwest_unstable -C target-cpu=${CPU} ${STATIC_FLAG}" \
     cargo build --release \
         --target "$TARGET" \
         --package "$PKG_NAME" \
         --bin "$BIN_NAME"
     
-    # Move and append the CPU suffix (as expected by your combine script)
-    mv "${OUT_DIR}/${BIN_NAME}.exe" "${OUT_DIR}/${BIN_NAME}-${CPU}.exe"
+    # Move and append the CPU suffix and correct executable extension
+    mv "${OUT_DIR}/${BIN_NAME}${EXE_EXT}" "${OUT_DIR}/${BIN_NAME}-${CPU}${EXE_EXT}"
 done
 
 # -------------------------------------------------------------------------
@@ -62,9 +81,9 @@ fi
 "${SCRIPT_DIR}/generate_feature_manifest.sh" "$TARGET_CPUS" "${PROJECT_DIR}/multivers_manifest.json"
 
 # Replace 'target/X' with the absolute path to the base binary.
-# AND append .exe to the filenames since generate_feature_manifest.sh assumes Linux
+# AND append the appropriate executable extension to the filenames.
 sed "s|target/X|${PROJECT_DIR}/target/${BIN_PATH}|g" "${PROJECT_DIR}/multivers_manifest.json" | \
-sed "s|${BIN_NAME}\(-[a-zA-Z0-9_-]*\)\"|${BIN_NAME}\1.exe\"|g" > "${PROJECT_DIR}/builds_absolute.json"
+sed "s|${BIN_NAME}\(-[a-zA-Z0-9_-]*\)\"|${BIN_NAME}\1${EXE_EXT}\"|g" > "${PROJECT_DIR}/builds_absolute.json"
 
 # -------------------------------------------------------------------------
 # 4. Compile the Runner Wrapper
@@ -96,22 +115,22 @@ if [ -f "${PROJECT_DIR}/assets/img/icon.ico" ]; then
     cp "${PROJECT_DIR}/assets/img/icon.ico" icon.ico
 fi
 
-# Point the multivers crate macro to our absolute manifest and compile for GNU
+# Point the multivers crate macro to our absolute manifest
 export MULTIVERS_BUILDS_DESCRIPTION_PATH="${PROJECT_DIR}/builds_absolute.json"
 export MULTIVERS_ZSTD_LEVEL
 
-# Statically link the GNU wrapper as well
-RUSTFLAGS="-C target-feature=+crt-static" cargo build --release --target "$TARGET"
+# Build the runner with matched target link configurations
+RUSTFLAGS="${STATIC_FLAG}" cargo build --release --target "$TARGET"
 
 # -------------------------------------------------------------------------
 # 5. Finalize
 # -------------------------------------------------------------------------
 cd "$PROJECT_DIR"
 
-FINAL_EXE="${OUT_DIR}/${BIN_NAME}_multivers.exe"
+FINAL_EXE="${OUT_DIR}/${BIN_NAME}_multivers${EXE_EXT}"
 
 # Include /runner-wrapper/ in the path!
-mv "$WRAPPER_TMP/runner-wrapper/target/${TARGET}/release/edirstat-runner.exe" "$FINAL_EXE"
+mv "$WRAPPER_TMP/runner-wrapper/target/${TARGET}/release/edirstat-runner${EXE_EXT}" "$FINAL_EXE"
 
 echo "==========================================================="
 echo "✅ Success! Non-FIPS multivers binary built:"
