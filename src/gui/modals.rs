@@ -520,23 +520,7 @@ impl GuiApp {
                 if let Err(e) = std::fs::rename(dst_path, &temp_dst) {
                     failures.push((dst_path_str, e.to_string(), is_permission_denied_io(&e)));
                 } else {
-                    let symlink_result = {
-                        #[cfg(unix)]
-                        {
-                            std::os::unix::fs::symlink(src_path, dst_path)
-                        }
-                        #[cfg(windows)]
-                        {
-                            std::os::windows::fs::symlink_file(src_path, dst_path)
-                        }
-                        #[cfg(not(any(unix, windows)))]
-                        {
-                            Err(std::io::Error::new(
-                                std::io::ErrorKind::Unsupported,
-                                "Symlinks not supported on this platform",
-                            ))
-                        }
-                    };
+                    let symlink_result = Self::symlink(src_path, dst_path);
 
                     match symlink_result {
                         Ok(()) => {
@@ -621,6 +605,24 @@ impl GuiApp {
 
             self.remove_nodes_from_snapshot(&successfully_linked);
         }
+    }
+
+    #[cfg(target_family = "unix")]
+    fn symlink(src_path: &std::path::Path, dst_path: &std::path::Path) -> std::io::Result<()> {
+        std::os::unix::fs::symlink(src_path, dst_path)
+    }
+
+    #[cfg(target_family = "windows")]
+    fn symlink(src_path: &std::path::Path, dst_path: &std::path::Path) -> std::io::Result<()> {
+        std::os::windows::fs::symlink_file(src_path, dst_path)
+    }
+
+    #[cfg(not(any(unix, windows)))]
+    fn symlink(src_path: &std::path::Path, dst_path: &std::path::Path) -> std::io::Result<()> {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "Symlinks not supported on this platform",
+        ))
     }
 
     pub fn render_modals(&mut self, ctx: &egui::Context, snapshot: &FileArenaSnapshot) {
