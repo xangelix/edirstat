@@ -40,7 +40,7 @@ Purchasing precompiled packages directly funds the engineering efforts required 
 
 ## 📽️ Demo Video
 
-<https://github.com/user-attachments/assets/0d50ca96-ba2d-4d3f-9792-ea49c206e37b>
+<https://github.com/user-attachments/assets/22075865-c258-4cee-bae4-247a48702f25>
 
 ---
 
@@ -205,7 +205,7 @@ The `.edst` snapshot file layout features a Zstd-compressed payload matched to t
 
 ### 5. Multi-Stage Deduplication Engine (`src/stats/deduplicator.rs`)
 
-<https://github.com/user-attachments/assets/3b9e009b-399a-4c52-8037-24bb1ab65703>
+<https://github.com/user-attachments/assets/a5743098-e88f-4fb7-bc0d-df073ed0615f>
 
 The deduplication module detects byte-for-byte identical files with minimal disk I/O. Candidate duplicate groups are identified and isolated through a 7-stage pipeline:
 
