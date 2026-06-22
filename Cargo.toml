@@ -1,6 +1,6 @@
 [package]
 name = "edirstat"
-description = "A fast, cross-platform disk usage analyzer with work-stealing multithreading, zero-copy snapshots, deduplication, and an interactive treemap GUI."
+description = "A fast, cross-platform disk usage analyzer and deduplicator—with work-stealing multithreading, zero-copy snapshots, and an interactive treemap GUI."
 version = "2.0.0"
 edition = "2024"
 license = "MIT"
