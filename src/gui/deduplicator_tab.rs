@@ -1,13 +1,11 @@
 #![allow(clippy::cast_precision_loss)]
 
-use std::sync::Arc;
-use std::sync::atomic::Ordering;
+use std::{sync::Arc, sync::atomic::Ordering};
 
 use eframe::egui;
 use egui_extras::{Column, TableBuilder};
 
-use crate::arena::FileArenaSnapshot;
-use crate::stats::deduplicator::run_deduplication;
+use crate::{arena::FileArenaSnapshot, stats::deduplicator::run_deduplication};
 
 impl super::GuiApp {
     pub(crate) fn render_deduplicator_tab(

@@ -9,8 +9,6 @@ use compact_str::CompactString;
 use eframe::egui;
 use rfd::FileDialog;
 
-use crate::arena::precompute_dir_counts;
-
 use super::{
     arena::FileArenaSnapshot,
     coordinator::SharedState,
@@ -18,6 +16,7 @@ use super::{
     stats::{self, StatComponent as _},
     traversal::TraversalEngine,
 };
+use crate::arena::precompute_dir_counts;
 
 pub mod deduplicator_tab;
 pub mod explorer;
