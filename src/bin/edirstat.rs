@@ -164,7 +164,7 @@ fn run_headless_scan_and_save(
     }
 
     println!("Saving snapshot to: {}", dest_path.display());
-    edirstat::persistence::save_snapshot(
+    edirstat::persistence::snapshot::save_snapshot(
         &snapshot.nodes,
         &snapshot.string_pool,
         &dest_path,

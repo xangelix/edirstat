@@ -186,7 +186,7 @@ impl StringPool {
 #[derive(Debug)]
 pub enum NodeStorage {
     Owned(Vec<FileNode>),
-    Mmapped(crate::persistence::PersistentArena),
+    Mmapped(crate::persistence::snapshot::PersistentArena),
 }
 
 impl std::ops::Deref for NodeStorage {

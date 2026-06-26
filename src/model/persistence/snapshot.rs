@@ -8,7 +8,7 @@ use std::{
 
 use bytemuck::{Pod, Zeroable};
 
-use super::{
+use super::super::{
     arena::{FileNode, StringPool},
     varint::{
         read_i64_zigzag, read_u64_varint, u8_slice_to_u32_vec, u32_slice_to_le, write_i64_zigzag,

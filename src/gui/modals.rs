@@ -1831,7 +1831,7 @@ mod tests {
             name_root, None, true, false, 0, 0, 0,
         )];
         let test_file = temp_dir.join("test_snapshot.edst");
-        crate::persistence::save_snapshot(&nodes, &pool, &test_file, false)?; // Save as raw uncompressed
+        crate::persistence::snapshot::save_snapshot(&nodes, &pool, &test_file, false)?; // Save as raw uncompressed
 
         let shared_state = Arc::new(SharedState::new());
         let engine = Arc::new(TraversalEngine::new());

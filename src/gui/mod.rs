@@ -12,7 +12,7 @@ use rfd::FileDialog;
 use super::{
     arena::FileArenaSnapshot,
     coordinator::SharedState,
-    persistence::{load_snapshot, save_snapshot},
+    persistence::snapshot::{load_snapshot, save_snapshot},
     stats::{self, StatComponent as _},
     traversal::TraversalEngine,
 };
@@ -109,6 +109,9 @@ pub struct GuiApp {
     pub(crate) extension_stats: Vec<ExtensionStat>,
     pub(crate) last_extension_update: Option<Instant>,
 
+    /// Tracked preference delta to safely batch config saves
+    pub(crate) last_saved_preferences: crate::model::persistence::preferences::UserPreferences,
+
     // Single-use trigger to automatically scroll the list view to the target row
     pub(crate) scroll_to_selected: bool,
 
@@ -201,6 +204,8 @@ impl GuiApp {
         #[cfg(not(target_os = "windows"))]
         let active_modal = None;
 
+        let prefs = crate::model::persistence::preferences::load_preferences();
+
         let app = Self {
             shared_state,
             traversal_engine,
@@ -210,12 +215,13 @@ impl GuiApp {
             focus_node_idx: None,
             delete_node_indices: Vec::new(),
             search_query: String::new(),
-            monospace_paths: false,
+            monospace_paths: prefs.monospace_paths,
             left_panel_collapsed: false,
             right_panel_collapsed: false,
             filter_case_sensitive: false,
             filter_regex: false,
-            time_format: crate::model::time_utils::TimeFormat::default(),
+            time_format: prefs.time_format.clone(),
+            last_saved_preferences: prefs,
             query_coordinator: crate::gui::explorer::QueryCoordinator::new(),
             vis_mode: VisMode::Treemap,
             plot_type: PlotType::SizeDistribution,
@@ -450,7 +456,8 @@ impl GuiApp {
         ui: &mut egui::Ui,
         snapshot: &FileArenaSnapshot,
     ) {
-        let provider = crate::gui::explorer::TableProviderWrapper::new(snapshot, self.time_format);
+        let provider =
+            crate::gui::explorer::TableProviderWrapper::new(snapshot, self.time_format.clone());
         let _ = self
             .operations
             .gui(ui, &provider, &mut self.table_state, true);
@@ -778,10 +785,10 @@ impl eframe::App for GuiApp {
                     ui.checkbox(&mut self.highlight_duplicates, "✨ Highlight Duplicates");  
 
                     ui.menu_button("🕒 Time Format", |ui| {
-                        for format in crate::model::time_utils::TimeFormat::ALL {
-                            let is_selected = self.time_format == *format;
+                        for format in crate::model::time_utils::CommonTimeFormat::ALL {
+                            let is_selected = self.time_format.0 == format.as_str();
                             if ui.selectable_label(is_selected, format.label()).clicked() {
-                                self.time_format = *format;
+                                self.time_format = crate::model::time_utils::TimeFormat(format.as_str().to_string());
                                 ui.close_kind(egui::UiKind::Menu);
                             }
                         }
@@ -1054,6 +1061,18 @@ impl eframe::App for GuiApp {
         {
             ui.ctx().request_repaint();
             tracy_client::frame_mark();
+        }
+
+        // Batched preference saving evaluated at frame exit
+        let current_prefs = crate::model::persistence::preferences::UserPreferences {
+            monospace_paths: self.monospace_paths,
+            highlight_duplicates: self.highlight_duplicates,
+            time_format: self.time_format.clone(),
+        };
+
+        if current_prefs != self.last_saved_preferences {
+            crate::model::persistence::preferences::save_preferences(&current_prefs);
+            self.last_saved_preferences = current_prefs;
         }
     }
 }
@@ -1533,7 +1552,7 @@ impl GuiApp {
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 4.0;
             let provider =
-                crate::gui::explorer::TableProviderWrapper::new(snapshot, self.time_format);
+                crate::gui::explorer::TableProviderWrapper::new(snapshot, self.time_format.clone());
 
             let _ = self.operations.gui_custom(
                 ui,

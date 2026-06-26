@@ -43,11 +43,13 @@ atomic-progress = { version = "0.1.5", default-features = false, features = [
 ] }
 blake3 = "1.8.5"
 bytemuck = { version = "1.25.0", features = ["derive"] }
+chrono = "0.4.45"
 clap = { version = "4.6.1", features = ["derive"] }
 cli-or-gui = "0.1.1"
 compact_str = "0.9.1"
 crc-fast = "1.10.0"
 crossbeam = "0.8.4"
+directories = "6.0.0"
 eframe = "0.34.3"
 egui-notify = "0.22.0"
 egui-table-kit = "0.2.1"
@@ -61,8 +63,10 @@ prettier-bytes = "0.2.1"
 rayon = "1.12.0"
 regex = { version = "1.12.4", features = ["use_std"] }
 rfd = "0.17.2"
+serde = { version = "1.0.228", features = ["derive"] }
 smallvec = "1.15.2"
 thiserror = "2.0.18"
+toml = "1.1.2"
 trash = "5.2.6"
 xgx_intern = "0.6.3"
 zstd = "0.13.3"

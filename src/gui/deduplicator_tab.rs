@@ -520,7 +520,7 @@ impl super::GuiApp {
         let selected = &self.selected_duplicates;
         let monospace_paths = self.monospace_paths;
         let is_scan_running = is_running;
-        let time_fmt = self.time_format;
+        let time_fmt = &self.time_format;
 
         let max_width = ui.available_width();
         let row_len = results_lock.read().flat_rows.len();

@@ -1,6 +1,19 @@
-/// Common international date/time display formats.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum TimeFormat {
+use chrono::{TimeZone, Utc};
+use serde::{Deserialize, Serialize};
+
+/// A generic time format wrapper holding a serialized `strftime` representation.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TimeFormat(pub String);
+
+impl Default for TimeFormat {
+    fn default() -> Self {
+        Self(CommonTimeFormat::Iso8601.as_str().to_string())
+    }
+}
+
+/// Common international date/time display formats for UI selection.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum CommonTimeFormat {
     /// ISO 8601 — `2024-06-13 12:04:05`  (international default)
     #[default]
     Iso8601,
@@ -24,7 +37,7 @@ pub enum TimeFormat {
     DateOnly,
 }
 
-impl TimeFormat {
+impl CommonTimeFormat {
     /// All variants in display order
     pub const ALL: &'static [Self] = &[
         Self::Iso8601,
@@ -55,111 +68,47 @@ impl TimeFormat {
             Self::DateOnly => "YYYY-MM-DD",
         }
     }
-}
 
-const MONTH_NAMES: [&str; 12] = [
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-];
+    /// `strftime` compatible representation of the format.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Iso8601 => "%Y-%m-%d %H:%M:%S",
+            Self::Iso8601T => "%Y-%m-%dT%H:%M:%S",
+            Self::EuropeanSlash => "%d/%m/%Y %H:%M:%S",
+            Self::EuropeanDot => "%d.%m.%Y %H:%M:%S",
+            Self::UsSlash => "%m/%d/%Y %I:%M:%S %p",
+            Self::EuropeanShort => "%d/%m/%y %H:%M",
+            Self::DotSeparated => "%Y.%m.%d %H:%M:%S",
+            Self::LongMonthName => "%d %b %Y %H:%M:%S",
+            Self::UnixTimestamp => "%s",
+            Self::DateOnly => "%Y-%m-%d",
+        }
+    }
+}
 
 /// Translates Unix Epoch seconds to a date/time string using the given `TimeFormat`.
 ///
 /// Returns `"Unknown"` for timestamps that cannot be represented (≤ 0 or beyond year 9999).
 #[must_use]
-pub fn format_epoch(epoch_secs: i64, fmt: TimeFormat) -> String {
+pub fn format_epoch(epoch_secs: i64, fmt: &TimeFormat) -> String {
     if epoch_secs <= 0 || epoch_secs > 253_402_300_799 {
-        return match fmt {
-            TimeFormat::UnixTimestamp => epoch_secs.to_string(),
-            TimeFormat::DateOnly => "Pre-1970".to_string(),
-            _ => "Unknown".to_string(),
-        };
+        if fmt.0 == CommonTimeFormat::UnixTimestamp.as_str() {
+            return epoch_secs.to_string();
+        } else if fmt.0 == CommonTimeFormat::DateOnly.as_str() {
+            return "Pre-1970".to_string();
+        }
+        return "Unknown".to_string();
     }
 
     // Special-case: Unix timestamp needs no calendar decomposition.
-    if fmt == TimeFormat::UnixTimestamp {
+    if fmt.0 == CommonTimeFormat::UnixTimestamp.as_str() {
         return epoch_secs.to_string();
     }
 
-    let days = epoch_secs / 86400;
-    let secs_in_day = epoch_secs % 86400;
-
-    let mut year = 1970i64;
-    let mut days_left = days;
-
-    loop {
-        let is_leap = (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0);
-        let days_in_year = if is_leap { 366 } else { 365 };
-        if days_left < days_in_year {
-            break;
-        }
-        days_left -= days_in_year;
-        year += 1;
-    }
-
-    let is_leap = (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0);
-    let month_days = if is_leap {
-        [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
-    } else {
-        [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
-    };
-
-    let mut month: i64 = 1;
-    let mut day = days_left + 1;
-    for &days_in_m in &month_days {
-        if day <= days_in_m {
-            break;
-        }
-        day -= days_in_m;
-        month += 1;
-    }
-
-    let hour = secs_in_day / 3600;
-    let minute = (secs_in_day % 3600) / 60;
-    let second = secs_in_day % 60;
-
-    let year_short = year % 100;
-    let month_name = MONTH_NAMES[(month - 1) as usize];
-
-    match fmt {
-        TimeFormat::Iso8601 => {
-            format!("{year:04}-{month:02}-{day:02} {hour:02}:{minute:02}:{second:02}")
-        }
-        TimeFormat::Iso8601T => {
-            format!("{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}")
-        }
-        TimeFormat::EuropeanSlash => {
-            format!("{day:02}/{month:02}/{year:04} {hour:02}:{minute:02}:{second:02}")
-        }
-        TimeFormat::EuropeanDot => {
-            format!("{day:02}.{month:02}.{year:04} {hour:02}:{minute:02}:{second:02}")
-        }
-        TimeFormat::UsSlash => {
-            let (display_hour, am_pm) = if hour == 0 {
-                (12, "AM")
-            } else if hour < 12 {
-                (hour, "AM")
-            } else if hour == 12 {
-                (12, "PM")
-            } else {
-                (hour - 12, "PM")
-            };
-            format!(
-                "{month:02}/{day:02}/{year:04} {display_hour:02}:{minute:02}:{second:02} {am_pm}"
-            )
-        }
-        TimeFormat::EuropeanShort => {
-            format!("{day:02}/{month:02}/{year_short:02} {hour:02}:{minute:02}")
-        }
-        TimeFormat::DotSeparated => {
-            format!("{year:04}.{month:02}.{day:02} {hour:02}:{minute:02}:{second:02}")
-        }
-        TimeFormat::LongMonthName => {
-            format!("{day:02} {month_name} {year:04} {hour:02}:{minute:02}:{second:02}")
-        }
-        TimeFormat::UnixTimestamp => unreachable!("handled above"),
-        TimeFormat::DateOnly => {
-            format!("{year:04}-{month:02}-{day:02}")
-        }
-    }
+    Utc.timestamp_opt(epoch_secs, 0)
+        .single()
+        .map_or_else(|| "Unknown".to_string(), |dt| dt.format(&fmt.0).to_string())
 }
 
 /// Safely translates `SystemTime` to seconds since Unix Epoch, maintaining signs for pre-1970 dates.
@@ -180,22 +129,29 @@ mod tests {
 
     use super::*;
 
+    fn tf(fmt: CommonTimeFormat) -> TimeFormat {
+        TimeFormat(fmt.as_str().to_string())
+    }
+
     #[test]
     fn test_format_epoch_pre_1970() {
-        assert_eq!(format_epoch(0, TimeFormat::DateOnly), "Pre-1970");
-        assert_eq!(format_epoch(0, TimeFormat::Iso8601), "Unknown");
-        assert_eq!(format_epoch(-50, TimeFormat::DateOnly), "Pre-1970");
-        assert_eq!(format_epoch(-50, TimeFormat::Iso8601), "Unknown");
+        assert_eq!(format_epoch(0, &tf(CommonTimeFormat::DateOnly)), "Pre-1970");
+        assert_eq!(format_epoch(0, &tf(CommonTimeFormat::Iso8601)), "Unknown");
+        assert_eq!(
+            format_epoch(-50, &tf(CommonTimeFormat::DateOnly)),
+            "Pre-1970"
+        );
+        assert_eq!(format_epoch(-50, &tf(CommonTimeFormat::Iso8601)), "Unknown");
     }
 
     #[test]
     fn test_format_epoch_post_maximum() {
         assert_eq!(
-            format_epoch(253_402_300_800, TimeFormat::DateOnly),
+            format_epoch(253_402_300_800, &tf(CommonTimeFormat::DateOnly)),
             "Pre-1970"
         );
         assert_eq!(
-            format_epoch(253_402_300_800, TimeFormat::Iso8601),
+            format_epoch(253_402_300_800, &tf(CommonTimeFormat::Iso8601)),
             "Unknown"
         );
     }
@@ -203,11 +159,11 @@ mod tests {
     #[test]
     fn test_format_epoch_standard_iso() {
         assert_eq!(
-            format_epoch(1_686_614_400, TimeFormat::DateOnly),
+            format_epoch(1_686_614_400, &tf(CommonTimeFormat::DateOnly)),
             "2023-06-13"
         );
         assert_eq!(
-            format_epoch(1_686_657_845, TimeFormat::Iso8601),
+            format_epoch(1_686_657_845, &tf(CommonTimeFormat::Iso8601)),
             "2023-06-13 12:04:05"
         );
     }
@@ -215,7 +171,7 @@ mod tests {
     #[test]
     fn test_format_epoch_leap_year() {
         assert_eq!(
-            format_epoch(1_582_977_600, TimeFormat::Iso8601),
+            format_epoch(1_582_977_600, &tf(CommonTimeFormat::Iso8601)),
             "2020-02-29 12:00:00"
         );
     }
@@ -223,7 +179,7 @@ mod tests {
     #[test]
     fn test_format_epoch_non_leap_year() {
         assert_eq!(
-            format_epoch(1_614_513_600, TimeFormat::Iso8601),
+            format_epoch(1_614_513_600, &tf(CommonTimeFormat::Iso8601)),
             "2021-02-28 12:00:00"
         );
     }
@@ -231,11 +187,11 @@ mod tests {
     #[test]
     fn test_format_epoch_european() {
         assert_eq!(
-            format_epoch(1_686_657_845, TimeFormat::EuropeanSlash),
+            format_epoch(1_686_657_845, &tf(CommonTimeFormat::EuropeanSlash)),
             "13/06/2023 12:04:05"
         );
         assert_eq!(
-            format_epoch(1_686_657_845, TimeFormat::EuropeanDot),
+            format_epoch(1_686_657_845, &tf(CommonTimeFormat::EuropeanDot)),
             "13.06.2023 12:04:05"
         );
     }
@@ -243,7 +199,7 @@ mod tests {
     #[test]
     fn test_format_epoch_us() {
         assert_eq!(
-            format_epoch(1_686_657_845, TimeFormat::UsSlash),
+            format_epoch(1_686_657_845, &tf(CommonTimeFormat::UsSlash)),
             "06/13/2023 12:04:05 PM"
         );
     }
@@ -251,17 +207,16 @@ mod tests {
     #[test]
     fn test_format_epoch_unix_timestamp() {
         assert_eq!(
-            format_epoch(1_686_657_845, TimeFormat::UnixTimestamp),
+            format_epoch(1_686_657_845, &tf(CommonTimeFormat::UnixTimestamp)),
             "1686657845"
         );
-        // Even invalid timestamps are passed through for Unix format
-        assert_eq!(format_epoch(0, TimeFormat::UnixTimestamp), "0");
+        assert_eq!(format_epoch(0, &tf(CommonTimeFormat::UnixTimestamp)), "0");
     }
 
     #[test]
     fn test_format_epoch_long_month_name() {
         assert_eq!(
-            format_epoch(1_686_657_845, TimeFormat::LongMonthName),
+            format_epoch(1_686_657_845, &tf(CommonTimeFormat::LongMonthName)),
             "13 Jun 2023 12:04:05"
         );
     }
