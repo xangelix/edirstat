@@ -391,15 +391,24 @@ impl GuiApp {
         self.current_scan_path = Some(path);
         self.scan_start_time = None;
 
-        // Rebuild extension stats exactly once in the background upon load
+        // Rebuild extension stats and accumulate total stats in a single pass
         let mut ext_map: HashMap<CompactString, (u64, u32), ahash::RandomState> =
             HashMap::with_hasher(ahash::RandomState::new());
+
+        let mut total_files = 0;
+        let mut total_dirs = 0;
+        let mut total_bytes = 0u64;
 
         let snapshot = self.shared_state.current_snapshot.load();
         for node in snapshot.nodes.iter() {
             if node.is_directory() {
+                total_dirs += 1;
                 continue;
             }
+
+            total_files += 1;
+            total_bytes += node.size;
+
             if let Some(name) = snapshot.string_pool.get(node.name_id) {
                 let ext_slice = super::arena::get_ext_slice(name);
                 super::arena::with_lowercase_ext(ext_slice, |ext_lowercased| {
@@ -410,6 +419,21 @@ impl GuiApp {
                 });
             }
         }
+
+        // Update the traversal engine stats so the bottom status bar displays the totals
+        self.traversal_engine
+            .stats()
+            .files_scanned
+            .store(total_files, Ordering::SeqCst);
+        self.traversal_engine
+            .stats()
+            .dirs_scanned
+            .store(total_dirs, Ordering::SeqCst);
+        self.traversal_engine
+            .stats()
+            .bytes_scanned
+            .store(total_bytes as usize, Ordering::SeqCst);
+
         let mut stats: Vec<(CompactString, u64, u32)> = ext_map
             .into_iter()
             .map(|(ext, (total_size, file_count))| (ext, total_size, file_count))
