@@ -1866,7 +1866,10 @@ mod tests {
         };
 
         // 1. Verify TableProviderWrapper for_selected_rows and for_all_rows
-        let provider = crate::gui::explorer::TableProviderWrapper::new(&snapshot);
+        let provider = crate::gui::explorer::TableProviderWrapper::new(
+            &snapshot,
+            crate::model::time_utils::TimeFormat::default(),
+        );
         let mut state = egui_table_kit::state::TableState::new("test_table", 0);
         state.selected_rows.insert(0);
 

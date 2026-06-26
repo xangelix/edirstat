@@ -38,8 +38,10 @@ pub struct DuplicateRow {
     pub size: u64,
     pub size_str: String,
     pub reclaimable_str: String,
-    pub created_time_str: String,
-    pub modified_time_str: String,
+    /// Raw Unix timestamp for the created time; formatted at render-time.
+    pub created_timestamp: i64,
+    /// Raw Unix timestamp for the modified time; formatted at render-time.
+    pub modified_timestamp: i64,
     pub is_original: bool,
     pub is_hardlink: bool,
 }
@@ -141,17 +143,6 @@ impl DeduplicationResults {
                         .to_string()
                 };
 
-                let created_time_str = if node.has_no_permission() {
-                    "No Permission".to_string()
-                } else {
-                    crate::model::time_utils::format_epoch(node.created_timestamp, true)
-                };
-                let modified_time_str = if node.has_no_permission() {
-                    "No Permission".to_string()
-                } else {
-                    crate::model::time_utils::format_epoch(node.modified_timestamp, true)
-                };
-
                 flat_rows.push(DuplicateRow {
                     node_idx,
                     group_idx: g_idx,
@@ -160,8 +151,9 @@ impl DeduplicationResults {
                     size: group.size,
                     size_str,
                     reclaimable_str,
-                    created_time_str,
-                    modified_time_str,
+                    // Store raw timestamps; the UI formats these at render-time.
+                    created_timestamp: node.created_timestamp,
+                    modified_timestamp: node.modified_timestamp,
                     is_original,
                     is_hardlink,
                 });

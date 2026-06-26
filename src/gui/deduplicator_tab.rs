@@ -520,6 +520,7 @@ impl super::GuiApp {
         let selected = &self.selected_duplicates;
         let monospace_paths = self.monospace_paths;
         let is_scan_running = is_running;
+        let time_fmt = self.time_format;
 
         let max_width = ui.available_width();
         let row_len = results_lock.read().flat_rows.len();
@@ -569,12 +570,37 @@ impl super::GuiApp {
                         body.rows(22.0, row_len, |mut row| {
                             let r_idx = row.index();
                             let row_data = &results_lock.read().flat_rows[r_idx];
+                            let node_idx = row_data.node_idx;
+                            let is_original = row_data.is_original;
+                            let is_hardlink = row_data.is_hardlink;
+                            let size_str = row_data.size_str.clone();
+                            let reclaimable_str = row_data.reclaimable_str.clone();
+                            let filename = row_data.filename.clone();
+                            let parent_path = row_data.parent_path.clone();
+                            // Format timestamps at render-time so we respect the user's chosen format.
+                            let has_no_perm = snapshot.nodes[node_idx as usize].has_no_permission();
+                            let created_str = if has_no_perm {
+                                "No Permission".to_string()
+                            } else {
+                                crate::model::time_utils::format_epoch(
+                                    row_data.created_timestamp,
+                                    time_fmt,
+                                )
+                            };
+                            let modified_str = if has_no_perm {
+                                "No Permission".to_string()
+                            } else {
+                                crate::model::time_utils::format_epoch(
+                                    row_data.modified_timestamp,
+                                    time_fmt,
+                                )
+                            };
 
                             row.col(|ui| {
                                 ui.add_enabled_ui(!is_scan_running, |ui| {
-                                    let mut is_checked = selected.contains(&row_data.node_idx);
+                                    let mut is_checked = selected.contains(&node_idx);
                                     if ui.checkbox(&mut is_checked, "").changed() {
-                                        toggled_node.set(Some((row_data.node_idx, is_checked)));
+                                        toggled_node.set(Some((node_idx, is_checked)));
                                     }
                                 });
                             });
@@ -587,19 +613,16 @@ impl super::GuiApp {
                                         ui.style_mut().wrap_mode =
                                             Some(egui::TextWrapMode::Truncate);
                                         ui.set_max_width(column_width);
-                                        let name_rich = if row_data.is_original {
-                                            egui::RichText::new(format!("⭐ {}", row_data.filename))
+                                        let name_rich = if is_original {
+                                            egui::RichText::new(format!("⭐ {filename}"))
                                                 .color(ui.visuals().text_color())
                                         } else {
-                                            egui::RichText::new(format!(
-                                                "      >> {}",
-                                                row_data.filename
-                                            ))
-                                            .strong()
-                                            .color(crate::colors::COLOR_DUPLICATE_ORANGE) // Orange for duplicate
+                                            egui::RichText::new(format!("      >> {filename}"))
+                                                .strong()
+                                                .color(crate::colors::COLOR_DUPLICATE_ORANGE) // Orange for duplicate
                                         };
-                                        ui.label(name_rich).on_hover_text(&row_data.filename);
-                                        if row_data.is_hardlink {
+                                        ui.label(name_rich).on_hover_text(&filename);
+                                        if is_hardlink {
                                             ui.add_space(4.0);
                                             let frame = egui::Frame::new()
                                                 .fill(
@@ -640,7 +663,7 @@ impl super::GuiApp {
                                             Some(egui::TextWrapMode::Truncate);
                                         ui.set_max_width(column_width);
                                         let mut path_rich =
-                                            egui::RichText::new(&row_data.parent_path).weak();
+                                            egui::RichText::new(&parent_path).weak();
                                         if monospace_paths {
                                             path_rich = path_rich.monospace();
                                         }
@@ -655,36 +678,36 @@ impl super::GuiApp {
                                                 .set_cursor_icon(egui::CursorIcon::PointingHand);
                                         }
                                         if response.clicked() {
-                                            let _ = open::that(&row_data.parent_path);
+                                            let _ = open::that(&parent_path);
                                         }
                                     },
                                 );
                             });
 
                             row.col(|ui| {
-                                ui.label(&row_data.size_str);
+                                ui.label(&size_str);
                             });
 
                             row.col(|ui| {
-                                if row_data.is_original {
+                                if is_original {
                                     // Display the original group-sum reclaimable value in standard green
                                     ui.colored_label(
                                         crate::colors::COLOR_SCAN_COMPLETE,
-                                        &row_data.reclaimable_str,
+                                        &reclaimable_str,
                                     );
                                 } else {
                                     // Display the duplicate rows in a lighter pastel mint-green
                                     let light_green = crate::colors::COLOR_LIGHT_GREEN;
-                                    ui.colored_label(light_green, &row_data.reclaimable_str);
+                                    ui.colored_label(light_green, &reclaimable_str);
                                 }
                             });
 
                             row.col(|ui| {
-                                ui.label(&row_data.created_time_str);
+                                ui.label(&created_str);
                             });
 
                             row.col(|ui| {
-                                ui.label(&row_data.modified_time_str);
+                                ui.label(&modified_str);
                             });
                         });
                     });

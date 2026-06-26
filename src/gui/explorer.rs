@@ -16,11 +16,15 @@ use crate::arena::{FileArenaSnapshot, NO_INDEX};
 pub struct TableProviderWrapper<'a> {
     snapshot: &'a FileArenaSnapshot,
     headers: Vec<&'static str>,
+    time_format: crate::model::time_utils::TimeFormat,
 }
 
 impl<'a> TableProviderWrapper<'a> {
     #[must_use]
-    pub fn new(snapshot: &'a FileArenaSnapshot) -> Self {
+    pub fn new(
+        snapshot: &'a FileArenaSnapshot,
+        time_format: crate::model::time_utils::TimeFormat,
+    ) -> Self {
         Self {
             snapshot,
             headers: vec![
@@ -33,6 +37,7 @@ impl<'a> TableProviderWrapper<'a> {
                 "Created",
                 "Modified",
             ],
+            time_format,
         }
     }
 }
@@ -209,7 +214,7 @@ impl egui_table_kit::operations::TableProvider for TableProviderWrapper<'_> {
                     if node.has_no_permission() {
                         "No Permission".to_string()
                     } else {
-                        crate::model::time_utils::format_epoch(node.created_timestamp, true)
+                        crate::model::time_utils::format_epoch(node.created_timestamp, self.time_format)
                     }
                 }
                 7 => {
@@ -217,7 +222,7 @@ impl egui_table_kit::operations::TableProvider for TableProviderWrapper<'_> {
                     if node.has_no_permission() {
                         "No Permission".to_string()
                     } else {
-                        crate::model::time_utils::format_epoch(node.modified_timestamp, true)
+                        crate::model::time_utils::format_epoch(node.modified_timestamp, self.time_format)
                     }
                 }
                 _ => String::new(),
@@ -691,7 +696,7 @@ impl GuiApp {
         let row_height = 24.0;
         let available_height = ui.available_height();
 
-        let provider = TableProviderWrapper::new(snapshot);
+        let provider = TableProviderWrapper::new(snapshot, self.time_format);
 
         // 1. Delegate tree flattening, sorting, and search-matching exclusively to egui-table-kit (O(1) after first frame)
         self.table_state.flatten_tree(&provider);
@@ -1084,7 +1089,7 @@ impl GuiApp {
                             let text = if node.has_no_permission() {
                                 "No Permission".to_string()
                             } else {
-                                crate::model::time_utils::format_epoch(node.created_timestamp, true)
+                                crate::model::time_utils::format_epoch(node.created_timestamp, self.time_format)
                             };
                             ui.label(text);
                             let cell_resp = ui.interact(
@@ -1114,7 +1119,7 @@ impl GuiApp {
                             } else {
                                 crate::model::time_utils::format_epoch(
                                     node.modified_timestamp,
-                                    true,
+                                    self.time_format,
                                 )
                             };
                             ui.label(text);

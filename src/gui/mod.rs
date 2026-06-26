@@ -75,6 +75,7 @@ pub struct GuiApp {
 
     pub(crate) filter_case_sensitive: bool,
     pub(crate) filter_regex: bool,
+    pub(crate) time_format: crate::model::time_utils::TimeFormat,
 
     // Caching layer for tree search matches
     pub(crate) query_coordinator: crate::gui::explorer::QueryCoordinator,
@@ -214,6 +215,7 @@ impl GuiApp {
             right_panel_collapsed: false,
             filter_case_sensitive: false,
             filter_regex: false,
+            time_format: crate::model::time_utils::TimeFormat::default(),
             query_coordinator: crate::gui::explorer::QueryCoordinator::new(),
             vis_mode: VisMode::Treemap,
             plot_type: PlotType::SizeDistribution,
@@ -424,7 +426,7 @@ impl GuiApp {
         ui: &mut egui::Ui,
         snapshot: &FileArenaSnapshot,
     ) {
-        let provider = crate::gui::explorer::TableProviderWrapper::new(snapshot);
+        let provider = crate::gui::explorer::TableProviderWrapper::new(snapshot, self.time_format);
         let _ = self
             .operations
             .gui(ui, &provider, &mut self.table_state, true);
@@ -750,6 +752,16 @@ impl eframe::App for GuiApp {
                     });
 
                     ui.checkbox(&mut self.highlight_duplicates, "✨ Highlight Duplicates");  
+
+                    ui.menu_button("🕒 Time Format", |ui| {
+                        for format in crate::model::time_utils::TimeFormat::ALL {
+                            let is_selected = self.time_format == *format;
+                            if ui.selectable_label(is_selected, format.label()).clicked() {
+                                self.time_format = *format;
+                                ui.close_kind(egui::UiKind::Menu);
+                            }
+                        }
+                    });
 
                     ui.separator();
                     ui.label("Layout Mode:");
@@ -1496,7 +1508,8 @@ impl GuiApp {
     ) {
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 4.0;
-            let provider = crate::gui::explorer::TableProviderWrapper::new(snapshot);
+            let provider =
+                crate::gui::explorer::TableProviderWrapper::new(snapshot, self.time_format);
 
             let _ = self.operations.gui_custom(
                 ui,

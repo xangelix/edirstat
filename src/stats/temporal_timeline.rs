@@ -111,7 +111,7 @@ impl super::StatComponent for TemporalTimelineChart {
         // Custom time-axis calendar formatter
         let x_formatter = |mark: egui_plot::GridMark, _range: &std::ops::RangeInclusive<f64>| {
             let val = mark.value.round() as i64;
-            crate::time_utils::format_epoch(val, false)
+            crate::time_utils::format_epoch(val, crate::model::time_utils::TimeFormat::DateOnly)
         };
 
         let y_space_formatter =
