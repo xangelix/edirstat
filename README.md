@@ -1,3 +1,5 @@
+> Heads up! Some WinDirStat benchmarks here are out of date! I was alerted that WinDirStat actually has a v2, and it's not on `winget`. Those devs should update the package manager version! Regardless, fixed benchmark numbers coming soon. The current numbers below are compared to v1.X.X releases. - Cody
+
 # eDirStat
 
 ![eDirStat Treemap](docs/screenshots/treemap-b-logo.png)
