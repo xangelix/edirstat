@@ -12,6 +12,7 @@ accepted = [
     "Unicode-3.0",
     "CDLA-Permissive-2.0",
     "MIT-0",
+    "MPL-2.0",
 ]
 
 # Dependency filtering

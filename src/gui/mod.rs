@@ -644,9 +644,6 @@ impl eframe::App for GuiApp {
     #[cfg(feature = "online")]
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         ctx.plugin_or_default::<egui_async::EguiAsyncPlugin>();
-    }
-
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui_extras::install_image_loaders(ctx);
     }
 
@@ -736,7 +733,7 @@ impl eframe::App for GuiApp {
         theme::setup_custom_style(&ctx);
 
         // Top Control Panel
-        egui::Panel::top("top_panel").show_inside(ui, |ui| {
+        egui::Panel::top("top_panel").show(ui, |ui| {
             ui.horizontal(|ui| {
                 ui.heading(
                     egui::RichText::new("eDirStat")
@@ -938,7 +935,7 @@ impl eframe::App for GuiApp {
         });
 
         // Bottom Stats Panel
-        egui::Panel::bottom("bottom_panel").show_inside(ui, |ui| {
+        egui::Panel::bottom("bottom_panel").show(ui, |ui| {
             ui.horizontal(|ui| {
                 let file_count = self
                     .traversal_engine
@@ -1033,7 +1030,7 @@ impl eframe::App for GuiApp {
                 egui::Panel::left("left_panel")
                     .resizable(true)
                     .default_size(300.0)
-                    .show_inside(ui, |ui| {
+                    .show(ui, |ui| {
                         self.render_classic_left_panel(ui, &snapshot);
                     });
             }
@@ -1044,7 +1041,7 @@ impl eframe::App for GuiApp {
             }
 
             // Central Panel - Canvas visual Treemap / Plot Panel
-            egui::CentralPanel::default().show_inside(ui, |ui| {
+            egui::CentralPanel::default().show(ui, |ui| {
                 self.render_classic_central_panel(ui, &snapshot);
             });
         } else {
@@ -1313,7 +1310,7 @@ impl GuiApp {
             .resizable(true)
             .default_size(380.0)
             .size_range(150.0..=600.0)
-            .show_inside(ui, |ui| {
+            .show(ui, |ui| {
                 ui.add_space(4.0);
                 ui.horizontal(|ui| {
                     // Render operations directly as a flat row of toolbar buttons
@@ -1363,7 +1360,7 @@ impl GuiApp {
                         .resizable(true)
                         .default_size(260.0)
                         .size_range(160.0..=450.0)
-                        .show_inside(ui, |ui| {
+                        .show(ui, |ui| {
                             if self.table_state.selected_rows.len() == 1 {
                                 if let Some(selected_idx) =
                                     self.table_state.selected_rows.iter().next()
@@ -1379,15 +1376,13 @@ impl GuiApp {
                 // The rest is the table view
                 let mut frame = egui::Frame::central_panel(ui.style());
                 frame.inner_margin.top = 2; // Shrink top padding above the table
-                egui::CentralPanel::default()
-                    .frame(frame)
-                    .show_inside(ui, |ui| {
-                        self.render_hierarchical_table(ui, snapshot);
-                    });
+                egui::CentralPanel::default().frame(frame).show(ui, |ui| {
+                    self.render_hierarchical_table(ui, snapshot);
+                });
             });
 
         // The remaining area becomes the bottom section
-        egui::CentralPanel::default().show_inside(ui, |ui| {
+        egui::CentralPanel::default().show(ui, |ui| {
             ui.vertical(|ui| {
                 self.draw_central_panel_header(ui, snapshot);
                 ui.separator();
@@ -1398,7 +1393,7 @@ impl GuiApp {
                         .resizable(true)
                         .default_size(210.0)
                         .size_range(80.0..=250.0)
-                        .show_inside(ui, |ui| {
+                        .show(ui, |ui| {
                             self.draw_extensions_contents(ui);
                         });
                 }

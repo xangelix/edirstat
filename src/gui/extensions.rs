@@ -104,7 +104,7 @@ impl GuiApp {
             .resizable(true)
             .size_range(80.0..=250.0)
             .default_size(210.0)
-            .show_inside(ui, |ui| {
+            .show(ui, |ui| {
                 self.draw_extensions_contents(ui);
             });
     }
