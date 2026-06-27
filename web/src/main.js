@@ -685,11 +685,11 @@ const benchmarkData = {
   mzvlb: {
     title: "Samsung MZVLB512HBJQ PCIe Gen 3 SSD",
     desc: "Scanning Windows system directories containing deep system libraries and DLLs.",
-    labels: ['eDirStat (Rust, Parallel)', 'WizTree (Windows MFT)', 'WinDirStat (Legacy C++)', 'QDirStat (Perl Backend)'],
+    labels: ['eDirStat (Rust, Parallel)', 'WizTree (Windows MFT)', 'WinDirStat (Modern C++)', 'QDirStat (Perl Backend)'],
     dnfTexts: [null, null, null, "Incompatible (Not supported on Windows)"],
     datasets: [{
       label: 'Median Scan Duration (Seconds)',
-      data: [1.72, 4.38, 92.38, null],
+      data: [1.72, 4.38, 4.82, null],
       backgroundColor: [
         'rgba(124, 58, 237, 0.85)',
         'rgba(236, 72, 153, 0.6)',

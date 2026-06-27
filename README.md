@@ -1,5 +1,3 @@
-> Heads up! Some WinDirStat benchmarks here are out of date! I was alerted that WinDirStat actually has a v2, and it's not on `winget`. Those devs should update the package manager version! Regardless, fixed benchmark numbers coming soon. The current numbers below are compared to v1.X.X releases. - Cody
-
 # eDirStat
 
 ![eDirStat Treemap](docs/screenshots/treemap-b-logo.png)
@@ -12,15 +10,15 @@
 
 Unlike traditional analyzers that crawl sequentially, **eDirStat** is engineered from the ground up for modern multi-core systems. It couples a highly optimized, work-stealing multithreaded directory walker with a zero-copy arena data structure. This allows you to scan millions of files, locate space-wasting files using a treemap diagram (among other plots), identify duplicate files, and save or load system snapshots in milliseconds using compressed snapshots.
 
-[**Up to 53.7x speedup** vs `WinDirStat`](#vs-windirstat-v11280-same-video-as-above)
-
-[**Up to 9.6x speedup** vs `QDirStat`](#vs-qdirstat-v2001)
+[**Up to 2.8x speedup** vs `WinDirStat`](#vs-windirstat-v262)
 
 [**Up to 2.5x speedup** vs `WizTree`](#vs-wiztree-v431)
 
+[**Up to 9.6x speedup** vs `QDirStat`](#vs-qdirstat-v2001)
+
 ## 📦 Distribution Model & Project Support
 
-eDirStat is, and will always remain, entirely open-source and free. However, to support continuous development, engineering, and maintenance costs, **official pre-compiled binaries for Windows, macOS, and Linux are distributed exclusively as a paid download via [Itch.io - xangelix.itch.io/edirstat](https://xangelix.itch.io/edirstat)**.
+eDirStat is, and will always remain, entirely open-source and free. However, if you'd like to support continuous development, engineering, and maintenance costs, **official pre-compiled binaries for Windows, macOS, and Linux are distributed exclusively as a paid download via [Itch.io - xangelix.itch.io/edirstat](https://xangelix.itch.io/edirstat)**.
 
 - **100% Open Source:** The complete codebase is free of charge and publicly available under the permissive **MIT License**. If you prefer to build the tool yourself, you are welcome to compile the source code on Windows, Linux, or macOS at no cost. Instructions are provided below.
 - **Package Managers:** Package managers and their repository maintainers are welcome to bundle and distribute eDirStat through their respective channels at no cost, provided that it is distributed un-paid, "unofficial", and under the MIT License.
@@ -29,14 +27,6 @@ Purchasing precompiled packages directly funds the engineering efforts required 
 
 [![Prebuilt Binaries](https://img.shields.io/badge/prebuilt%20binaries-itch.io-ff5c5c)](https://xangelix.itch.io/edirstat)
 [![AUR version](https://img.shields.io/aur/version/edirstat?color=blue)](https://aur.archlinux.org/packages/edirstat)
-
----
-
-## 🏁 Drag Race vs `WinDirStat` 🏁 (`ntfs`, `NVMe PCIe Gen3`)
-
-<https://github.com/user-attachments/assets/72ab0f7a-0dac-48ae-886c-f3f8cb22ad49>
-
-**`eDirStat` is up to 53x faster than `WinDirStat`.** And, no, that's not "time to first data"-- that's a complete and equivalent scan. `eDirStat` uses a modern multi-threaded work-stealing algorithm paired with custom disk drivers. `eDirStat` really is that much faster. While the effect is exaggerated on an SSD, you'll still experience dramatic (usually >10x faster) speedups on traditional hard drives too.
 
 ---
 
@@ -68,7 +58,7 @@ Purchasing precompiled packages directly funds the engineering efforts required 
 
 ## 🚀 Key Features
 
-- ⚡ **Work-Stealing Multi-threading:** Powered by a lock-free task injector queue that keeps all CPU cores saturated during scanning.
+- ⚡ **Work-Stealing Multi-threading:** Powered by a lock-free task injector queue that keeps all CPU cores saturated during scanning-- inspired by `ripgrep`.
 - 🪟 **NTFS MFT Scanner (Windows):** Accesses raw NTFS physical handles to parse the Master File Table directly, bypassing OS filesystem bottlenecks for near-instantaneous drive indexing (requires administrative privileges).
 - 👥 **7-Stage Deduplication Engine:** Safely identifies byte-for-byte identical files using cryptographically secure BLAKE3 hashing. It is hardlink-aware to protect shared filesystem links.
 - 📦 **Fast Compressed Snapshots:** Writes structured tree snapshots to disk with Zstd compression. Once loaded and decompressed, the flat binary representation is cast directly via `bytemuck`, eliminating parsing overhead. Cross-compatible on all Little-Endian platforms.
@@ -83,7 +73,7 @@ Purchasing precompiled packages directly funds the engineering efforts required 
 
 ### Prerequisites
 
-Ensure you have the latest stable Rust toolchain installed.
+Ensure you have the Rust toolchain installed. See `rust-toolchain.toml` for the version currently required.
 
 ### Build from Source
 
@@ -143,8 +133,8 @@ You can also pass a directory path as a positional argument to automatically lau
 
 If you need to analyze a server or remote environment:
 
-1. Scan the directory and click **💾 Save Snapshot** to write the structured tree to an `.edst` file.
-2. Transfer the file to another machine.
+1. `edirstat /path/to/my/dir --to mysnapshot`
+2. Transfer the `mysnapshot.edst` file to another machine.
 3. Launch `edirstat` and click **📖 Load Snapshot** to open and navigate the tree with full interactivity, requiring no active filesystem connection.
 
 ---
@@ -153,7 +143,7 @@ If you need to analyze a server or remote environment:
 
 ### 1. Parallel Work-Stealing Walker (`src/traversal.rs`)
 
-The traversal engine avoids the performance bottlenecks of standard recursive single-threaded walkers. It utilizes `crossbeam-deque` for task scheduling:
+The traversal engine avoids the performance bottlenecks of standard recursive single-threaded walkers. It utilizes `crossbeam-deque` for task scheduling inspired by `ripgrep`:
 
 - **Workers & Stealers:** Each parallel thread operates on a local thread-safe FIFO task queue. When a thread runs out of directories to scan, it attempts to steal tasks from a global injector or peer worker queues.
 - **Cycle Detection:** Avoids infinite directory loops (caused by recursive symbolic links) by checking filesystem identity descriptors (`dev`/`ino` on Unix, and `volume_serial_number`/`file_index` on Windows) against an inherited stack of ancestors.
@@ -225,15 +215,15 @@ The engine remains hardlink-aware, allowing it to accurately differentiate betwe
 
 ## Benchmarks
 
-### Vs `WinDirStat` (v1.1.2.80) (same video as above)
+### Vs `WinDirStat` (v2.6.2)
 
 A dense Windows primary drive.
 
 `NVMe PCIe Gen3 [ntfs]`
 
-**Up to 53.7x speedup**
+**Up to 2.8x speedup**
 
-<https://github.com/user-attachments/assets/72ab0f7a-0dac-48ae-886c-f3f8cb22ad49>
+video coming soon!
 
 ### Vs `WizTree` (v4.31)
 
@@ -423,7 +413,7 @@ Speedup (QDirStat / eDirStat): 6.60x
 
 > **Benchmark Disclaimer & Configuration:**
 >
-> - Comparisons were conducted against **WinDirStat v1.1.2.80**, **WizTree v4.31**, and **QDirStat v2.0.01** under equivalent, controlled testing conditions with primed system caches.
+> - Comparisons were conducted against **WinDirStat v2.6.2**, **WizTree v4.31**, and **QDirStat v2.0.01** under controlled testing conditions with primed system caches.
 > - eDirStat is an independent open-source utility and is not associated with, sponsored by, or endorsed by the trademark holders of those projects.
 > - Performance measurements depend heavily on hardware setup, filesystem fragmentation, operating system scheduling, and disk caching behavior; individual test results may vary.
 
