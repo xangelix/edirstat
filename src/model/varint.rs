@@ -55,7 +55,9 @@ pub(super) const fn read_u64_varint(
 
     loop {
         if *cursor >= slice.len() {
-            return Err(crate::EdirstatError::TruncatedNodes);
+            return Err(crate::EdirstatError::Decode(
+                "varint stream ended unexpectedly",
+            ));
         }
 
         let byte = slice[*cursor];
@@ -64,7 +66,9 @@ pub(super) const fn read_u64_varint(
 
         // Prevent overflow attacks (larger than 64-bit shifts)
         if shift >= 64 {
-            return Err(crate::EdirstatError::TruncatedNodes);
+            return Err(crate::EdirstatError::Decode(
+                "overlong varint exceeds 64 bits",
+            ));
         }
 
         val |= payload << shift;
