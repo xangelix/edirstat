@@ -229,7 +229,7 @@ impl super::GuiApp {
                         if ui.button("🎯 All But Oldest").clicked() {
                             self.selected_duplicates.clear();
                             for group in &results_lock.read().groups {
-                                let mut oldest_node: Option<(u32, i64)> = None;
+                                let mut oldest_node: Option<(u32, u32)> = None;
                                 for &idx in &group.nodes {
                                     let mod_time = snapshot.nodes[idx as usize].modified_timestamp;
                                     match oldest_node {
@@ -255,7 +255,7 @@ impl super::GuiApp {
                         if ui.button("🎯 All But Newest").clicked() {
                             self.selected_duplicates.clear();
                             for group in &results_lock.read().groups {
-                                let mut newest_node: Option<(u32, i64)> = None;
+                                let mut newest_node: Option<(u32, u32)> = None;
                                 for &idx in &group.nodes {
                                     let mod_time = snapshot.nodes[idx as usize].modified_timestamp;
                                     match newest_node {

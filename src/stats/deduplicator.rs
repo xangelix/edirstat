@@ -39,9 +39,9 @@ pub struct DuplicateRow {
     pub size_str: String,
     pub reclaimable_str: String,
     /// Raw Unix timestamp for the created time; formatted at render-time.
-    pub created_timestamp: i64,
+    pub created_timestamp: u32,
     /// Raw Unix timestamp for the modified time; formatted at render-time.
-    pub modified_timestamp: i64,
+    pub modified_timestamp: u32,
     pub is_original: bool,
     pub is_hardlink: bool,
 }
@@ -223,22 +223,23 @@ fn calculate_hash_at_range(
     path: &str,
     start_offset: u64,
     len: usize,
-    expected_modified: i64,
-    expected_created: i64,
+    expected_modified: u32,
+    expected_created: u32,
 ) -> Option<[u8; 32]> {
-    // 1. Verify metadata timestamps before reading
+    // 1. Verify metadata timestamps before reading.
+    // Timestamps are stored as u32 epoch seconds, so compare the lower 32 bits.
     let metadata = std::fs::metadata(path).ok()?;
 
     if let Ok(modified_time) = metadata.modified()
         && let Ok(duration) = modified_time.duration_since(std::time::UNIX_EPOCH)
-        && duration.as_secs() as i64 != expected_modified
+        && duration.as_secs() as u32 != expected_modified
     {
         return None; // modified since snapshot
     }
 
     if let Ok(created_time) = metadata.created()
         && let Ok(duration) = created_time.duration_since(std::time::UNIX_EPOCH)
-        && duration.as_secs() as i64 != expected_created
+        && duration.as_secs() as u32 != expected_created
     {
         return None; // created since snapshot
     }
@@ -258,21 +259,21 @@ fn calculate_hash_at_range(
 fn calculate_multi_range_hash(
     path: &str,
     file_size: u64,
-    expected_modified: i64,
-    expected_created: i64,
+    expected_modified: u32,
+    expected_created: u32,
 ) -> Option<[u8; 32]> {
     let metadata = std::fs::metadata(path).ok()?;
 
     if let Ok(modified_time) = metadata.modified()
         && let Ok(duration) = modified_time.duration_since(std::time::UNIX_EPOCH)
-        && duration.as_secs() as i64 != expected_modified
+        && duration.as_secs() as u32 != expected_modified
     {
         return None;
     }
 
     if let Ok(created_time) = metadata.created()
         && let Ok(duration) = created_time.duration_since(std::time::UNIX_EPOCH)
-        && duration.as_secs() as i64 != expected_created
+        && duration.as_secs() as u32 != expected_created
     {
         return None;
     }
@@ -295,21 +296,21 @@ fn calculate_multi_range_hash(
 /// Full cryptographic hash of the entire file contents
 fn calculate_full_hash(
     path: &str,
-    expected_modified: i64,
-    expected_created: i64,
+    expected_modified: u32,
+    expected_created: u32,
 ) -> Option<[u8; 32]> {
     let metadata = std::fs::metadata(path).ok()?;
 
     if let Ok(modified_time) = metadata.modified()
         && let Ok(duration) = modified_time.duration_since(std::time::UNIX_EPOCH)
-        && duration.as_secs() as i64 != expected_modified
+        && duration.as_secs() as u32 != expected_modified
     {
         return None;
     }
 
     if let Ok(created_time) = metadata.created()
         && let Ok(duration) = created_time.duration_since(std::time::UNIX_EPOCH)
-        && duration.as_secs() as i64 != expected_created
+        && duration.as_secs() as u32 != expected_created
     {
         return None;
     }
@@ -329,7 +330,7 @@ fn calculate_full_hash(
     Some(hasher.finalize().into())
 }
 
-pub type HashFn = dyn Fn(&str, u64, i64, i64) -> HashResult + Send + Sync;
+pub type HashFn = dyn Fn(&str, u64, u32, u32) -> HashResult + Send + Sync;
 
 /// Main execution routine of the background deduplication runner
 #[allow(clippy::needless_pass_by_value)]
@@ -548,7 +549,7 @@ pub fn run_deduplication(
     };
 
     // --- Phase 2: Prefix Hashing ---
-    let prefix_hash_fn = |path: &str, _size: u64, expected_mod: i64, expected_cre: i64| {
+    let prefix_hash_fn = |path: &str, _size: u64, expected_mod: u32, expected_cre: u32| {
         calculate_hash_at_range(path, 0, HASH_BLOCK_SIZE, expected_mod, expected_cre)
             .map_or(HashResult::Error, HashResult::Success)
     };
@@ -566,7 +567,7 @@ pub fn run_deduplication(
     update_results(current_groups.clone());
 
     // --- Phase 3: Midpoint Hashing ---
-    let midpoint_hash_fn = |path: &str, size: u64, expected_mod: i64, expected_cre: i64| {
+    let midpoint_hash_fn = |path: &str, size: u64, expected_mod: u32, expected_cre: u32| {
         if size <= (HASH_BLOCK_SIZE * 2) as u64 {
             return HashResult::Skipped;
         }
@@ -595,7 +596,7 @@ pub fn run_deduplication(
     update_results(current_groups.clone());
 
     // --- Phase 4: Suffix Hashing ---
-    let suffix_hash_fn = |path: &str, size: u64, expected_mod: i64, expected_cre: i64| {
+    let suffix_hash_fn = |path: &str, size: u64, expected_mod: u32, expected_cre: u32| {
         if size <= HASH_BLOCK_SIZE as u64 {
             return HashResult::Skipped;
         }
@@ -623,7 +624,7 @@ pub fn run_deduplication(
     update_results(current_groups.clone());
 
     // --- Phase 5: Multi-Range Hashing ---
-    let multi_range_hash_fn = |path: &str, size: u64, expected_mod: i64, expected_cre: i64| {
+    let multi_range_hash_fn = |path: &str, size: u64, expected_mod: u32, expected_cre: u32| {
         if size < MULTI_RANGE_SPREAD_SIZE {
             return HashResult::Skipped;
         }
@@ -644,7 +645,7 @@ pub fn run_deduplication(
     update_results(current_groups.clone());
 
     // --- Phase 6: Full Hashing ---
-    let full_hash_fn = |path: &str, _size: u64, expected_mod: i64, expected_cre: i64| {
+    let full_hash_fn = |path: &str, _size: u64, expected_mod: u32, expected_cre: u32| {
         calculate_full_hash(path, expected_mod, expected_cre)
             .map_or(HashResult::Error, HashResult::Success)
     };
@@ -695,12 +696,12 @@ pub fn run_deduplication(
                 let modified_ok = meta.modified().map_or(true, |mod_time| {
                     mod_time
                         .duration_since(std::time::UNIX_EPOCH)
-                        .map_or(true, |duration| duration.as_secs() as i64 == expected_mod)
+                        .map_or(true, |duration| duration.as_secs() as u32 == expected_mod)
                 });
                 let created_ok = meta.created().map_or(true, |cre_time| {
                     cre_time
                         .duration_since(std::time::UNIX_EPOCH)
-                        .map_or(true, |duration| duration.as_secs() as i64 == expected_cre)
+                        .map_or(true, |duration| duration.as_secs() as u32 == expected_cre)
                 });
 
                 if modified_ok && created_ok {
@@ -886,9 +887,9 @@ mod tests {
         let f2_id = pool.get_or_insert(b"file2.png");
 
         let nodes = vec![
-            FileNode::new(r_id, None, true, false, 0, 0, 0),
-            FileNode::new(f1_id, Some(0), false, false, 10, 0, 0),
-            FileNode::new(f2_id, Some(0), false, false, 20, 0, 0),
+            FileNode::new(r_id, None, true, false, 0, 0),
+            FileNode::new(f1_id, Some(0), false, false, 10, 0),
+            FileNode::new(f2_id, Some(0), false, false, 20, 0),
         ];
 
         let snapshot = FileArenaSnapshot {
@@ -926,9 +927,9 @@ mod tests {
         let f2_id = pool.get_or_insert(b"file2.png");
 
         let nodes = vec![
-            FileNode::new(r_id, None, true, false, 0, 0, 0),
-            FileNode::new(f1_id, Some(0), false, false, 10, 0, 0),
-            FileNode::new(f2_id, Some(0), false, false, 20, 0, 0),
+            FileNode::new(r_id, None, true, false, 0, 0),
+            FileNode::new(f1_id, Some(0), false, false, 10, 0),
+            FileNode::new(f2_id, Some(0), false, false, 20, 0),
         ];
 
         let snapshot = FileArenaSnapshot {

@@ -89,12 +89,12 @@ impl CommonTimeFormat {
 
 /// Translates Unix Epoch seconds to a date/time string using the given `TimeFormat`.
 ///
-/// Returns `"Unknown"` for timestamps that cannot be represented (≤ 0 or beyond year 9999).
+/// Returns `"Unknown"` for the `0` sentinel (unknown/missing timestamp).
 #[must_use]
-pub fn format_epoch(epoch_secs: i64, fmt: &TimeFormat) -> String {
-    if epoch_secs <= 0 || epoch_secs > 253_402_300_799 {
+pub fn format_epoch(epoch_secs: u32, fmt: &TimeFormat) -> String {
+    if epoch_secs == 0 {
         if fmt.0 == CommonTimeFormat::UnixTimestamp.as_str() {
-            return epoch_secs.to_string();
+            return "0".to_string();
         } else if fmt.0 == CommonTimeFormat::DateOnly.as_str() {
             return "Pre-1970".to_string();
         }
@@ -106,21 +106,19 @@ pub fn format_epoch(epoch_secs: i64, fmt: &TimeFormat) -> String {
         return epoch_secs.to_string();
     }
 
-    Utc.timestamp_opt(epoch_secs, 0)
+    Utc.timestamp_opt(epoch_secs as i64, 0)
         .single()
         .map_or_else(|| "Unknown".to_string(), |dt| dt.format(&fmt.0).to_string())
 }
 
-/// Safely translates `SystemTime` to seconds since Unix Epoch, maintaining signs for pre-1970 dates.
+/// Translates `SystemTime` to seconds since Unix Epoch.
+///
+/// Pre-1970 times clamp to `0` (the sentinel for an unknown/missing timestamp);
+/// far-future values saturate at `u32::MAX` (year 2106).
 #[must_use]
-pub fn system_time_to_unix_timestamp(t: std::time::SystemTime) -> i64 {
-    match t.duration_since(std::time::SystemTime::UNIX_EPOCH) {
-        Ok(duration) => duration.as_secs() as i64,
-        Err(err) => {
-            let neg_duration = err.duration();
-            -(neg_duration.as_secs() as i64)
-        }
-    }
+pub fn system_time_to_unix_timestamp(t: std::time::SystemTime) -> u32 {
+    t.duration_since(std::time::SystemTime::UNIX_EPOCH)
+        .map_or(0, |duration| duration.as_secs().min(u32::MAX as u64) as u32)
 }
 
 #[cfg(test)]
@@ -134,25 +132,17 @@ mod tests {
     }
 
     #[test]
-    fn test_format_epoch_pre_1970() {
+    fn test_format_epoch_unknown_sentinel() {
         assert_eq!(format_epoch(0, &tf(CommonTimeFormat::DateOnly)), "Pre-1970");
         assert_eq!(format_epoch(0, &tf(CommonTimeFormat::Iso8601)), "Unknown");
-        assert_eq!(
-            format_epoch(-50, &tf(CommonTimeFormat::DateOnly)),
-            "Pre-1970"
-        );
-        assert_eq!(format_epoch(-50, &tf(CommonTimeFormat::Iso8601)), "Unknown");
     }
 
     #[test]
-    fn test_format_epoch_post_maximum() {
+    fn test_format_epoch_saturating_max() {
+        // u32::MAX (year 2106) is the largest representable epoch; it formats normally.
         assert_eq!(
-            format_epoch(253_402_300_800, &tf(CommonTimeFormat::DateOnly)),
-            "Pre-1970"
-        );
-        assert_eq!(
-            format_epoch(253_402_300_800, &tf(CommonTimeFormat::Iso8601)),
-            "Unknown"
+            format_epoch(u32::MAX, &tf(CommonTimeFormat::Iso8601)),
+            "2106-02-07 06:28:15"
         );
     }
 
@@ -235,7 +225,8 @@ mod tests {
 
     #[test]
     fn test_system_time_to_unix_timestamp_past() {
+        // Pre-1970 times clamp to the 0 "unknown" sentinel.
         let t = SystemTime::UNIX_EPOCH - Duration::from_secs(98765);
-        assert_eq!(system_time_to_unix_timestamp(t), -98765);
+        assert_eq!(system_time_to_unix_timestamp(t), 0);
     }
 }

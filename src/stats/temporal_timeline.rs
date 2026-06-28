@@ -3,8 +3,8 @@ use std::collections::HashMap;
 use crate::arena::FileArenaSnapshot;
 
 pub struct TemporalTimelineChart {
-    pub sorted_days: Vec<i64>,
-    pub daily_totals: HashMap<i64, (u64, u32)>, // Day_secs -> (size_sum, count)
+    pub sorted_days: Vec<u32>,
+    pub daily_totals: HashMap<u32, (u64, u32)>, // Day_secs -> (size_sum, count)
     pub last_snapshot_ptr: usize,
 }
 
@@ -110,7 +110,8 @@ impl super::StatComponent for TemporalTimelineChart {
 
         // Custom time-axis calendar formatter
         let x_formatter = |mark: egui_plot::GridMark, _range: &std::ops::RangeInclusive<f64>| {
-            let val = mark.value.round() as i64;
+            // Saturating cast: marks left of the epoch become 0 (the "unknown" sentinel).
+            let val = mark.value.round() as u32;
             let fmt = crate::model::time_utils::TimeFormat(
                 crate::model::time_utils::CommonTimeFormat::DateOnly
                     .as_str()
@@ -222,10 +223,10 @@ mod tests {
         let f3_id = pool.get_or_insert(b"f3");
 
         let mut nodes = vec![
-            FileNode::new(r_id, None, true, false, 0, 0, 0),
-            FileNode::new(f1_id, Some(0), false, false, 1_686_657_845, 0, 0),
-            FileNode::new(f2_id, Some(0), false, false, 1_686_667_845, 0, 0),
-            FileNode::new(f3_id, Some(0), false, false, 1_686_744_200, 0, 0),
+            FileNode::new(r_id, None, true, false, 0, 0),
+            FileNode::new(f1_id, Some(0), false, false, 1_686_657_845, 0),
+            FileNode::new(f2_id, Some(0), false, false, 1_686_667_845, 0),
+            FileNode::new(f3_id, Some(0), false, false, 1_686_744_200, 0),
         ];
         nodes[1].size = 100;
         nodes[2].size = 200;
@@ -259,8 +260,8 @@ mod tests {
         let f1_id = pool.get_or_insert(b"f1");
 
         let mut nodes = vec![
-            FileNode::new(r_id, None, true, false, 0, 0, 0),
-            FileNode::new(f1_id, Some(0), false, false, 0, 0, 0),
+            FileNode::new(r_id, None, true, false, 0, 0),
+            FileNode::new(f1_id, Some(0), false, false, 0, 0),
         ];
         nodes[1].size = 500;
 
@@ -283,12 +284,12 @@ mod tests {
         let mut pool = StringPool::new();
         let r_id = pool.get_or_insert(b"root");
 
-        let mut nodes = vec![FileNode::new(r_id, None, true, false, 0, 0, 0)];
+        let mut nodes = vec![FileNode::new(r_id, None, true, false, 0, 0)];
 
         for i in 0..5005 {
             let f_id = pool.get_or_insert(format!("f{i}").as_bytes());
             let timestamp = 1_686_657_845 + (i * 86400);
-            let mut node = FileNode::new(f_id, Some(0), false, false, timestamp, 0, 0);
+            let mut node = FileNode::new(f_id, Some(0), false, false, timestamp, 0);
             node.size = 1;
             nodes.push(node);
         }

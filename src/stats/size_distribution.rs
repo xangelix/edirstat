@@ -189,11 +189,11 @@ mod tests {
         let f4_id = pool.get_or_insert(b"f4");
 
         let mut nodes = vec![
-            FileNode::new(r_id, None, true, false, 0, 0, 0),
-            FileNode::new(f1_id, Some(0), false, false, 0, 0, 0),
-            FileNode::new(f2_id, Some(0), false, false, 0, 0, 0),
-            FileNode::new(f3_id, Some(0), false, false, 0, 0, 0),
-            FileNode::new(f4_id, Some(0), false, false, 0, 0, 0),
+            FileNode::new(r_id, None, true, false, 0, 0),
+            FileNode::new(f1_id, Some(0), false, false, 0, 0),
+            FileNode::new(f2_id, Some(0), false, false, 0, 0),
+            FileNode::new(f3_id, Some(0), false, false, 0, 0),
+            FileNode::new(f4_id, Some(0), false, false, 0, 0),
         ];
         nodes[1].size = 5000;
         nodes[2].size = 50000;
@@ -227,8 +227,8 @@ mod tests {
         let d1_id = pool.get_or_insert(b"dir1");
 
         let mut nodes = vec![
-            FileNode::new(r_id, None, true, false, 0, 0, 0),
-            FileNode::new(d1_id, Some(0), true, false, 0, 0, 0),
+            FileNode::new(r_id, None, true, false, 0, 0),
+            FileNode::new(d1_id, Some(0), true, false, 0, 0),
         ];
         nodes[1].size = 5000;
 

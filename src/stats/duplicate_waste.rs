@@ -267,11 +267,11 @@ mod tests {
         let f4_id = pool.get_or_insert(b"file4.txt");
 
         let nodes = vec![
-            FileNode::new(r_id, None, true, false, 0, 0, 0),
-            FileNode::new(f1_id, Some(0), false, false, 0, 0, 0),
-            FileNode::new(f2_id, Some(0), false, false, 0, 0, 0),
-            FileNode::new(f3_id, Some(0), false, false, 0, 0, 0),
-            FileNode::new(f4_id, Some(0), false, false, 0, 0, 0),
+            FileNode::new(r_id, None, true, false, 0, 0),
+            FileNode::new(f1_id, Some(0), false, false, 0, 0),
+            FileNode::new(f2_id, Some(0), false, false, 0, 0),
+            FileNode::new(f3_id, Some(0), false, false, 0, 0),
+            FileNode::new(f4_id, Some(0), false, false, 0, 0),
         ];
 
         let dir_counts = precompute_dir_counts(&nodes);
@@ -313,9 +313,9 @@ mod tests {
         let f2_id = pool.get_or_insert(b"file2.png");
 
         let nodes = vec![
-            FileNode::new(r_id, None, true, false, 0, 0, 0),
-            FileNode::new(f1_id, Some(0), false, false, 0, 0, 0),
-            FileNode::new(f2_id, Some(0), false, false, 0, 0, 0),
+            FileNode::new(r_id, None, true, false, 0, 0),
+            FileNode::new(f1_id, Some(0), false, false, 0, 0),
+            FileNode::new(f2_id, Some(0), false, false, 0, 0),
         ];
 
         let dir_counts = precompute_dir_counts(&nodes);

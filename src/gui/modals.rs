@@ -1828,7 +1828,7 @@ mod tests {
         let mut pool = crate::arena::StringPool::new();
         let name_root = pool.get_or_insert(b"/");
         let nodes = vec![crate::arena::FileNode::new(
-            name_root, None, true, false, 0, 0, 0,
+            name_root, None, true, false, 0, 0,
         )];
         let test_file = temp_dir.join("test_snapshot.edst");
         crate::persistence::snapshot::save_snapshot(&nodes, &pool, &test_file, false)?; // Save as raw uncompressed
@@ -1856,7 +1856,7 @@ mod tests {
         // A Windows UNC path as the root node name
         let name_root = pool.get_or_insert(b"\\\\?\\C:\\TestFolder");
         let nodes = vec![crate::arena::FileNode::new(
-            name_root, None, true, false, 0, 0, 0,
+            name_root, None, true, false, 0, 0,
         )];
         let dir_counts = crate::arena::precompute_dir_counts(&nodes);
         let snapshot = FileArenaSnapshot {

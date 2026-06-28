@@ -80,7 +80,7 @@ impl Coordinator {
 
         // Register root directory node (Global ID 0)
         let root_name_id = string_pool.get_or_insert(root_path_str.as_bytes());
-        let root_node = FileNode::new(root_name_id, None, true, false, 0, 0, 0);
+        let root_node = FileNode::new(root_name_id, None, true, false, 0, 0);
         arena.push(root_node);
         last_child_map.push(NO_INDEX);
 
@@ -102,7 +102,6 @@ impl Coordinator {
                         name,
                         modified_timestamp,
                         created_timestamp,
-                        accessed_timestamp,
                         no_permission,
                     } => {
                         // Resolve parent global index using the parent's creator worker ID
@@ -120,7 +119,6 @@ impl Coordinator {
                                 false,
                                 modified_timestamp,
                                 created_timestamp,
-                                accessed_timestamp,
                             );
                             if no_permission {
                                 dir_node.flags |= FileNode::FLAG_NO_PERMISSION;
@@ -155,7 +153,6 @@ impl Coordinator {
                         is_symlink,
                         modified_timestamp,
                         created_timestamp,
-                        accessed_timestamp,
                         no_permission,
                     } => {
                         if name.is_empty() && size == 0 {
@@ -178,7 +175,6 @@ impl Coordinator {
                                 is_symlink,
                                 modified_timestamp,
                                 created_timestamp,
-                                accessed_timestamp,
                             );
                             file_node.size = size;
                             if no_permission {
@@ -294,7 +290,6 @@ fn propagate_all_sizes_bottom_up(arena: &mut [FileNode]) {
             };
             let modified = arena[idx].modified_timestamp;
             let created = arena[idx].created_timestamp;
-            let accessed = arena[idx].accessed_timestamp;
 
             // Update parent directly in contiguous slice memory
             let parent_node = &mut arena[parent_idx];
@@ -305,9 +300,6 @@ fn propagate_all_sizes_bottom_up(arena: &mut [FileNode]) {
             }
             if created > parent_node.created_timestamp {
                 parent_node.created_timestamp = created;
-            }
-            if accessed > parent_node.accessed_timestamp {
-                parent_node.accessed_timestamp = accessed;
             }
         }
     }

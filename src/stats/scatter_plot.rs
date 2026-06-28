@@ -1,6 +1,6 @@
 pub struct FileAgeSizeScatterChart {
     pub top_files: Vec<(u32, u64)>, // (node_idx, size)
-    pub max_timestamp: i64,
+    pub max_timestamp: u32,
     pub last_snapshot_ptr: usize,
 }
 
@@ -32,7 +32,7 @@ impl super::StatsChart for FileAgeSizeScatterChart {
         }
 
         // 1. Establish the modern baseline using the most recent modification time
-        let mut max_time = 0i64;
+        let mut max_time = 0u32;
         for node in snapshot.nodes.iter() {
             if !node.is_directory() && node.modified_timestamp > max_time {
                 max_time = node.modified_timestamp;
@@ -241,9 +241,9 @@ mod tests {
         let f2_id = pool.get_or_insert(b"f2.txt");
 
         let mut nodes = vec![
-            FileNode::new(r_id, None, true, false, 0, 0, 0),
-            FileNode::new(f1_id, Some(0), false, false, 1000, 0, 0),
-            FileNode::new(f2_id, Some(0), false, false, 2000, 0, 0),
+            FileNode::new(r_id, None, true, false, 0, 0),
+            FileNode::new(f1_id, Some(0), false, false, 1000, 0),
+            FileNode::new(f2_id, Some(0), false, false, 2000, 0),
         ];
         nodes[1].size = 500;
         nodes[2].size = 1000;

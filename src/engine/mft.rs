@@ -31,9 +31,8 @@ struct AlignedPage {
 struct MftEntry {
     size: u64,
     parent_record_id: u64,
-    modified_timestamp: i64,
-    created_timestamp: i64,
-    accessed_timestamp: i64,
+    modified_timestamp: u32,
+    created_timestamp: u32,
     name_id: u32,
     flags: u8, // bit 0: is_dir, bit 1: is_symlink, bit 2: has_attr_list
     _padding: [u8; 3],
@@ -167,11 +166,17 @@ impl ShardedStringPool {
 
 /// Converts Windows NT 100-nanosecond intervals to standard Unix epoch seconds.
 #[inline]
-const fn nt_time_to_unix(nt_time: u64) -> i64 {
+const fn nt_time_to_unix(nt_time: u64) -> u32 {
     if nt_time == 0 {
-        0
+        return 0;
+    }
+    // Saturating subtraction keeps pre-1970 NT times at 0.
+    let secs = (nt_time / 10_000_000).saturating_sub(11_644_473_600);
+    // `Ord::min` is not const-stable, so cap manually: values past 2106 saturate to u32::MAX.
+    if secs > u32::MAX as u64 {
+        u32::MAX
     } else {
-        (nt_time / 10_000_000).saturating_sub(11_644_473_600) as i64
+        secs as u32
     }
 }
 
@@ -411,15 +416,15 @@ fn parse_attributes(record_data: &[u8]) -> SmallVec<[AttributeHeader<'_>; 6]> {
     attrs
 }
 
-/// Extracts standard info timestamps (created, modified, accessed) from an attribute payload.
+/// Extracts standard info timestamps (created, modified) from an attribute payload.
 #[inline]
-fn parse_standard_information_timestamps(payload: &[u8]) -> Option<(i64, i64, i64)> {
+fn parse_standard_information_timestamps(payload: &[u8]) -> Option<(u32, u32)> {
     if payload.len() < 24 {
         return None;
     }
     let val_offset = u16::from_le_bytes([payload[20], payload[21]]) as usize;
-    if val_offset + 32 <= payload.len() {
-        let std_info = &payload[val_offset..val_offset + 32];
+    if val_offset + 16 <= payload.len() {
+        let std_info = &payload[val_offset..val_offset + 16];
         let created = nt_time_to_unix(u64::from_le_bytes([
             std_info[0],
             std_info[1],
@@ -440,17 +445,7 @@ fn parse_standard_information_timestamps(payload: &[u8]) -> Option<(i64, i64, i6
             std_info[14],
             std_info[15],
         ]));
-        let accessed = nt_time_to_unix(u64::from_le_bytes([
-            std_info[24],
-            std_info[25],
-            std_info[26],
-            std_info[27],
-            std_info[28],
-            std_info[29],
-            std_info[30],
-            std_info[31],
-        ]));
-        Some((created, modified, accessed))
+        Some((created, modified))
     } else {
         None
     }
@@ -707,21 +702,19 @@ fn process_mft_chunks(
                                         let extracted_links = extract_all_links_from_record(&attrs);
                                         let is_dir = (flags & 2) != 0;
 
-                                        let mut modified = 0i64;
-                                        let mut created = 0i64;
-                                        let mut accessed = 0i64;
+                                        let mut modified = 0u32;
+                                        let mut created = 0u32;
 
                                         for attr in &attrs {
                                             if attr.ty == 0x10
                                                 && !attr.is_non_resident
-                                                && let Some((cre, mod_t, acc)) =
+                                                && let Some((cre, mod_t)) =
                                                     parse_standard_information_timestamps(
                                                         attr.payload,
                                                     )
                                             {
                                                 created = cre;
                                                 modified = mod_t;
-                                                accessed = acc;
                                                 break;
                                             }
                                         }
@@ -744,7 +737,6 @@ fn process_mft_chunks(
                                                 parent_record_id: first.parent_ref,
                                                 modified_timestamp: modified,
                                                 created_timestamp: created,
-                                                accessed_timestamp: accessed,
                                                 name_id: name_id.0,
                                                 flags: entry_flags,
                                                 _padding: [0; 3],
@@ -808,7 +800,6 @@ fn process_mft_chunks(
             parent_record_id: link.parent_ref,
             modified_timestamp: 0,
             created_timestamp: 0,
-            accessed_timestamp: 0,
             name_id: name_id.0,
             flags: 0, // Hardlinks are files
             _padding: [0; 3],
@@ -900,7 +891,6 @@ fn process_mft_chunks(
                         name: CompactString::new(name_str),
                         modified_timestamp: entry.modified_timestamp,
                         created_timestamp: entry.created_timestamp,
-                        accessed_timestamp: entry.accessed_timestamp,
                         no_permission: false,
                     });
                     if batch.len() >= BATCH_SIZE {
@@ -962,7 +952,6 @@ fn process_mft_chunks(
                         is_symlink: entry.flags & 2 != 0,
                         modified_timestamp: entry.modified_timestamp,
                         created_timestamp: entry.created_timestamp,
-                        accessed_timestamp: entry.accessed_timestamp,
                         no_permission: false,
                     });
                     if batch.len() >= BATCH_SIZE {

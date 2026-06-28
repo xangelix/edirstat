@@ -623,9 +623,9 @@ mod tests {
         let d_id = pool.get_or_insert(b"dir");
         let f_id = pool.get_or_insert(b"file");
         let nodes = vec![
-            FileNode::new(r_id, None, true, false, 0, 0, 0),
-            FileNode::new(d_id, Some(0), true, false, 0, 0, 0),
-            FileNode::new(f_id, Some(1), false, false, 0, 0, 0),
+            FileNode::new(r_id, None, true, false, 0, 0),
+            FileNode::new(d_id, Some(0), true, false, 0, 0),
+            FileNode::new(f_id, Some(1), false, false, 0, 0),
         ];
 
         assert!(is_descendant(&nodes, 2, 1));
@@ -642,9 +642,9 @@ mod tests {
         let d_id = pool.get_or_insert(b"dir");
         let f_id = pool.get_or_insert(b"file");
         let nodes = vec![
-            FileNode::new(r_id, None, true, false, 0, 0, 0),
-            FileNode::new(d_id, Some(0), true, false, 0, 0, 0),
-            FileNode::new(f_id, Some(1), false, false, 0, 0, 0),
+            FileNode::new(r_id, None, true, false, 0, 0),
+            FileNode::new(d_id, Some(0), true, false, 0, 0),
+            FileNode::new(f_id, Some(1), false, false, 0, 0),
         ];
 
         let mut selected = std::collections::HashSet::new();
@@ -687,8 +687,8 @@ mod tests {
         let f1_id = pool.get_or_insert(b"f1.png");
 
         let mut nodes = vec![
-            FileNode::new(r_id, None, true, false, 0, 0, 0),
-            FileNode::new(f1_id, Some(0), false, false, 0, 0, 0),
+            FileNode::new(r_id, None, true, false, 0, 0),
+            FileNode::new(f1_id, Some(0), false, false, 0, 0),
         ];
         nodes[0].first_child = 1;
         nodes[0].size = 1000;

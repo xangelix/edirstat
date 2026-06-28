@@ -29,14 +29,11 @@ pub struct FileNode {
     /// Cumulative size in bytes on disk.
     pub size: u64,
 
-    /// Last modified timestamp (seconds since Unix Epoch)
-    pub modified_timestamp: i64,
+    /// Last modified timestamp (seconds since Unix Epoch; 0 = unknown)
+    pub modified_timestamp: u32,
 
-    /// Creation timestamp (seconds since Unix Epoch)
-    pub created_timestamp: i64,
-
-    /// Last access timestamp (seconds since Unix Epoch)
-    pub accessed_timestamp: i64,
+    /// Creation timestamp (seconds since Unix Epoch; 0 = unknown)
+    pub created_timestamp: u32,
 
     /// Total number of files nested under this node (if directory).
     pub file_count: u32,
@@ -60,9 +57,8 @@ impl FileNode {
         parent: Option<u32>,
         is_dir: bool,
         is_symlink: bool,
-        modified_timestamp: i64,
-        created_timestamp: i64,
-        accessed_timestamp: i64,
+        modified_timestamp: u32,
+        created_timestamp: u32,
     ) -> Self {
         let mut flags = 0u8;
         if is_dir {
@@ -79,7 +75,6 @@ impl FileNode {
             size: 0,
             modified_timestamp,
             created_timestamp,
-            accessed_timestamp,
             file_count: 0,
             flags,
             _padding: [0; 3],
@@ -144,7 +139,6 @@ impl FileNode {
             meta.is_symlink,
             meta.modified_timestamp,
             meta.created_timestamp,
-            meta.accessed_timestamp,
         );
         if meta.no_permission {
             node.flags |= Self::FLAG_NO_PERMISSION;
@@ -486,9 +480,9 @@ mod tests {
         // Node 1: Dir (Documents), parent=0
         // Node 2: File (test.rs), parent=1
         let nodes = vec![
-            FileNode::new(root_id, None, true, false, 0, 0, 0),
-            FileNode::new(dir_id, Some(0), true, false, 0, 0, 0),
-            FileNode::new(file_id, Some(1), false, false, 0, 0, 0),
+            FileNode::new(root_id, None, true, false, 0, 0),
+            FileNode::new(dir_id, Some(0), true, false, 0, 0),
+            FileNode::new(file_id, Some(1), false, false, 0, 0),
         ];
 
         let dir_counts = precompute_dir_counts(&nodes);
@@ -511,9 +505,9 @@ mod tests {
         let file_id = pool.get_or_insert(b"test.exe");
 
         let nodes = vec![
-            FileNode::new(root_id, None, true, false, 0, 0, 0),
-            FileNode::new(dir_id, Some(0), true, false, 0, 0, 0),
-            FileNode::new(file_id, Some(1), false, false, 0, 0, 0),
+            FileNode::new(root_id, None, true, false, 0, 0),
+            FileNode::new(dir_id, Some(0), true, false, 0, 0),
+            FileNode::new(file_id, Some(1), false, false, 0, 0),
         ];
 
         let dir_counts = precompute_dir_counts(&nodes);
@@ -530,44 +524,43 @@ mod tests {
 
     #[test]
     fn test_filenode_new() {
-        let node = FileNode::new(StringId(12), Some(5), true, true, 100, 200, 300);
+        let node = FileNode::new(StringId(12), Some(5), true, true, 100, 200);
         assert_eq!(node.name_id, StringId(12));
         assert_eq!(node.parent, 5);
         assert!(node.is_directory());
         assert!(node.is_symlink());
         assert_eq!(node.modified_timestamp, 100);
         assert_eq!(node.created_timestamp, 200);
-        assert_eq!(node.accessed_timestamp, 300);
         assert_eq!(node.size, 0);
     }
 
     #[test]
     fn test_filenode_flags() {
-        let node_file = FileNode::new(StringId(0), None, false, false, 0, 0, 0);
+        let node_file = FileNode::new(StringId(0), None, false, false, 0, 0);
         assert!(!node_file.is_directory());
         assert!(!node_file.is_symlink());
 
-        let node_dir = FileNode::new(StringId(0), None, true, false, 0, 0, 0);
+        let node_dir = FileNode::new(StringId(0), None, true, false, 0, 0);
         assert!(node_dir.is_directory());
         assert!(!node_dir.is_symlink());
 
-        let node_sym = FileNode::new(StringId(0), None, false, true, 0, 0, 0);
+        let node_sym = FileNode::new(StringId(0), None, false, true, 0, 0);
         assert!(!node_sym.is_directory());
         assert!(node_sym.is_symlink());
     }
 
     #[test]
     fn test_filenode_parent_opt() {
-        let node1 = FileNode::new(StringId(0), None, false, false, 0, 0, 0);
+        let node1 = FileNode::new(StringId(0), None, false, false, 0, 0);
         assert_eq!(node1.parent_opt(), None);
 
-        let node2 = FileNode::new(StringId(0), Some(42), false, false, 0, 0, 0);
+        let node2 = FileNode::new(StringId(0), Some(42), false, false, 0, 0);
         assert_eq!(node2.parent_opt(), Some(42));
     }
 
     #[test]
     fn test_filenode_first_child_opt() {
-        let mut node = FileNode::new(StringId(0), None, false, false, 0, 0, 0);
+        let mut node = FileNode::new(StringId(0), None, false, false, 0, 0);
         assert_eq!(node.first_child_opt(), None);
         node.first_child = 7;
         assert_eq!(node.first_child_opt(), Some(7));
@@ -575,7 +568,7 @@ mod tests {
 
     #[test]
     fn test_filenode_next_sibling_opt() {
-        let mut node = FileNode::new(StringId(0), None, false, false, 0, 0, 0);
+        let mut node = FileNode::new(StringId(0), None, false, false, 0, 0);
         assert_eq!(node.next_sibling_opt(), None);
         node.next_sibling = 100;
         assert_eq!(node.next_sibling_opt(), Some(100));
@@ -590,7 +583,6 @@ mod tests {
             len: 12345,
             modified_timestamp: 10,
             created_timestamp: 20,
-            accessed_timestamp: 30,
             file_id: (1, 2),
             no_permission: false,
         };
@@ -664,9 +656,8 @@ pub struct EntryMetadata {
     pub is_dir: bool,
     pub is_symlink: bool,
     pub len: u64,
-    pub modified_timestamp: i64,
-    pub created_timestamp: i64,
-    pub accessed_timestamp: i64,
+    pub modified_timestamp: u32,
+    pub created_timestamp: u32,
     pub file_id: (u64, u64),
     pub no_permission: bool,
 }
@@ -688,9 +679,6 @@ impl EntryMetadata {
                 let created_timestamp = metadata
                     .created()
                     .map_or(0, crate::model::time_utils::system_time_to_unix_timestamp);
-                let accessed_timestamp = metadata
-                    .accessed()
-                    .map_or(0, crate::model::time_utils::system_time_to_unix_timestamp);
 
                 let file_id = crate::engine::traversal::get_file_id(&metadata);
 
@@ -701,7 +689,6 @@ impl EntryMetadata {
                     len,
                     modified_timestamp,
                     created_timestamp,
-                    accessed_timestamp,
                     file_id,
                     no_permission: false,
                 })
@@ -719,7 +706,6 @@ impl EntryMetadata {
                     len: 0,
                     modified_timestamp: 0,
                     created_timestamp: 0,
-                    accessed_timestamp: 0,
                     file_id: (0, 0),
                     no_permission: true,
                 })

@@ -349,7 +349,7 @@ mod tests {
         let mut pool = StringPool::new();
         let r_id = pool.get_or_insert(b"root");
 
-        let nodes = vec![FileNode::new(r_id, None, true, false, 0, 0, 0)];
+        let nodes = vec![FileNode::new(r_id, None, true, false, 0, 0)];
         let dir_counts = precompute_dir_counts(&nodes);
         let snapshot = FileArenaSnapshot {
             nodes: Arc::new(NodeStorage::Owned(nodes)),
@@ -371,9 +371,9 @@ mod tests {
         let f2_id = pool.get_or_insert(b"f2.txt");
 
         let mut nodes = vec![
-            FileNode::new(r_id, None, true, false, 0, 0, 0),
-            FileNode::new(f1_id, Some(0), false, false, 0, 0, 0),
-            FileNode::new(f2_id, Some(0), false, false, 0, 0, 0),
+            FileNode::new(r_id, None, true, false, 0, 0),
+            FileNode::new(f1_id, Some(0), false, false, 0, 0),
+            FileNode::new(f2_id, Some(0), false, false, 0, 0),
         ];
         nodes[0].first_child = 1;
         nodes[1].next_sibling = 2;
@@ -410,10 +410,10 @@ mod tests {
         let f2_id = pool.get_or_insert(b"f2.txt");
 
         let mut nodes = vec![
-            FileNode::new(r_id, None, true, false, 0, 0, 0),
-            FileNode::new(d1_id, Some(0), true, false, 0, 0, 0),
-            FileNode::new(f1_id, Some(1), false, false, 0, 0, 0),
-            FileNode::new(f2_id, Some(1), false, false, 0, 0, 0),
+            FileNode::new(r_id, None, true, false, 0, 0),
+            FileNode::new(d1_id, Some(0), true, false, 0, 0),
+            FileNode::new(f1_id, Some(1), false, false, 0, 0),
+            FileNode::new(f2_id, Some(1), false, false, 0, 0),
         ];
         nodes[0].first_child = 1;
         nodes[1].first_child = 2;

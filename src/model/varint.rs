@@ -1,5 +1,3 @@
-use std::borrow::Cow;
-
 /// Max bytes required to represent a 64-bit integer in LEB128 varint format.
 /// Ceil(64 bits / 7 bits per byte) = 10 bytes.
 pub const MAX_VARINT_BYTES: usize = 10;
@@ -101,20 +99,6 @@ pub(super) fn read_i64_zigzag(
 // =============================================================================
 // Slice API (For In-Memory / Zero-Allocation Array Buffers)
 // =============================================================================
-
-/// Converts a slice of `u32` to little-endian representation.
-/// Compiles down to an empty, zero-allocation borrow on little-endian platforms.
-pub(super) fn u32_slice_to_le(slice: &[u32]) -> Cow<'_, [u32]> {
-    if cfg!(target_endian = "little") {
-        Cow::Borrowed(slice)
-    } else {
-        let mut le_slice = slice.to_vec();
-        for val in &mut le_slice {
-            *val = val.to_le();
-        }
-        Cow::Owned(le_slice)
-    }
-}
 
 /// Safely transforms a raw, potentially unaligned `u8` slice into an aligned `Vec<u32>`
 /// without pointer casting risks.

@@ -1,5 +1,4 @@
 use std::{
-    borrow::Cow,
     fs::File,
     io::{Read, Write},
     path::Path,
@@ -11,8 +10,7 @@ use bytemuck::{Pod, Zeroable};
 use super::super::{
     arena::{FileNode, StringPool},
     varint::{
-        read_i64_zigzag, read_u64_varint, u8_slice_to_u32_vec, u32_slice_to_le, write_i64_zigzag,
-        write_u64_varint,
+        read_i64_zigzag, read_u64_varint, u8_slice_to_u32_vec, write_i64_zigzag, write_u64_varint,
     },
 };
 
@@ -20,10 +18,10 @@ pub const FILE_VERSION_V2: u16 = 2;
 pub const FILE_VERSION_V3: u16 = 3;
 pub const ZSTD_COMPRESSION_LEVEL: i32 = 3;
 
-// Control byte bit flags for Columnar optimizations
+// Control byte bit flags for Columnar optimizations. Bits 0-2 live on `FileNode`
+// (directory / symlink / no-permission); bits 3-4 are the timestamp shortcuts.
 const FLAG_CREATED_EQ_MODIFIED: u8 = 1 << 3;
-const FLAG_ACCESSED_EQ_MODIFIED: u8 = 1 << 4;
-const FLAG_MODIFIED_EQ_PARENT: u8 = 1 << 5;
+const FLAG_MODIFIED_EQ_PARENT: u8 = 1 << 4;
 
 #[derive(Debug, Copy, Clone, Pod, Zeroable)]
 #[repr(C, align(8))]
@@ -108,39 +106,61 @@ impl PersistentArena {
 // Helper Binary Bit-Packing, Endian, & Varint Functions
 // =============================================================================
 
-/// Converts a slice of `FileNode` to little-endian representation.
-/// Compiles down to an empty, zero-allocation borrow on little-endian platforms.
-fn nodes_to_le(nodes: &[FileNode]) -> Cow<'_, [FileNode]> {
-    if cfg!(target_endian = "little") {
-        Cow::Borrowed(nodes)
-    } else {
-        let mut le_nodes = nodes.to_vec();
-        for node in &mut le_nodes {
-            node.name_id.0 = node.name_id.0.to_le();
-            node.parent = node.parent.to_le();
-            node.first_child = node.first_child.to_le();
-            node.next_sibling = node.next_sibling.to_le();
-            node.size = node.size.to_le();
-            node.modified_timestamp = node.modified_timestamp.to_le();
-            node.created_timestamp = node.created_timestamp.to_le();
-            node.accessed_timestamp = node.accessed_timestamp.to_le();
-            node.file_count = node.file_count.to_le();
-        }
-        Cow::Owned(le_nodes)
-    }
-}
+/// On-disk size of a legacy Version-2 node record.
+///
+/// V2 was a raw memory dump of the pre-u32 `FileNode`: four `u32` pointers, a
+/// `u64` size, **three `i64` timestamps** (modified, created, accessed), a `u32`
+/// file count, a `u8` flags byte, and 3 padding bytes. That layout no longer
+/// matches the current `FileNode` (which uses `u32` timestamps and stores no
+/// accessed time), so V2 files must be decoded record-by-record rather than cast.
+const V2_NODE_SIZE: usize = 56;
 
-/// Safely transforms a raw, potentially unaligned `u8` slice into an aligned `Vec<FileNode>`
-/// without pointer casting risks.
-fn u8_slice_to_filenode_vec(bytes: &[u8]) -> Vec<FileNode> {
-    let node_size = std::mem::size_of::<FileNode>();
-    let count = bytes.len() / node_size;
-    let mut nodes =
-        vec![FileNode::new(crate::arena::StringId(0), None, false, false, 0, 0, 0,); count];
+/// Decodes one 56-byte Version-2 node record into the current [`FileNode`].
+///
+/// Fields are read with explicit little-endian reads so the code is both
+/// alignment-safe (records are not 8-byte aligned within the payload) and
+/// endian-portable (no `cfg(target_endian)` branch). The accessed time is read
+/// only to advance past it — it is intentionally discarded.
+fn decode_v2_legacy_node(chunk: &[u8]) -> FileNode {
+    // Helper closures keep the field-by-field reads readable and bounds-checked.
+    let u32_at = |offset: usize| {
+        u32::from_le_bytes(chunk[offset..offset + 4].try_into().unwrap_or([0; 4]))
+    };
+    let u64_at = |offset: usize| {
+        u64::from_le_bytes(chunk[offset..offset + 8].try_into().unwrap_or([0; 8]))
+    };
+    let i64_at = |offset: usize| {
+        i64::from_le_bytes(chunk[offset..offset + 8].try_into().unwrap_or([0; 8]))
+    };
 
-    let target_bytes = bytemuck::cast_slice_mut(&mut nodes);
-    target_bytes.copy_from_slice(bytes);
-    nodes
+    let name_id = crate::arena::StringId(u32_at(0));
+    let parent = u32_at(4);
+    let first_child = u32_at(8);
+    let next_sibling = u32_at(12);
+    let size = u64_at(16);
+    // Timestamps were i64 in V2; clamp pre-epoch values to the 0 "unknown" sentinel.
+    let modified = i64_at(24).max(0) as u32;
+    let created = i64_at(32).max(0) as u32;
+    // accessed (i64 at offset 40) is discarded.
+    let file_count = u32_at(48);
+    let flags = chunk[52];
+
+    let mut node = FileNode::new(
+        name_id,
+        (parent != crate::arena::NO_INDEX).then_some(parent),
+        (flags & FileNode::FLAG_DIRECTORY) != 0,
+        (flags & FileNode::FLAG_SYMLINK) != 0,
+        modified,
+        created,
+    );
+    node.parent = parent;
+    node.first_child = first_child;
+    node.next_sibling = next_sibling;
+    node.size = size;
+    node.file_count = file_count;
+    // The dir/symlink/no-permission bit layout is unchanged, so carry the byte as-is.
+    node.flags = flags;
+    node
 }
 
 // =============================================================================
@@ -184,38 +204,33 @@ pub fn save_snapshot_v3(
         children_buf.clear();
     }
 
-    // Create 8 homogeneous column buffers
+    // Create 7 homogeneous column buffers
     let mut col_control = Vec::with_capacity(nodes.len());
     let mut col_name_id = Vec::with_capacity(nodes.len() * 2);
     let mut col_size = Vec::with_capacity(nodes.len() * 2);
     let mut col_mod_delta = Vec::with_capacity(nodes.len() * 2);
     let mut col_cre_delta = Vec::with_capacity(nodes.len() * 2);
-    let mut col_acc_delta = Vec::with_capacity(nodes.len() * 2);
     let mut col_file_count = Vec::with_capacity(nodes.len() * 2);
     let mut col_child_count = Vec::with_capacity(nodes.len() * 2);
 
     for &old_idx in &dfs_order {
         let node = &nodes[old_idx as usize];
 
-        // Compute delta offsets of fields relative to original parent lookup
-        let (mod_delta, cre_delta, acc_delta) = if node.parent == crate::arena::NO_INDEX {
-            (
-                node.modified_timestamp,
-                node.created_timestamp - node.modified_timestamp,
-                node.accessed_timestamp - node.modified_timestamp,
-            )
+        // Compute delta offsets of fields relative to original parent lookup.
+        // Deltas are computed in i64 so negative deltas (created before modified,
+        // or a node older than its parent) do not underflow; the underlying values
+        // are u32 epoch seconds.
+        let modified = node.modified_timestamp as i64;
+        let created = node.created_timestamp as i64;
+        let (mod_delta, cre_delta) = if node.parent == crate::arena::NO_INDEX {
+            (modified, created - modified)
         } else {
             let parent_node = &nodes[node.parent as usize];
-            (
-                node.modified_timestamp - parent_node.modified_timestamp,
-                node.created_timestamp - node.modified_timestamp,
-                node.accessed_timestamp - node.modified_timestamp,
-            )
+            (modified - parent_node.modified_timestamp as i64, created - modified)
         };
 
         let mod_eq_parent = node.parent != crate::arena::NO_INDEX && mod_delta == 0;
         let cre_eq_mod = cre_delta == 0;
-        let acc_eq_mod = acc_delta == 0;
 
         // 1. Pack directory, symlink, and permission flags into the control byte
         let mut control = 0u8;
@@ -234,9 +249,6 @@ pub fn save_snapshot_v3(
         if cre_eq_mod {
             control |= FLAG_CREATED_EQ_MODIFIED;
         }
-        if acc_eq_mod {
-            control |= FLAG_ACCESSED_EQ_MODIFIED;
-        }
         col_control.push(control);
 
         // 2. Write name StringID (Varint)
@@ -245,15 +257,12 @@ pub fn save_snapshot_v3(
         // 3. Write size (Varint)
         write_u64_varint(&mut col_size, node.size);
 
-        // 4. Write timestamps contiguously to their columns ONLY if they are different
+        // 4. Write timestamps contiguously to their columns ONLY if they differ
         if !mod_eq_parent {
             write_i64_zigzag(&mut col_mod_delta, mod_delta);
         }
         if !cre_eq_mod {
             write_i64_zigzag(&mut col_cre_delta, cre_delta);
-        }
-        if !acc_eq_mod {
-            write_i64_zigzag(&mut col_acc_delta, acc_delta);
         }
 
         // 5. Write file count & immediate child count ONLY if directory
@@ -291,12 +300,11 @@ pub fn save_snapshot_v3(
         col_size.len() as u32,
         col_mod_delta.len() as u32,
         col_cre_delta.len() as u32,
-        col_acc_delta.len() as u32,
         col_file_count.len() as u32,
         col_child_count.len() as u32,
     ];
 
-    let meta_header_size = 32; // 8 * 4 bytes
+    let meta_header_size = col_lengths.len() * std::mem::size_of::<u32>(); // 7 * 4 = 28 bytes
     let nodes_size = meta_header_size + col_lengths.iter().sum::<u32>() as usize;
     let string_pool_length = sp_buf.len();
     let uncompressed_size = nodes_size + string_pool_length;
@@ -318,16 +326,7 @@ pub fn save_snapshot_v3(
     edst_bytes.write_all(bytemuck::bytes_of(&le_header))?;
 
     // Convert metadata header column lengths to little-endian representation
-    let col_lengths_le = [
-        col_lengths[0].to_le(),
-        col_lengths[1].to_le(),
-        col_lengths[2].to_le(),
-        col_lengths[3].to_le(),
-        col_lengths[4].to_le(),
-        col_lengths[5].to_le(),
-        col_lengths[6].to_le(),
-        col_lengths[7].to_le(),
-    ];
+    let col_lengths_le: [u32; 7] = col_lengths.map(u32::to_le);
     edst_bytes.write_all(bytemuck::cast_slice(&col_lengths_le))?;
 
     // Write contiguous column blocks sequentially
@@ -336,7 +335,6 @@ pub fn save_snapshot_v3(
     edst_bytes.write_all(&col_size)?;
     edst_bytes.write_all(&col_mod_delta)?;
     edst_bytes.write_all(&col_cre_delta)?;
-    edst_bytes.write_all(&col_acc_delta)?;
     edst_bytes.write_all(&col_file_count)?;
     edst_bytes.write_all(&col_child_count)?;
 
@@ -350,63 +348,6 @@ pub fn save_snapshot_v3(
     } else {
         file.write_all(&edst_bytes)?;
     }
-
-    file.sync_all()?;
-    Ok(())
-}
-
-/// Serializes nodes using the legacy Version 2 direct memory mapping format.
-pub fn save_snapshot_v2(
-    nodes: &[FileNode],
-    string_pool: &StringPool,
-    path: &Path,
-) -> Result<(), crate::EdirstatError> {
-    let mut file = File::create(path)?;
-
-    // Calculate offsets by exporting the interner
-    let (arena_string, offsets) = string_pool.export_for_save()?;
-
-    let nodes_size = std::mem::size_of_val(nodes);
-    let offsets_size = offsets.len() * std::mem::size_of::<u32>();
-    let bytes_count = arena_string.len();
-
-    // Calculate uncompressed sizes of payload data segments
-    let string_pool_length = 8 + offsets_size + 8 + bytes_count;
-    let uncompressed_size = nodes_size + string_pool_length;
-
-    // Create header with version 2 and 32 bytes of future-proofing reserved space
-    let header = FileHeader {
-        magic: *b"EDST",
-        version: FILE_VERSION_V2,
-        _padding: 0,
-        uncompressed_size: uncompressed_size as u64,
-        node_count: nodes.len() as u64,
-        string_pool_offset: nodes_size as u64,
-        string_pool_length: string_pool_length as u64,
-        reserved: [0; 4],
-    };
-
-    // Pre-allocate the raw uncompressed payload
-    let mut raw_payload = Vec::with_capacity(uncompressed_size);
-
-    // Apply zero-overhead endian-portable conversions for V2 structures
-    let le_nodes = nodes_to_le(nodes);
-    let le_offsets = u32_slice_to_le(&offsets);
-
-    raw_payload.write_all(bytemuck::cast_slice(&le_nodes))?;
-    raw_payload.write_all(&(offsets.len() as u64).to_le_bytes())?;
-    raw_payload.write_all(bytemuck::cast_slice(&le_offsets))?;
-    raw_payload.write_all(&(bytes_count as u64).to_le_bytes())?;
-    raw_payload.write_all(arena_string.as_bytes())?;
-
-    // Compress the payload
-    let compressed_payload = zstd::encode_all(&raw_payload[..], ZSTD_COMPRESSION_LEVEL)?;
-
-    // Write uncompressed header first
-    let le_header = header.to_le();
-    file.write_all(bytemuck::bytes_of(&le_header))?;
-    // Write compressed payload second
-    file.write_all(&compressed_payload)?;
 
     file.sync_all()?;
     Ok(())
@@ -627,41 +568,30 @@ pub fn load_snapshot(path: &Path) -> Result<(PersistentArena, StringPool), crate
     let node_count = usize::try_from(header.node_count)
         .map_err(|_| crate::EdirstatError::OutOfRange("node count exceeds addressable memory"))?;
     let decoded_nodes = if header.version == FILE_VERSION_V2 {
+        // Legacy V2 stored nodes as a raw memory dump of the pre-u32 `FileNode`
+        // layout: `V2_NODE_SIZE` bytes per record, with three i64 timestamps.
+        // Decode each record field-by-field into the current `FileNode`; the
+        // accessed time (read only to skip past it) is intentionally discarded.
         let expected_nodes_size = node_count
-            .checked_mul(std::mem::size_of::<FileNode>())
+            .checked_mul(V2_NODE_SIZE)
             .ok_or(crate::EdirstatError::OutOfRange("node table size overflow"))?;
         if decompressed_data.len() < expected_nodes_size {
             return Err(crate::EdirstatError::TruncatedNodes);
         }
-        let mut decoded = u8_slice_to_filenode_vec(&decompressed_data[..expected_nodes_size]);
-
-        // Convert slice values on-the-fly only when compiled on big-endian architectures
-        if cfg!(target_endian = "big") {
-            for node in &mut decoded {
-                node.name_id.0 = u32::from_le(node.name_id.0);
-                node.parent = u32::from_le(node.parent);
-                node.first_child = u32::from_le(node.first_child);
-                node.next_sibling = u32::from_le(node.next_sibling);
-                node.size = u64::from_le(node.size);
-                node.modified_timestamp = i64::from_le(node.modified_timestamp);
-                node.created_timestamp = i64::from_le(node.created_timestamp);
-                node.accessed_timestamp = i64::from_le(node.accessed_timestamp);
-                node.file_count = u32::from_le(node.file_count);
-            }
-        }
-        decoded
+        decompressed_data[..expected_nodes_size]
+            .chunks_exact(V2_NODE_SIZE)
+            .map(decode_v2_legacy_node)
+            .collect()
     } else {
-        // Version 3: Reconstruct nodes from the 8 parallel column streams
-        let mut decoded = vec![
-            FileNode::new(crate::arena::StringId(0), None, false, false, 0, 0, 0,);
-            node_count
-        ];
+        // Version 3: Reconstruct nodes from the 7 parallel column streams
+        let mut decoded =
+            vec![FileNode::new(crate::arena::StringId(0), None, false, false, 0, 0); node_count];
 
-        // The 32-byte column-length prefix must be present before we read it.
-        if decompressed_data.len() < 32 {
+        // The 28-byte (7 * 4) column-length prefix must be present before we read it.
+        if decompressed_data.len() < 28 {
             return Err(crate::EdirstatError::TruncatedNodes);
         }
-        let mut col_lengths = u8_slice_to_u32_vec(&decompressed_data[0..32]);
+        let mut col_lengths = u8_slice_to_u32_vec(&decompressed_data[0..28]);
 
         // Convert metadata sizes back to host-endian
         if cfg!(target_endian = "big") {
@@ -672,7 +602,7 @@ pub fn load_snapshot(path: &Path) -> Result<(PersistentArena, StringPool), crate
 
         // Segment the column boundaries with overflow- and bounds-checked math
         // so a corrupt header cannot index past the available data.
-        let mut start = 32;
+        let mut start = 28;
         let (col_control_slice, next) = take_column(&decompressed_data, start, col_lengths[0])?;
         start = next;
         let (col_name_id_slice, next) = take_column(&decompressed_data, start, col_lengths[1])?;
@@ -683,12 +613,10 @@ pub fn load_snapshot(path: &Path) -> Result<(PersistentArena, StringPool), crate
         start = next;
         let (col_cre_delta_slice, next) = take_column(&decompressed_data, start, col_lengths[4])?;
         start = next;
-        let (col_acc_delta_slice, next) = take_column(&decompressed_data, start, col_lengths[5])?;
-        start = next;
-        let (col_file_count_slice, next) = take_column(&decompressed_data, start, col_lengths[6])?;
+        let (col_file_count_slice, next) = take_column(&decompressed_data, start, col_lengths[5])?;
         start = next;
         let (col_child_count_slice, _next) =
-            take_column(&decompressed_data, start, col_lengths[7])?;
+            take_column(&decompressed_data, start, col_lengths[6])?;
 
         // Track cursor positions sequentially per column
 
@@ -696,7 +624,6 @@ pub fn load_snapshot(path: &Path) -> Result<(PersistentArena, StringPool), crate
         let mut cursor_size = 0;
         let mut cursor_mod_delta = 0;
         let mut cursor_cre_delta = 0;
-        let mut cursor_acc_delta = 0;
         let mut cursor_file_count = 0;
         let mut cursor_child_count = 0;
 
@@ -719,7 +646,6 @@ pub fn load_snapshot(path: &Path) -> Result<(PersistentArena, StringPool), crate
             let no_permission = (control & FileNode::FLAG_NO_PERMISSION) != 0;
             let mod_eq_parent = (control & FLAG_MODIFIED_EQ_PARENT) != 0;
             let cre_eq_mod = (control & FLAG_CREATED_EQ_MODIFIED) != 0;
-            let acc_eq_mod = (control & FLAG_ACCESSED_EQ_MODIFIED) != 0;
 
             let name_id_val = read_u64_varint(col_name_id_slice, &mut cursor_name_id)? as u32;
             let size = read_u64_varint(col_size_slice, &mut cursor_size)?;
@@ -731,17 +657,11 @@ pub fn load_snapshot(path: &Path) -> Result<(PersistentArena, StringPool), crate
                 read_i64_zigzag(col_mod_delta_slice, &mut cursor_mod_delta)?
             };
 
-            // Reconstruct timestamps relative to modified flag (0 bytes read if matching modified time)
+            // Reconstruct creation timestamp relative to modified flag (0 bytes read if matching modified time)
             let cre_delta = if cre_eq_mod {
                 0
             } else {
                 read_i64_zigzag(col_cre_delta_slice, &mut cursor_cre_delta)?
-            };
-
-            let acc_delta = if acc_eq_mod {
-                0
-            } else {
-                read_i64_zigzag(col_acc_delta_slice, &mut cursor_acc_delta)?
             };
 
             // Reconstruct file_count & child_count only if directory
@@ -757,17 +677,15 @@ pub fn load_snapshot(path: &Path) -> Result<(PersistentArena, StringPool), crate
             // Reconstruct absolute parent pointer implicitly using the DFS pre-order stack
             let parent = parent_stack.last().map(|&(parent_idx, _)| parent_idx);
 
-            // Reconstruct absolute timestamps
-            let (modified, created, accessed) = parent.map_or_else(
-                || (mod_delta, cre_delta + mod_delta, acc_delta + mod_delta),
+            // Reconstruct absolute timestamps as u32. Deltas were encoded as i64, so
+            // the arithmetic stays exact even when created precedes modified or a
+            // node is older than its parent. The originals are u32, so `as u32` is lossless.
+            let (modified, created) = parent.map_or_else(
+                || (mod_delta as u32, (cre_delta + mod_delta) as u32),
                 |p| {
                     let parent_node = &decoded[p as usize];
-                    let absolute_mod = parent_node.modified_timestamp + mod_delta;
-                    (
-                        absolute_mod,
-                        cre_delta + absolute_mod,
-                        acc_delta + absolute_mod,
-                    )
+                    let absolute_mod = parent_node.modified_timestamp as i64 + mod_delta;
+                    (absolute_mod as u32, (cre_delta + absolute_mod) as u32)
                 },
             );
 
@@ -778,7 +696,6 @@ pub fn load_snapshot(path: &Path) -> Result<(PersistentArena, StringPool), crate
                 is_symlink,
                 modified,
                 created,
-                accessed,
             );
             node.size = size;
             node.file_count = file_count;
@@ -865,8 +782,8 @@ mod tests {
         let f1_id = pool.get_or_insert(b"f1.png");
 
         let mut nodes = vec![
-            FileNode::new(r_id, None, true, false, 0, 0, 0),
-            FileNode::new(f1_id, Some(0), false, false, 0, 0, 0),
+            FileNode::new(r_id, None, true, false, 0, 0),
+            FileNode::new(f1_id, Some(0), false, false, 0, 0),
         ];
         nodes[0].first_child = 1;
         nodes[0].size = 1000;
@@ -1106,6 +1023,152 @@ mod tests {
         assert!(matches!(res, Err(crate::EdirstatError::TruncatedNodes)));
 
         let _ = std::fs::remove_file(&test_path);
+        Ok(())
+    }
+
+    /// Builds one 56-byte Version-2 legacy node record in the pre-u32 layout:
+    /// four `u32` pointers, `u64` size, **three `i64` timestamps**, `u32`
+    /// `file_count`, `u8` flags, 3 padding bytes.
+    #[allow(clippy::too_many_arguments)]
+    fn legacy_v2_record(
+        name_id: u32,
+        parent: u32,
+        first_child: u32,
+        next_sibling: u32,
+        size: u64,
+        modified: i64,
+        created: i64,
+        accessed: i64,
+        file_count: u32,
+        flags: u8,
+    ) -> [u8; V2_NODE_SIZE] {
+        let mut b = [0u8; V2_NODE_SIZE];
+        b[0..4].copy_from_slice(&name_id.to_le_bytes());
+        b[4..8].copy_from_slice(&parent.to_le_bytes());
+        b[8..12].copy_from_slice(&first_child.to_le_bytes());
+        b[12..16].copy_from_slice(&next_sibling.to_le_bytes());
+        b[16..24].copy_from_slice(&size.to_le_bytes());
+        b[24..32].copy_from_slice(&modified.to_le_bytes());
+        b[32..40].copy_from_slice(&created.to_le_bytes());
+        b[40..48].copy_from_slice(&accessed.to_le_bytes());
+        b[48..52].copy_from_slice(&file_count.to_le_bytes());
+        b[52] = flags;
+        // bytes 53..56 stay zero (padding)
+        b
+    }
+
+    /// A Version-2 snapshot (raw 56-byte legacy records with three i64 timestamps)
+    /// must still load: modified/created are recovered as u32, the accessed time is
+    /// discarded, and pre-epoch i64 values clamp to the 0 "unknown" sentinel.
+    #[test]
+    fn test_load_v2_legacy_timestamps() -> Result<(), crate::EdirstatError> {
+        let temp_dir = std::env::current_dir()?.join("target");
+        let test_path = temp_dir.join("test_v2_legacy_timestamps.edst");
+        let _ = std::fs::create_dir_all(&temp_dir);
+
+        // Nodes (DFS order): root dir, a file, and a file whose i64 times are pre-1970.
+        let nodes_buf: Vec<u8> = [
+            legacy_v2_record(0, u32::MAX, 1, u32::MAX, 0, 1_000_000_000, 900_000_000, 2_000_000_000, 1, 1),
+            legacy_v2_record(1, 0, u32::MAX, u32::MAX, 500, 1_100_000_000, 950_000_000, 2_100_000_000, 0, 0),
+            legacy_v2_record(2, 0, u32::MAX, u32::MAX, 0, -50, -100, 5_000_000_000, 0, 0),
+        ]
+        .concat();
+
+        // String pool (V2 layout): offsets_count, offsets[], bytes_count, raw bytes.
+        let strings = ["root", "f1.png", "old"];
+        let mut offsets: Vec<u32> = vec![0];
+        let mut arena = String::new();
+        for s in strings {
+            arena.push_str(s);
+            offsets.push(arena.len() as u32);
+        }
+        let mut sp_buf: Vec<u8> = Vec::new();
+        sp_buf.extend_from_slice(&(offsets.len() as u64).to_le_bytes());
+        for &o in &offsets {
+            sp_buf.extend_from_slice(&o.to_le_bytes());
+        }
+        sp_buf.extend_from_slice(&(arena.len() as u64).to_le_bytes());
+        sp_buf.extend_from_slice(arena.as_bytes());
+
+        let mut raw_payload = Vec::new();
+        raw_payload.extend_from_slice(&nodes_buf);
+        raw_payload.extend_from_slice(&sp_buf);
+
+        let nodes_size = nodes_buf.len();
+        let string_pool_length = sp_buf.len();
+        let uncompressed_size = raw_payload.len();
+
+        let header = FileHeader {
+            magic: *b"EDST",
+            version: FILE_VERSION_V2,
+            _padding: 0,
+            uncompressed_size: uncompressed_size as u64,
+            node_count: 3,
+            string_pool_offset: nodes_size as u64,
+            string_pool_length: string_pool_length as u64,
+            reserved: [0; 4],
+        };
+
+        let compressed = zstd::encode_all(&raw_payload[..], ZSTD_COMPRESSION_LEVEL)?;
+        let mut file_bytes = bytemuck::bytes_of(&header.to_le()).to_vec();
+        file_bytes.extend_from_slice(&compressed);
+        std::fs::write(&test_path, &file_bytes)?;
+
+        let (arena_obj, pool_loaded) = load_snapshot(&test_path)?;
+        let n = arena_obj.nodes();
+
+        assert_eq!(n.len(), 3);
+        // modified/created recovered as u32; accessed (2e9/2.1e9) discarded entirely.
+        assert_eq!(n[0].modified_timestamp, 1_000_000_000);
+        assert_eq!(n[0].created_timestamp, 900_000_000);
+        assert!(n[0].is_directory());
+        assert_eq!(pool_loaded.get(n[0].name_id), Some("root"));
+
+        assert_eq!(n[1].modified_timestamp, 1_100_000_000);
+        assert_eq!(n[1].created_timestamp, 950_000_000);
+        assert_eq!(n[1].size, 500);
+        assert_eq!(pool_loaded.get(n[1].name_id), Some("f1.png"));
+
+        // Pre-epoch i64 timestamps clamp to 0.
+        assert_eq!(n[2].modified_timestamp, 0);
+        assert_eq!(n[2].created_timestamp, 0);
+        assert_eq!(pool_loaded.get(n[2].name_id), Some("old"));
+
+        let _ = std::fs::remove_file(&test_path);
+        Ok(())
+    }
+
+    /// Round-trips `v3` nodes whose timestamps require negative deltas: a child
+    /// newer in creation than modification (negative `cre_delta`), and a child
+    /// older than its parent (negative `mod_delta`). The `i64` delta math must
+    /// reconstruct the exact u32 values.
+    #[test]
+    fn test_v3_negative_delta_roundtrip() -> Result<(), crate::EdirstatError> {
+        let mut pool = StringPool::new();
+        let r_id = pool.get_or_insert(b"root");
+        let f_id = pool.get_or_insert(b"child.txt");
+
+        let mut nodes = vec![
+            FileNode::new(r_id, None, true, false, 1_000_000_000, 900_000_000),
+            FileNode::new(f_id, Some(0), false, false, 800_000_000, 850_000_000),
+        ];
+        nodes[0].first_child = 1;
+
+        let temp_dir = std::env::current_dir()?.join("target");
+        let path = temp_dir.join("test_v3_negative_delta.edst");
+        let _ = std::fs::create_dir_all(&temp_dir);
+
+        save_snapshot(&nodes, &pool, &path, false)?;
+        let (arena_obj, _) = load_snapshot(&path)?;
+        let n = arena_obj.nodes();
+
+        assert_eq!(n.len(), 2);
+        assert_eq!(n[0].modified_timestamp, 1_000_000_000);
+        assert_eq!(n[0].created_timestamp, 900_000_000);
+        assert_eq!(n[1].modified_timestamp, 800_000_000);
+        assert_eq!(n[1].created_timestamp, 850_000_000);
+
+        let _ = std::fs::remove_file(&path);
         Ok(())
     }
 }
