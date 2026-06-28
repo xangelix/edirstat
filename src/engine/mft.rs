@@ -137,8 +137,8 @@ impl ShardedStringPool {
 
         {
             let shard_read = self.shards[shard_idx].read();
-            if let Ok(Some(local_id)) = shard_read.interner.lookup_handle(s_str) {
-                let global_id = ((shard_idx as u32) << 24) | local_id;
+            if let Some(local_id) = shard_read.lookup(s_str) {
+                let global_id = ((shard_idx as u32) << 24) | local_id.0;
                 return crate::arena::StringId(global_id);
             }
         }

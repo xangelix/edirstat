@@ -165,12 +165,7 @@ pub fn save_snapshot_v3(
     path: &Path,
     compress: bool,
 ) -> Result<(), crate::EdirstatError> {
-    let (arena_string, offsets) = string_pool.interner.clone().export_arena().map_err(|_| {
-        std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "Interner handle overflow during export",
-        )
-    })?;
+    let (arena_string, offsets) = string_pool.export_for_save()?;
 
     // 1. Sort nodes in memory into strict DFS pre-order using an explicit stack
     let mut dfs_order = Vec::with_capacity(nodes.len());
@@ -369,12 +364,7 @@ pub fn save_snapshot_v2(
     let mut file = File::create(path)?;
 
     // Calculate offsets by exporting the interner
-    let (arena_string, offsets) = string_pool.interner.clone().export_arena().map_err(|_| {
-        std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "Interner handle overflow during export",
-        )
-    })?;
+    let (arena_string, offsets) = string_pool.export_for_save()?;
 
     let nodes_size = std::mem::size_of_val(nodes);
     let offsets_size = offsets.len() * std::mem::size_of::<u32>();
@@ -566,10 +556,9 @@ pub fn load_snapshot(path: &Path) -> Result<(PersistentArena, StringPool), crate
         let arena_data: Arc<str> = Arc::from(
             std::str::from_utf8(raw_bytes).map_err(|_| crate::EdirstatError::InvalidUtf8)?,
         );
-        let mut interner = xgx_intern::Interner::new(ahash::RandomState::new());
 
-        // Rebuild each shared string slice, validating that the offsets are
-        // monotonic and in-bounds so a corrupt table cannot underflow or slice OOB.
+        // Validate that the offsets are monotonic and in-bounds so a corrupt
+        // table cannot underflow or slice OOB when frozen handles are resolved.
         let upper_bound = u32::try_from(raw_bytes.len()).map_err(|_| {
             crate::EdirstatError::OutOfRange("string pool exceeds u32 addressable range")
         })?;
@@ -581,15 +570,8 @@ pub fn load_snapshot(path: &Path) -> Result<(PersistentArena, StringPool), crate
                     "string pool offsets are not monotonic or out of bounds",
                 ));
             }
-            let len = next - offset;
-            let shared_str = xgx_intern::ArenaString::Shared {
-                arena: arena_data.clone(),
-                offset,
-                len,
-            };
-            let _ = interner.intern_owned(shared_str);
         }
-        StringPool { interner }
+        StringPool::frozen(arena_data, offsets)
     } else {
         // Version 3: Sequentially rebuild offsets and the StringPool without storage tables
         let mut sp_cursor = 0;
@@ -638,19 +620,7 @@ pub fn load_snapshot(path: &Path) -> Result<(PersistentArena, StringPool), crate
         let arena_data: Arc<str> = Arc::from(
             std::str::from_utf8(&string_bytes).map_err(|_| crate::EdirstatError::InvalidUtf8)?,
         );
-        let mut interner = xgx_intern::Interner::new(ahash::RandomState::new());
-
-        for pair in offsets.windows(2) {
-            let offset = pair[0];
-            let len = pair[1] - offset;
-            let shared_str = xgx_intern::ArenaString::Shared {
-                arena: arena_data.clone(),
-                offset,
-                len,
-            };
-            let _ = interner.intern_owned(shared_str);
-        }
-        StringPool { interner }
+        StringPool::frozen(arena_data, offsets)
     };
 
     // 2. Decode file nodes based on format version

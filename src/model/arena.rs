@@ -158,28 +158,152 @@ impl FileNode {
 
 #[derive(Debug, Clone, Default)]
 pub struct StringPool {
-    /// High-performance interner managing string deduplication and storage
-    pub interner: Interner<ArenaString, ahash::RandomState, u32>,
+    state: StringPoolState,
+}
+
+/// Backing representation for [`StringPool`].
+///
+/// * `Building` — a mutable, dedup-capable `xgx_intern::Interner`. Used while a
+///   scan is producing nodes, so repeated base names collapse to a single handle.
+/// * `Frozen` — a resolve-only view of a *finished* snapshot: one shared string
+///   arena plus an offsets table. Handle `i` maps to `arena[offsets[i]..offsets[i+1]]`.
+#[derive(Clone)]
+enum StringPoolState {
+    Building(Interner<ArenaString, ahash::RandomState, u32>),
+    Frozen { arena: Arc<str>, offsets: Vec<u32> },
+}
+
+impl Default for StringPoolState {
+    fn default() -> Self {
+        Self::Building(Interner::new(ahash::RandomState::new()))
+    }
+}
+
+impl std::fmt::Debug for StringPoolState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Building(interner) => f
+                .debug_struct("StringPoolState::Building")
+                .field("unique", &interner.len())
+                .finish(),
+            Self::Frozen { arena, offsets } => f
+                .debug_struct("StringPoolState::Frozen")
+                .field("arena_len", &arena.len())
+                .field("unique", &offsets.len().saturating_sub(1))
+                .finish(),
+        }
+    }
 }
 
 impl StringPool {
+    /// Creates an empty, mutable (dedup-capable) string pool for use while scanning.
     #[must_use]
     pub fn new() -> Self {
         Self {
-            interner: Interner::new(ahash::RandomState::new()),
+            state: StringPoolState::default(),
         }
     }
 
-    pub fn get_or_insert(&mut self, s: &[u8]) -> StringId {
-        let s_str = std::str::from_utf8(s).unwrap_or("");
-        // Performs an allocation-free check. Clones/creates an ArenaString only on a cache miss.
-        let handle = self.interner.intern_ref(s_str).unwrap_or(0);
-        StringId(handle)
+    /// Creates a resolve-only string pool from a pre-decoded arena and offsets table.
+    ///
+    /// `offsets` must follow the `[0, end_0, end_1, …, total]` layout produced by
+    /// `xgx_intern::Interner::export_arena` (and by the snapshot decoders), so that
+    /// the string for handle `i` is `arena[offsets[i]..offsets[i+1]]`.
+    #[must_use]
+    pub(crate) const fn frozen(arena: Arc<str>, offsets: Vec<u32>) -> Self {
+        Self {
+            state: StringPoolState::Frozen { arena, offsets },
+        }
     }
 
+    /// Inserts (or deduplicates) a base name, returning its stable [`StringId`].
+    ///
+    /// If the pool is currently `Frozen`, it is transparently thawed into a
+    /// `Building` interner first so new strings can be deduplicated against the
+    /// existing ones. This makes a loaded snapshot safe to rescan.
+    pub fn get_or_insert(&mut self, s: &[u8]) -> StringId {
+        self.ensure_building();
+        if let StringPoolState::Building(interner) = &mut self.state {
+            let s_str = std::str::from_utf8(s).unwrap_or("");
+            // Allocation-free probe; clones/creates an ArenaString only on a cache miss.
+            StringId(interner.intern_ref(s_str).unwrap_or(0))
+        } else {
+            StringId(0)
+        }
+    }
+
+    /// Resolves a [`StringId`] back to its base name slice.
+    ///
+    /// Returns `None` for out-of-range handles (callers fall back to `""`).
     #[must_use]
     pub fn get(&self, id: StringId) -> Option<&str> {
-        self.interner.resolve(id.0).map(ArenaString::as_str)
+        match &self.state {
+            StringPoolState::Building(interner) => interner.resolve(id.0).map(ArenaString::as_str),
+            StringPoolState::Frozen { arena, offsets } => {
+                let idx = id.0 as usize;
+                // offsets layout: [0, end_0, …, total]; string i = offsets[i]..offsets[i+1].
+                // `checked_add` guards against a maliciously large handle id.
+                let end_idx = (idx.checked_add(1)).filter(|&e| e < offsets.len())?;
+                let start = offsets[idx] as usize;
+                let end = offsets[end_idx] as usize;
+                arena.get(start..end)
+            }
+        }
+    }
+
+    /// Read-only reverse lookup: returns the handle for `s` if it is already
+    /// interned, without inserting. Used by the sharded MFT interner's lock-free
+    /// fast path. Returns `None` for `Frozen` pools (which never serve interning
+    /// probes — the MFT shards are always `Building`).
+    pub(crate) fn lookup(&self, s: &str) -> Option<StringId> {
+        match &self.state {
+            StringPoolState::Building(interner) => {
+                interner.lookup_handle(s).ok().flatten().map(StringId)
+            }
+            StringPoolState::Frozen { .. } => None,
+        }
+    }
+
+    /// Exports the pool into the `(arena, offsets)` pair consumed by the snapshot
+    /// serializers. For a `Building` pool this mirrors `Interner::export_arena`;
+    /// for a `Frozen` pool the data is already in the target shape and is returned
+    /// directly without rebuilding an interner.
+    pub(crate) fn export_for_save(&self) -> Result<(String, Vec<u32>), crate::EdirstatError> {
+        Ok(match &self.state {
+            StringPoolState::Building(interner) => {
+                interner.clone().export_arena().map_err(|_| {
+                    crate::EdirstatError::from(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "Interner handle overflow during export",
+                    ))
+                })?
+            }
+            StringPoolState::Frozen { arena, offsets } => (arena.to_string(), offsets.clone()),
+        })
+    }
+
+    /// Lazily converts a `Frozen` pool back into a mutable `Building` pool so
+    /// new strings can be deduplicated. No-op when already `Building`.
+    ///
+    /// The frozen `Arc<str>` arena is shared across the rebuilt `ArenaString`
+    /// entries (no per-string byte copy), so the only allocation is the
+    /// interner's `Vec`/hash table — once, on the first `get_or_insert`.
+    fn ensure_building(&mut self) {
+        let (arena, offsets) = match &self.state {
+            StringPoolState::Building(_) => return,
+            StringPoolState::Frozen { arena, offsets } => (arena.clone(), offsets.clone()),
+        };
+        let mut interner = Interner::new(ahash::RandomState::new());
+        for pair in offsets.windows(2) {
+            let offset = pair[0];
+            let len = pair[1] - offset;
+            let _ = interner.intern_owned(ArenaString::Shared {
+                arena: arena.clone(),
+                offset,
+                len,
+            });
+        }
+        self.state = StringPoolState::Building(interner);
     }
 }
 
@@ -317,6 +441,37 @@ mod tests {
 
         assert_eq!(pool.get(id1), Some("Cargo.toml"));
         assert_eq!(pool.get(id2), Some("src"));
+    }
+
+    #[test]
+    fn test_frozen_pool_resolves_and_thaws() -> Result<(), crate::EdirstatError> {
+        // 1. Build a dedup-capable pool the normal way.
+        let mut pool = StringPool::new();
+        let a = pool.get_or_insert(b"alpha");
+        let b = pool.get_or_insert(b"beta");
+        let a_dup = pool.get_or_insert(b"alpha"); // dedups to `a`
+        assert_eq!(a, a_dup);
+
+        // 2. Freeze it via the same (arena, offsets) shape the snapshot decoders produce.
+        let (arena, offsets) = pool.export_for_save()?;
+        let frozen = StringPool::frozen(std::sync::Arc::from(arena.as_str()), offsets);
+
+        // 3. A Frozen pool must resolve the same names as the Building original.
+        assert_eq!(frozen.get(a), Some("alpha"));
+        assert_eq!(frozen.get(b), Some("beta"));
+        // Out-of-range handle returns None (bounds-checked, never panics).
+        assert_eq!(frozen.get(StringId(u32::MAX)), None);
+
+        // 4. Thaw: get_or_insert on a Frozen pool must dedup against existing entries.
+        let mut thawed = frozen;
+        let a_again = thawed.get_or_insert(b"alpha"); // existing -> reuses handle `a`
+        assert_eq!(a_again, a);
+        // A genuinely new string gets a fresh handle and resolves correctly.
+        let c = thawed.get_or_insert(b"gamma");
+        assert_ne!(c, a);
+        assert_ne!(c, b);
+        assert_eq!(thawed.get(c), Some("gamma"));
+        Ok(())
     }
 
     #[test]
