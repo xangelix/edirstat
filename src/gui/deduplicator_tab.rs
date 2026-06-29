@@ -184,6 +184,14 @@ impl super::GuiApp {
     fn draw_deduplicator_results(&mut self, ui: &mut egui::Ui, snapshot: &FileArenaSnapshot) {
         let progress_snap = self.deduplicator_progress.snapshot();
         let is_running = !progress_snap.finished && progress_snap.elapsed.is_some();
+        let is_cancelled = progress_snap.error.is_some();
+
+        if is_cancelled {
+            ui.centered_and_justified(|ui| {
+                ui.label("Scan was cancelled. Start a new scan to find duplicates.");
+            });
+            return;
+        }
 
         let results_lock = Arc::clone(&self.deduplicator_results);
 
@@ -202,7 +210,8 @@ impl super::GuiApp {
             }
         }
 
-        ui.horizontal_wrapped(|ui| {
+        ui.add_enabled_ui(!is_running, |ui| {
+            ui.horizontal_wrapped(|ui| {
             ui.scope(|ui| {
                 ui.style_mut().visuals.widgets.inactive.weak_bg_fill = crate::colors::BUTTON_BLUE;
                 ui.style_mut().visuals.widgets.hovered.weak_bg_fill =
@@ -513,6 +522,7 @@ impl super::GuiApp {
                 });
             });
         });
+    });
 
         ui.add_space(6.0);
 
@@ -668,16 +678,20 @@ impl super::GuiApp {
                                             path_rich = path_rich.monospace();
                                         }
 
-                                        // Make folder label clickable to open in file explorer
-                                        let response = ui.add(
-                                            egui::Label::new(path_rich).sense(egui::Sense::click()),
-                                        );
-
-                                        if response.hovered() {
-                                            ui.ctx()
-                                                .set_cursor_icon(egui::CursorIcon::PointingHand);
-                                        }
-                                        if response.clicked() {
+                                        // Make folder label clickable to open in file explorer (only when scan is not running)
+                                        let response = if is_scan_running {
+                                            ui.add(egui::Label::new(path_rich))
+                                        } else {
+                                            let r = ui.add(
+                                                egui::Label::new(path_rich).sense(egui::Sense::click()),
+                                            );
+                                            if r.hovered() {
+                                                ui.ctx()
+                                                    .set_cursor_icon(egui::CursorIcon::PointingHand);
+                                            }
+                                            r
+                                        };
+                                        if !is_scan_running && response.clicked() {
                                             let _ = open::that(&parent_path);
                                         }
                                     },

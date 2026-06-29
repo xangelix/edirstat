@@ -349,9 +349,14 @@ pub fn run_deduplication(
         guard.rebuild_flat_rows(&snapshot);
     };
 
-    if is_cancelled() {
+    let cancel_and_clear = || {
         progress.set_error(Some("Scan was cancelled."));
         progress.finish();
+        *results.write() = DeduplicationResults::default();
+    };
+
+    if is_cancelled() {
+        cancel_and_clear();
         return;
     }
 
@@ -382,8 +387,7 @@ pub fn run_deduplication(
     }
 
     if is_cancelled() {
-        progress.set_error(Some("Scan was cancelled."));
-        progress.finish();
+        cancel_and_clear();
         return;
     }
 
@@ -446,8 +450,7 @@ pub fn run_deduplication(
     }
 
     if is_cancelled() {
-        progress.set_error(Some("Scan was cancelled."));
-        progress.finish();
+        cancel_and_clear();
         return;
     }
 
@@ -558,8 +561,7 @@ pub fn run_deduplication(
         &prefix_hash_fn,
         "Phase 2/7: Hashing file prefixes (first 4KB)...",
     ) else {
-        progress.set_error(Some("Scan was cancelled."));
-        progress.finish();
+        cancel_and_clear();
         return;
     };
     current_groups = groups;
@@ -587,8 +589,7 @@ pub fn run_deduplication(
         &midpoint_hash_fn,
         "Phase 3/7: Hashing file midpoints...",
     ) else {
-        progress.set_error(Some("Scan was cancelled."));
-        progress.finish();
+        cancel_and_clear();
         return;
     };
     current_groups = groups;
@@ -615,8 +616,7 @@ pub fn run_deduplication(
         &suffix_hash_fn,
         "Phase 4/7: Hashing file suffixes...",
     ) else {
-        progress.set_error(Some("Scan was cancelled."));
-        progress.finish();
+        cancel_and_clear();
         return;
     };
     current_groups = groups;
@@ -636,8 +636,7 @@ pub fn run_deduplication(
         &multi_range_hash_fn,
         "Phase 5/7: Multi-range hashing large files...",
     ) else {
-        progress.set_error(Some("Scan was cancelled."));
-        progress.finish();
+        cancel_and_clear();
         return;
     };
     current_groups = groups;
@@ -654,8 +653,7 @@ pub fn run_deduplication(
         &full_hash_fn,
         "Phase 6/7: Full BLAKE3 hashing of remaining candidates...",
     ) else {
-        progress.set_error(Some("Scan was cancelled."));
-        progress.finish();
+        cancel_and_clear();
         return;
     };
     current_groups = groups;
@@ -672,8 +670,7 @@ pub fn run_deduplication(
 
     for (grp_idx, group) in current_groups.into_iter().enumerate() {
         if is_cancelled() {
-            progress.set_error(Some("Scan was cancelled."));
-            progress.finish();
+            cancel_and_clear();
             return;
         }
 
@@ -957,5 +954,61 @@ mod tests {
         assert_eq!(results.flat_rows[1].node_idx, 2);
         assert!(results.flat_rows[1].is_hardlink);
         assert_eq!(results.flat_rows[1].reclaimable_str, "0 B");
+    }
+
+    #[test]
+    fn test_deduplication_cancellation_clears_results() -> Result<(), crate::EdirstatError> {
+        let temp_dir = std::env::current_dir()?
+            .join("target")
+            .join("test_deduplicator_cancel");
+        let _ = std::fs::remove_dir_all(&temp_dir); // Clean old
+        std::fs::create_dir_all(&temp_dir)?;
+
+        let file1_path = temp_dir.join("file1.txt");
+        let file2_path = temp_dir.join("file2.txt");
+
+        let content = b"some identical content";
+        std::fs::write(&file1_path, content)?;
+        std::fs::write(&file2_path, content)?;
+
+        let shared_state = Arc::new(SharedState::new());
+        let engine = TraversalEngine::new();
+        let (tx, rx) = crossbeam::channel::unbounded();
+
+        let handle = engine.start_traversal(temp_dir.clone(), tx)?;
+        let mut coordinator = Coordinator::new(rx, shared_state.clone());
+        coordinator.run_coordinator_loop(&temp_dir.to_string_lossy());
+        let _ = handle.join();
+
+        let snapshot = shared_state.current_snapshot.load();
+        assert!(!snapshot.nodes.is_empty());
+
+        // Initialize with pre-existing results
+        let results = Arc::new(RwLock::new(DeduplicationResults {
+            groups: vec![DuplicateGroup {
+                size: 10,
+                nodes: vec![1, 2],
+                file_ids: vec![(0,0), (0,0)],
+            }],
+            flat_rows: vec![],
+        }));
+        let cancel = Arc::new(AtomicBool::new(true)); // Cancelled immediately
+        let progress = atomic_progress::Progress::new_spinner("Deduplicator");
+        let config = DeduplicatorConfig {
+            min_size: 1,
+            ignore_system: false,
+            ignore_hidden: false,
+        };
+
+        run_deduplication(snapshot.clone(), progress, results.clone(), cancel, config);
+
+        // Results should be cleared
+        let results_guard = results.read();
+        assert!(results_guard.groups.is_empty());
+        assert!(results_guard.flat_rows.is_empty());
+
+        // Clean up
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        Ok(())
     }
 }
