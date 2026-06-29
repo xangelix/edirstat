@@ -42,6 +42,9 @@ echo "==========================================================="
 rustup target add "$TARGET"
 mkdir -p "$OUT_DIR"
 
+# FORCE RUST DEFAULT LINKER
+export CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER="cc"
+
 # -------------------------------------------------------------------------
 # 2. Build inner binaries (Matrix step equivalent)
 # -------------------------------------------------------------------------
