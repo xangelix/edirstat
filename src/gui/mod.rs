@@ -1,14 +1,16 @@
 use std::{
     collections::{HashMap, HashSet},
     path::{Path, PathBuf},
+    str::FromStr as _,
     sync::{Arc, atomic::Ordering},
     time::{Duration, Instant},
 };
 
-use compact_str::CompactString;
+use compact_str::{CompactString, ToCompactString as _};
 use eframe::egui;
 use fluent_zero::t;
 use rfd::FileDialog;
+use strum::IntoEnumIterator as _;
 
 use super::{
     arena::FileArenaSnapshot,
@@ -137,8 +139,24 @@ pub struct GuiApp {
     /// Caches (Node Index, User String, Group String, Permissions String)
     pub(crate) unix_metadata_cache: Option<(u32, String, String, String)>,
 
+    pub(crate) locale: Locale,
+
     #[cfg(feature = "online")]
     pub(crate) update_checker: egui_async::Bind<Option<String>, String>,
+}
+
+#[derive(Default, PartialEq, strum::EnumIter)]
+pub(crate) enum Locale {
+    #[default]
+    EnUs,
+}
+
+impl std::fmt::Display for Locale {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::EnUs => write!(f, "en-US"),
+        }
+    }
 }
 
 impl GuiApp {
@@ -262,6 +280,8 @@ impl GuiApp {
             last_extension_stats_ptr: 0,
 
             unix_metadata_cache: None,
+
+            locale: Locale::default(),
 
             #[cfg(feature = "online")]
             update_checker: egui_async::Bind::default(),
@@ -788,6 +808,22 @@ impl eframe::App for GuiApp {
                             let is_selected = self.time_format.0 == format.as_str();
                             if ui.selectable_label(is_selected, format.label()).clicked() {
                                 self.time_format = crate::model::time_utils::TimeFormat(format.as_str().to_string());
+                                ui.close_kind(egui::UiKind::Menu);
+                            }
+                        }
+                    });
+
+                    ui.menu_button("💬 Language", |ui| {
+                        for locale in Locale::iter() {
+                            let is_selected = self.locale == locale;
+                            let locale_str = locale.to_compact_string();
+                            if ui.selectable_label(is_selected, locale_str.as_str()).clicked() {
+
+                                if let Ok(lang) = fluent_zero::LanguageIdentifier::from_str(&locale_str) {
+                                    fluent_zero::set_lang(lang);
+                                }
+
+                                self.locale = locale;
                                 ui.close_kind(egui::UiKind::Menu);
                             }
                         }

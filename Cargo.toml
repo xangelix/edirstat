@@ -67,6 +67,7 @@ regex = { version = "1.12.4", features = ["use_std"] }
 rfd = "0.17.2"
 serde = { version = "1.0.228", features = ["derive"] }
 smallvec = "1.15.2"
+strum = { version = "0.28.0", features = ["derive"] }
 thiserror = "2.0.18"
 toml = "1.1.2"
 trash = "5.2.6"
