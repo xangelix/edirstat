@@ -711,6 +711,35 @@ impl eframe::App for GuiApp {
             self.last_rendered_snapshot_ptr = snapshot_ptr;
         }
 
+        // Delete keyboard shortcuts (Delete / Shift + Delete)
+        if !is_scanning
+            && !ctx.egui_wants_keyboard_input()
+            && !self.table_state.selected_rows.is_empty()
+            && ctx.input(|i| i.key_pressed(egui::Key::Delete))
+        {
+            let shift = ctx.input(|i| i.modifiers.shift);
+            self.delete_node_indices = self.table_state.selected_rows.iter().collect();
+            if shift {
+                if self.deletion_confirmation {
+                    self.active_modal = Some(ActiveModal::Delete);
+                    self.delete_confirm_checked = false;
+                    self.remember_confirmation = false;
+                } else {
+                    self.execute_deletion(&self.delete_node_indices.clone(), false, &snapshot);
+                    self.delete_node_indices.clear();
+                }
+            } else {
+                if self.trash_confirmation {
+                    self.active_modal = Some(ActiveModal::Trash);
+                    self.delete_confirm_checked = false;
+                    self.remember_confirmation = false;
+                } else {
+                    self.execute_deletion(&self.delete_node_indices.clone(), true, &snapshot);
+                    self.delete_node_indices.clear();
+                }
+            }
+        }
+
         // --- Handle Table commands sent from standard and context-menu operations ---
         while let Ok(command) = self.command_rx.try_recv() {
             match command {
