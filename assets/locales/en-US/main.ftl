@@ -287,5 +287,3 @@ explorer-hdr-files = Files
 explorer-hdr-subdirs = Subdirs
 explorer-hdr-created = Created
 explorer-hdr-modified = Modified
-
-
