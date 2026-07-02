@@ -953,12 +953,9 @@ impl GuiApp {
 
                                 if path_exists {
                                     ui.label(if cfg.paths.len() > 1 {
-                                        format!(
-                                            "You are about to process {} duplicate files/items:",
-                                            cfg.paths.len()
-                                        )
+                                        t!("modal-process-multiple", { "count" => cfg.paths.len() }).into_owned()
                                     } else {
-                                        "You are about to process the following path:".to_string()
+                                        t!("modal-process-single").into_owned()
                                     });
 
                                     ui.add_space(8.0);
@@ -1794,14 +1791,14 @@ impl GuiApp {
             None => {
                 ui.horizontal(|ui| {
                     ui.spinner();
-                    ui.small("Checking for updates...");
+                    ui.small(t!("update-checking"));
                 });
             }
             Some(Ok(Some(new_version))) => {
                 ui.horizontal(|ui| {
                     ui.colored_label(theme::BUTTON_ORANGE, "✨");
                     ui.hyperlink_to(
-                        egui::RichText::new(format!("New version {new_version} available!"))
+                        egui::RichText::new(t!("update-available", { "version" => new_version.as_str() }))
                             .color(theme::BUTTON_ORANGE)
                             .strong(),
                         "https://github.com/xangelix/edirstat/releases/latest",
@@ -1809,10 +1806,10 @@ impl GuiApp {
                 });
             }
             Some(Ok(None)) => {
-                ui.weak("You are up to date");
+                ui.weak(t!("update-up-to-date"));
             }
             Some(Err(err)) => {
-                ui.weak(format!("Update check failed: {err}"));
+                ui.weak(t!("update-failed", { "error" => err.as_str() }));
             }
         }
     }

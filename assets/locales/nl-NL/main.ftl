@@ -124,6 +124,7 @@ dedup-phase5-multirange = Fase 5/7: Multi-range hashing grote bestanden...
 dedup-phase6-full = Fase 6/7: Volledige BLAKE3-hashing van resterende kandidaten...
 dedup-phase7-validation = Fase 7/7: Definitieve validatie van tijdstempels...
 dedup-phase-finished = Voltooid in { $duration }! { $count } duplicaatgroepen gevonden. Potentieel terug te winnen ruimte: { $space }
+dedup-scan-cancelled-with-error = Scan is geannuleerd: { $error }
 
 # Deduplicator Table Headers
 dedup-hdr-checkbox = [     ]
@@ -217,6 +218,8 @@ toast-copied-names = { $count ->
 
 # --- Modals ---
 modal-remember-confirmation = Bevestiging onthouden voor alle toekomstige bestanden en mappen
+modal-process-multiple = U staat op het punt om { $count } duplicaatbestanden/-items te verwerken:
+modal-process-single = U staat op het punt het volgende pad te verwerken:
 # Confirm Deletion/Trash/Link Modals
 modal-delete-title = ⚠ WAARSCHUWING PERMANENTE VERWIJDERING
 modal-delete-header = ⚠ Waarschuwing permanente verwijdering!
@@ -322,3 +325,9 @@ explorer-hdr-files = Bestanden
 explorer-hdr-subdirs = Submappen
 explorer-hdr-created = Gemaakt
 explorer-hdr-modified = Gewijzigd
+
+# Update Checker
+update-checking = Controleren op updates...
+update-available = Nieuwe versie { $version } beschikbaar!
+update-up-to-date = U bent up-to-date
+update-failed = Updatecontrole mislukt: { $error }

@@ -169,7 +169,7 @@ impl super::GuiApp {
                 if let Some(err) = &progress_snap.error {
                     ui.colored_label(
                         crate::colors::COLOR_WARNING_YELLOW,
-                        format!("Scan was cancelled: {err}"),
+                        t!("dedup-scan-cancelled-with-error", { "error" => err.as_str() }),
                     );
                 } else if !progress_snap.name.is_empty() && progress_snap.name != "Deduplicator" {
                     ui.colored_label(

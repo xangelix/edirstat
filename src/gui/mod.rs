@@ -672,9 +672,9 @@ impl GuiApp {
 
             // Right side: Active Visualizer Modes
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.selectable_value(&mut self.vis_mode, VisMode::Deduplicator, "👥 Deduplicator");
-                ui.selectable_value(&mut self.vis_mode, VisMode::Plots, "📈 Plots");
-                ui.selectable_value(&mut self.vis_mode, VisMode::Treemap, "🗺 Treemap");
+                ui.selectable_value(&mut self.vis_mode, VisMode::Deduplicator, t!("vis-mode-deduplicator"));
+                ui.selectable_value(&mut self.vis_mode, VisMode::Plots, t!("vis-mode-plots"));
+                ui.selectable_value(&mut self.vis_mode, VisMode::Treemap, t!("vis-mode-treemap"));
             });
         });
     }

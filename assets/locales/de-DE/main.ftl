@@ -124,6 +124,7 @@ dedup-phase5-multirange = Phase 5/7: Mehrbereichs-Hashing großer Dateien...
 dedup-phase6-full = Phase 6/7: Vollständiges BLAKE3-Hashing der verbleibenden Kandidaten...
 dedup-phase7-validation = Phase 7/7: Abschließende Überprüfung der Zeitstempel...
 dedup-phase-finished = Fertig in { $duration }! { $count } Duplikatgruppen gefunden. Potenzial freizugebender Speicherplatz: { $space }
+dedup-scan-cancelled-with-error = Scan wurde abgebrochen: { $error }
 
 # Deduplicator Table Headers
 dedup-hdr-checkbox = [     ]
@@ -217,6 +218,8 @@ toast-copied-names = { $count ->
 
 # --- Modals ---
 modal-remember-confirmation = Entscheidung für alle zukünftigen Dateien und Ordner merken
+modal-process-multiple = Sie sind im Begriff, { $count } doppelte Dateien/Elemente zu verarbeiten:
+modal-process-single = Sie sind im Begriff, den folgenden Pfad zu verarbeiten:
 # Confirm Deletion/Trash/Link Modals
 modal-delete-title = ⚠ WARNUNG: DAUERHAFTES LÖSCHEN
 modal-delete-header = ⚠ Warnung: Dauerhaftes Löschen!
@@ -322,3 +325,9 @@ explorer-hdr-files = Dateien
 explorer-hdr-subdirs = Unterordner
 explorer-hdr-created = Erstellt
 explorer-hdr-modified = Geändert
+
+# Update Checker
+update-checking = Nach Updates suchen...
+update-available = Neue Version { $version } verfügbar!
+update-up-to-date = Sie sind auf dem neuesten Stand
+update-failed = Update-Prüfung fehlgeschlagen: { $error }
