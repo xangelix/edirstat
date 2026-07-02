@@ -234,7 +234,7 @@ impl egui_table_kit::operations::TableProvider for TableProviderWrapper<'_> {
                 6 => {
                     // Created date string
                     if node.has_no_permission() {
-                        "No Permission".to_string()
+                        t!("no-permission").into_owned()
                     } else {
                         crate::model::time_utils::format_epoch(
                             node.created_timestamp,
@@ -245,7 +245,7 @@ impl egui_table_kit::operations::TableProvider for TableProviderWrapper<'_> {
                 7 => {
                     // Last Modified date string
                     if node.has_no_permission() {
-                        "No Permission".to_string()
+                        t!("no-permission").into_owned()
                     } else {
                         crate::model::time_utils::format_epoch(
                             node.modified_timestamp,
@@ -1124,7 +1124,7 @@ impl GuiApp {
                         row.col(|ui| {
                             paint_bg(ui, 6);
                             let text = if node.has_no_permission() {
-                                "No Permission".to_string()
+                                t!("no-permission").into_owned()
                             } else {
                                 crate::model::time_utils::format_epoch(
                                     node.created_timestamp,
@@ -1155,7 +1155,7 @@ impl GuiApp {
                         row.col(|ui| {
                             paint_bg(ui, 7);
                             let text = if node.has_no_permission() {
-                                "No Permission".to_string()
+                                t!("no-permission").into_owned()
                             } else {
                                 crate::model::time_utils::format_epoch(
                                     node.modified_timestamp,

@@ -503,7 +503,7 @@ impl GuiApp {
             match self.vis_mode {
                 VisMode::Treemap => {
                     ui.heading(
-                        egui::RichText::new("📊 Treemap")
+                        egui::RichText::new(t!("vis-mode-treemap"))
                             .strong()
                             .color(ui.visuals().strong_text_color()),
                     );
@@ -511,14 +511,14 @@ impl GuiApp {
                 VisMode::Plots => {
                     ui.horizontal(|ui| {
                         ui.heading(
-                            egui::RichText::new("📈 Plots")
+                            egui::RichText::new(t!("vis-mode-plots"))
                                 .strong()
                                 .color(ui.visuals().strong_text_color()),
                         );
                         ui.add_space(8.0);
                         ui.separator();
                         ui.add_space(8.0);
-                        ui.label("Select Plot:");
+                        ui.label(t!("select-plot-label"));
 
                         let plot_combo_id = if self.layout_mode == LayoutMode::Classic {
                             "plot_type_combo"
@@ -528,50 +528,50 @@ impl GuiApp {
 
                         egui::ComboBox::from_id_salt(plot_combo_id)
                             .selected_text(match self.plot_type {
-                                PlotType::SizeDistribution => "📊 File Size Distribution",
-                                PlotType::AgeSizeScatter => "🌌 File Age vs. File Size",
-                                PlotType::DirComposition => "🍰 Directory Composition",
-                                PlotType::ExtensionBoxplot => "📦 File Sizes by Extension",
-                                PlotType::TemporalTimeline => "⏱ Linked Temporal Timelines",
-                                PlotType::DeduplicatorWaste => "👥 Duplicate Waste by Extension",
+                                PlotType::SizeDistribution => t!("plot-size-distribution"),
+                                PlotType::AgeSizeScatter => t!("plot-age-size"),
+                                PlotType::DirComposition => t!("plot-dir-composition"),
+                                PlotType::ExtensionBoxplot => t!("plot-extension-boxplot"),
+                                PlotType::TemporalTimeline => t!("plot-temporal-timeline"),
+                                PlotType::DeduplicatorWaste => t!("plot-deduplicator-waste"),
                             })
                             .show_ui(ui, |ui| {
                                 ui.selectable_value(
                                     &mut self.plot_type,
                                     PlotType::SizeDistribution,
-                                    "📊 File Size Distribution",
+                                    t!("plot-size-distribution"),
                                 );
                                 ui.selectable_value(
                                     &mut self.plot_type,
                                     PlotType::AgeSizeScatter,
-                                    "🌌 File Age vs. File Size",
+                                    t!("plot-age-size"),
                                 );
                                 ui.selectable_value(
                                     &mut self.plot_type,
                                     PlotType::DirComposition,
-                                    "🍰 Directory Composition",
+                                    t!("plot-dir-composition"),
                                 );
                                 ui.selectable_value(
                                     &mut self.plot_type,
                                     PlotType::ExtensionBoxplot,
-                                    "📦 File Sizes by Extension",
+                                    t!("plot-extension-boxplot"),
                                 );
                                 ui.selectable_value(
                                     &mut self.plot_type,
                                     PlotType::TemporalTimeline,
-                                    "⏱ Linked Temporal Timelines",
+                                    t!("plot-temporal-timeline"),
                                 );
                                 ui.selectable_value(
                                     &mut self.plot_type,
                                     PlotType::DeduplicatorWaste,
-                                    "👥 Duplicate Waste by Extension",
+                                    t!("plot-deduplicator-waste"),
                                 );
                             });
                     });
                 }
                 VisMode::Deduplicator => {
                     ui.heading(
-                        egui::RichText::new("👥 Duplicate File Finder")
+                        egui::RichText::new(t!("vis-mode-deduplicator"))
                             .strong()
                             .color(ui.visuals().strong_text_color()),
                     );
@@ -615,12 +615,12 @@ impl GuiApp {
 
                         let response = frame.show(ui, |ui| {
                             ui.horizontal(|ui| {
-                                ui.label(egui::RichText::new("⚠ DATA LOSS WARNING").strong().color(text_color));
+                                ui.label(egui::RichText::new(t!("dedup-warning-title")).strong().color(text_color));
                                 ui.separator();
                                 ui.label(
-                                    egui::RichText::new(format!(
-                                        "Deleting all versions of {} file(s)",
-                                        fully_selected_groups_info.len()
+                                    egui::RichText::new(t!(
+                                        "dedup-warning-desc",
+                                        { "count" => fully_selected_groups_info.len() }
                                     ))
                                     .color(ui.visuals().text_color())
                                 );
@@ -630,11 +630,11 @@ impl GuiApp {
                         response.on_hover_ui(|ui| {
                             ui.set_max_width(450.0);
                             ui.heading(
-                                egui::RichText::new("No Original Copy Will Remain:")
+                                egui::RichText::new(t!("dedup-warning-no-original"))
                                     .color(theme::WARNING_RED)
                                     .strong()
                             );
-                            ui.label("You have checked both the original and all duplicate copies for the files listed below. Deleting them will likely result in permanent data loss:");
+                            ui.label(t!("dedup-warning-details"));
                             ui.separator();
 
                             egui::ScrollArea::vertical().max_height(250.0).show(ui, |ui| {
@@ -643,7 +643,10 @@ impl GuiApp {
                                         ui.horizontal(|ui| {
                                             ui.colored_label(theme::WARNING_RED, "🔥");
                                             ui.strong(filename);
-                                            ui.weak(format!("({} copies selected)", nodes.len()));
+                                            ui.weak(t!(
+                                                "dedup-copies-selected",
+                                                { "count" => nodes.len() }
+                                            ));
                                         });
                                         for &idx in nodes {
                                             let path = snapshot.get_full_path(idx);
@@ -1263,7 +1266,7 @@ impl GuiApp {
 
             if snapshot.nodes.is_empty() {
                 ui.centered_and_justified(|ui| {
-                    ui.label("Click 'Scan Directory' to explore disk usage.");
+                    ui.label(t!("explorer-empty-state"));
                 });
             } else {
                 // Auto-expand the root node (0) if expanded_rows is empty
@@ -1321,7 +1324,7 @@ impl GuiApp {
                 VisMode::Treemap => {
                     if snapshot.nodes.is_empty() {
                         ui.centered_and_justified(|ui| {
-                            ui.label("Scanned filesystem will be visualized as a treemap here.");
+                            ui.label(t!("placeholder-treemap"));
                         });
                     } else {
                         // Gather temporary HashSets compatible with the treemap API
@@ -1371,7 +1374,7 @@ impl GuiApp {
                     ui.add_space(8.0);
                     if snapshot.nodes.is_empty() {
                         ui.centered_and_justified(|ui| {
-                            ui.label("Scanned filesystem will be plotted here.");
+                            ui.label(t!("placeholder-plots"));
                         });
                     } else {
                         let mut selected_nodes_set: HashSet<u32> =
@@ -1461,7 +1464,7 @@ impl GuiApp {
                     ui.separator();
 
                     // Filter search input
-                    ui.label("🔍 Filter:");
+                    ui.label(t!("search-filter-label"));
                     if !self.search_query.is_empty() && ui.button("❌").clicked() {
                         self.search_query.clear();
                     }
@@ -1542,9 +1545,7 @@ impl GuiApp {
                     VisMode::Treemap => {
                         if snapshot.nodes.is_empty() {
                             ui.centered_and_justified(|ui| {
-                                ui.label(
-                                    "Scanned filesystem will be visualized as a treemap here.",
-                                );
+                                ui.label(t!("placeholder-treemap"));
                             });
                         } else {
                             // Gather temporary HashSets compatible with the treemap API
@@ -1601,7 +1602,7 @@ impl GuiApp {
                             .show(ui, |ui| {
                                 if snapshot.nodes.is_empty() {
                                     ui.centered_and_justified(|ui| {
-                                        ui.label("Scanned filesystem will be plotted here.");
+                                        ui.label(t!("placeholder-plots"));
                                     });
                                 } else {
                                     let mut selected_nodes_set: HashSet<u32> =

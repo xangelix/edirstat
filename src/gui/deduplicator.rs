@@ -54,7 +54,7 @@ impl super::GuiApp {
 
                 if response.hovered() {
                     ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
-                    response = response.on_hover_text("Click to Cancel Scan");
+                    response = response.on_hover_text(t!("dedup-cancel-hover"));
 
                     let stroke = egui::Stroke::new(2.0f32, crate::colors::WARNING_RED);
                     let inset = 4.0;
@@ -93,7 +93,7 @@ impl super::GuiApp {
 
                 if !progress_snap.item.is_empty() {
                     ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Truncate);
-                    ui.weak(format!("Current: {}", progress_snap.item));
+                    ui.weak(format!("{}: {}", t!("dedup-current-label"), progress_snap.item));
                 }
             });
         } else {
@@ -136,7 +136,7 @@ impl super::GuiApp {
                     });
 
                     self.deduplicator_progress = atomic_progress::ProgressBuilder::new_spinner(
-                        "Phase 1/7: Grouping all scanned files by size...",
+                        t!("dedup-phase1-size"),
                     )
                     .with_start_time_now()
                     .build();

@@ -11,6 +11,7 @@ use std::{
 
 use prettier_bytes::ByteFormatter;
 use rayon::iter::{IntoParallelIterator as _, ParallelIterator as _};
+use fluent_zero::t;
 
 pub const HASH_BLOCK_SIZE: usize = 4096; // 4KB hashing block size
 pub const MULTI_RANGE_SPREAD_SIZE: u64 = 100 * 1024 * 1024; // 100MB spread size for multi-range checks
@@ -361,7 +362,7 @@ pub fn run_deduplication(
     }
 
     // Set state to SizeGrouping (Phase 1)
-    progress.set_name("Phase 1/7: Grouping all scanned files by size...");
+    progress.set_name(t!("dedup-phase1-size"));
     progress.set_total(0); // Indeterminate spinner initially
     progress.set_pos(0);
 
@@ -396,7 +397,7 @@ pub fn run_deduplication(
         .iter()
         .filter(|(_, nodes)| nodes.len() >= 2)
         .count();
-    progress.set_name("Phase 1/7: Filtering exclusions on duplicate candidates...");
+    progress.set_name(t!("dedup-phase1-filter"));
     progress.set_total(candidate_groups_count as u64);
     progress.set_pos(0);
 
@@ -559,7 +560,7 @@ pub fn run_deduplication(
     let Some(groups) = run_hashing_phase(
         current_groups,
         &prefix_hash_fn,
-        "Phase 2/7: Hashing file prefixes (first 4KB)...",
+        &t!("dedup-phase2-prefix"),
     ) else {
         cancel_and_clear();
         return;
@@ -587,7 +588,7 @@ pub fn run_deduplication(
     let Some(groups) = run_hashing_phase(
         current_groups,
         &midpoint_hash_fn,
-        "Phase 3/7: Hashing file midpoints...",
+        &t!("dedup-phase3-midpoint"),
     ) else {
         cancel_and_clear();
         return;
@@ -614,7 +615,7 @@ pub fn run_deduplication(
     let Some(groups) = run_hashing_phase(
         current_groups,
         &suffix_hash_fn,
-        "Phase 4/7: Hashing file suffixes...",
+        &t!("dedup-phase4-suffix"),
     ) else {
         cancel_and_clear();
         return;
@@ -634,7 +635,7 @@ pub fn run_deduplication(
     let Some(groups) = run_hashing_phase(
         current_groups,
         &multi_range_hash_fn,
-        "Phase 5/7: Multi-range hashing large files...",
+        &t!("dedup-phase5-multirange"),
     ) else {
         cancel_and_clear();
         return;
@@ -651,7 +652,7 @@ pub fn run_deduplication(
     let Some(groups) = run_hashing_phase(
         current_groups,
         &full_hash_fn,
-        "Phase 6/7: Full BLAKE3 hashing of remaining candidates...",
+        &t!("dedup-phase6-full"),
     ) else {
         cancel_and_clear();
         return;
@@ -662,7 +663,7 @@ pub fn run_deduplication(
 
     // --- Phase 7: Validation ---
     let total_groups = current_groups.len();
-    progress.set_name("Phase 7/7: Final timestamp validation...");
+    progress.set_name(t!("dedup-phase7-validation"));
     progress.set_total(total_groups as u64);
     progress.set_pos(0);
 
@@ -751,9 +752,11 @@ pub fn run_deduplication(
 
     update_results(final_groups);
 
-    progress.set_name(format!(
-        "Finished in {duration:.2?}! Found {final_groups_count} duplicate groups. Potential reclaimable space: {space_str}"
-    ));
+    progress.set_name(t!("dedup-phase-finished", {
+        "duration" => format!("{duration:.2?}"),
+        "count" => final_groups_count,
+        "space" => space_str.as_str()
+    }));
     progress.finish();
 }
 

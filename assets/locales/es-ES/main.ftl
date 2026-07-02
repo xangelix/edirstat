@@ -21,6 +21,11 @@ language = 💬 Idioma
 layout-mode = Modo de diseño:
 classic-layout = Diseño clásico
 windirstat-layout = Diseño de WinDirStat
+vis-mode-treemap = 📊 Mapa de árbol
+vis-mode-plots = 📈 Gráficos
+select-plot-label = Seleccionar gráfico:
+vis-mode-deduplicator = 👥 Buscador de archivos duplicados
+search-filter-label = 🔍 Filtrar:
 
 # Panel Toggles
 toggle-left-panel = { $collapsed ->
@@ -63,6 +68,14 @@ selection-items = Selección: { $count ->
    *[other] { $count } elementos
 }
 
+# Plot Types
+plot-size-distribution = 📊 Distribución de tamaño de archivo
+plot-age-size = 🌌 Antigüedad de archivo vs. Tamaño de archivo
+plot-dir-composition = 🍰 Composición de directorios
+plot-extension-boxplot = 📦 Tamaños de archivo por extensión
+plot-temporal-timeline = ⏱ Líneas de tiempo temporales vinculadas
+plot-deduplicator-waste = 👥 Espacio duplicado desperdiciado por extensión
+
 # --- Deduplicator Strings ---
 dedup-desc = Busque y elimine de forma segura archivos idénticos byte por byte mediante hashes BLAKE3 criptográficamente seguros.
 dedup-how-it-works = ℹ Cómo funciona
@@ -93,6 +106,24 @@ dedup-remove-menu = 🗑 Eliminar... ({ $count } archivos, { $size })
 dedup-remove-menu-disabled = 🗑 Eliminar... (0 archivos)
 dedup-remove-trash = ♻ Mover seleccionados a la papelera
 dedup-remove-delete = 🗑 Eliminar seleccionados permanentemente
+dedup-warning-title = ⚠ ADVERTENCIA DE PÉRDIDA DE DATOS
+dedup-warning-desc = { $count ->
+    [one] Eliminando todas las versiones de 1 archivo
+   *[other] Eliminando todas las versiones de { $count } archivos
+}
+dedup-warning-no-original = No quedará ninguna copia original:
+dedup-warning-details = Ha marcado tanto el archivo original como todas las copias duplicadas de los archivos enumerados a continuación. Su eliminación provocará probablemente una pérdida permanente de datos:
+dedup-cancel-hover = Haga clic para cancelar el análisis
+dedup-current-label = Actual
+dedup-phase1-size = Fase 1/7: Agrupando todos los archivos analizados por tamaño...
+dedup-phase1-filter = Fase 1/7: Filtrando exclusiones en candidatos duplicados...
+dedup-phase2-prefix = Fase 2/7: Calculando el hash de los prefijos de archivo (primeros 4KB)...
+dedup-phase3-midpoint = Fase 3/7: Calculando el hash del punto medio de los archivos...
+dedup-phase4-suffix = Fase 4/7: Calculando el hash de los sufijos de archivo...
+dedup-phase5-multirange = Fase 5/7: Calculando el hash de rango múltiple para archivos grandes...
+dedup-phase6-full = Fase 6/7: Calculando el hash BLAKE3 completo de los candidatos restantes...
+dedup-phase7-validation = Fase 7/7: Validación final de la marca de tiempo...
+dedup-phase-finished = ¡Finalizado en { $duration }! Se encontraron { $count } grupos de duplicados. Espacio potencial a recuperar: { $space }
 
 # Deduplicator Table Headers
 dedup-hdr-checkbox = [     ]
@@ -147,6 +178,8 @@ explorer-action-refresh-directory = 🔄 Actualizar directorio
 
 # Explorer Empty State
 explorer-empty-state = Haga clic en «Analizar directorio» para explorar el uso del disco.
+placeholder-treemap = El sistema de archivos analizado se visualizará como un mapa de árbol aquí.
+placeholder-plots = El sistema de archivos analizado se graficará aquí.
 
 # --- Extensions Panel ---
 extensions-header = 📂 Extensiones
@@ -200,7 +233,7 @@ modal-trash-checkbox = Confirmo que deseo mover esto a la papelera.
 modal-trash-confirm = ♻ Sí, mover a la papelera
 
 modal-delete-duplicates-title = ⚠ ADVERTENCIA DE DEDUPLICACIÓN PERMANENTE
-modal-delete-duplicates-header = ⚠ ¡Advertencia de eliminación permanente de duplicados!`
+modal-delete-duplicates-header = ⚠ ¡Advertencia de eliminación permanente de duplicados!
 modal-delete-duplicates-info = Espacio total a recuperar: { $size }
 modal-delete-duplicates-warning = Todos los archivos seleccionados se eliminarán permanentemente y no se podrán recuperar (omitiendo la papelera de reciclaje).
 modal-delete-duplicates-checkbox = Entiendo que los archivos se eliminarán permanentemente y no se podrán recuperar.
@@ -220,7 +253,7 @@ modal-hardlink-duplicates-warning = Esto eliminará los archivos duplicados sele
 modal-hardlink-duplicates-checkbox = Confirmo que deseo reemplazar los archivos seleccionados con enlaces físicos.
 modal-hardlink-duplicates-confirm = 🔗 Sí, reemplazar con enlaces físicos
 
-modal-softlink-duplicates-title = 🔗 REEMPLAZAR DUPLICADOS CON ENLACES SIMBÓLICOS
+modal-softlink-duplicates-title = 🔗 REPLACE DUPLICATES WITH SOFTLINKS
 modal-softlink-duplicates-header = 🔗 Reemplazar duplicados con enlaces simbólicos
 modal-softlink-duplicates-info = Total de archivos a procesar: { $count }. Tamaño virtual acumulado: { $size }
 modal-softlink-duplicates-warning = Esto eliminará los archivos duplicados seleccionados y los reemplazará con enlaces simbólicos a nivel de sistema de archivos que apuntan al archivo original restante en cada grupo. Esto conserva los archivos visualmente mientras libera almacenamiento físico real.
@@ -231,6 +264,8 @@ modal-softlink-duplicates-confirm = 🔗 Sí, reemplazar con enlaces simbólicos
 modal-path-not-exist-title = ❌ ¡La ruta no existe!
 modal-path-not-exist-msg = Error: La ruta que intenta eliminar no existe en el disco.
 modal-close-btn = Cerrar
+modal-details-label = Detalles: 
+modal-cancel-btn = Cancelar
 
 # Elevation Recommended Modal
 modal-elevation-title = ⚠ Elevación recomendada

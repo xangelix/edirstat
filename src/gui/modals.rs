@@ -995,7 +995,7 @@ impl GuiApp {
                                     ui.add_space(8.0);
 
                                     ui.horizontal(|ui| {
-                                        ui.label("Details: ");
+                                        ui.label(t!("modal-details-label"));
                                         ui.label(egui::RichText::new(&cfg.info_msg).strong());
                                     });
 
@@ -1034,7 +1034,7 @@ impl GuiApp {
 
                                     // Action Buttons
                                     ui.horizontal(|ui| {
-                                        if ui.button("Cancel").clicked() {
+                                        if ui.button(t!("modal-cancel-btn")).clicked() {
                                             self.active_modal = None;
                                         }
 
@@ -1496,7 +1496,7 @@ impl GuiApp {
 
                                 ui.add_space(16.0);
                                 ui.vertical_centered(|ui| {
-                                    if ui.button("Close").clicked() {
+                                    if ui.button(t!("modal-close-btn")).clicked() {
                                         self.active_modal = None;
                                     }
                                 });

@@ -21,6 +21,11 @@ language = 💬 Language
 layout-mode = Layout Mode:
 classic-layout = Classic Layout
 windirstat-layout = WinDirStat Layout
+vis-mode-treemap = 📊 Treemap
+vis-mode-plots = 📈 Plots
+select-plot-label = Select Plot:
+vis-mode-deduplicator = 👥 Duplicate File Finder
+search-filter-label = 🔍 Filter:
 
 # Panel Toggles
 toggle-left-panel = { $collapsed ->
@@ -63,6 +68,14 @@ selection-items = Selection: { $count ->
    *[other] { $count } items
 }
 
+# Plot Types
+plot-size-distribution = 📊 File Size Distribution
+plot-age-size = 🌌 File Age vs. File Size
+plot-dir-composition = 🍰 Directory Composition
+plot-extension-boxplot = 📦 File Sizes by Extension
+plot-temporal-timeline = ⏱ Linked Temporal Timelines
+plot-deduplicator-waste = 👥 Duplicate Waste by Extension
+
 # --- Deduplicator Strings ---
 dedup-desc = Find and safely remove byte-for-byte identical files using cryptographically secure BLAKE3 hashes.
 dedup-how-it-works = ℹ How it Works
@@ -93,6 +106,24 @@ dedup-remove-menu = 🗑 Remove... ({ $count } files, { $size })
 dedup-remove-menu-disabled = 🗑 Remove... (0 files)
 dedup-remove-trash = ♻ Move Selected to Trash
 dedup-remove-delete = 🗑 Delete Selected Permanently
+dedup-warning-title = ⚠ DATA LOSS WARNING
+dedup-warning-desc = { $count ->
+    [one] Deleting all versions of 1 file
+   *[other] Deleting all versions of { $count } files
+}
+dedup-warning-no-original = No Original Copy Will Remain:
+dedup-warning-details = You have checked both the original and all duplicate copies for the files listed below. Deleting them will likely result in permanent data loss:
+dedup-cancel-hover = Click to Cancel Scan
+dedup-current-label = Current
+dedup-phase1-size = Phase 1/7: Grouping all scanned files by size...
+dedup-phase1-filter = Phase 1/7: Filtering exclusions on duplicate candidates...
+dedup-phase2-prefix = Phase 2/7: Hashing file prefixes (first 4KB)...
+dedup-phase3-midpoint = Phase 3/7: Hashing file midpoints...
+dedup-phase4-suffix = Phase 4/7: Hashing file suffixes...
+dedup-phase5-multirange = Phase 5/7: Multi-range hashing large files...
+dedup-phase6-full = Phase 6/7: Full BLAKE3 hashing of remaining candidates...
+dedup-phase7-validation = Phase 7/7: Final timestamp validation...
+dedup-phase-finished = Finished in { $duration }! Found { $count } duplicate groups. Potential reclaimable space: { $space }
 
 # Deduplicator Table Headers
 dedup-hdr-checkbox = [     ]
@@ -147,6 +178,8 @@ explorer-action-refresh-directory = 🔄 Refresh Directory
 
 # Explorer Empty State
 explorer-empty-state = Click 'Scan Directory' to explore disk usage.
+placeholder-treemap = Scanned filesystem will be visualized as a treemap here.
+placeholder-plots = Scanned filesystem will be plotted here.
 
 # --- Extensions Panel ---
 extensions-header = 📂 Extensions
@@ -231,6 +264,8 @@ modal-softlink-duplicates-confirm = 🔗 Yes, Replace with Softlinks
 modal-path-not-exist-title = ❌ Path Does Not Exist!
 modal-path-not-exist-msg = Error: The path you are trying to delete does not exist on disk.
 modal-close-btn = Close
+modal-details-label = Details: 
+modal-cancel-btn = Cancel
 
 # Elevation Recommended Modal
 modal-elevation-title = ⚠ Elevation Recommended
