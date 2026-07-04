@@ -104,6 +104,9 @@ impl StatComponent for TreemapChart {
         );
 
         // --- Layout Cache Check ---
+        // Race-free (the pointer and the snapshot it identifies are the same value).
+        // The rescan path always publishes a fresh `Arc`, so every content change
+        // invalidates this cache.
         let snapshot_ptr = std::sync::Arc::as_ptr(&snapshot.nodes) as usize;
         let needs_rebuild = self.cached_blocks.is_empty()
             || snapshot_ptr != self.last_snapshot_ptr
@@ -425,6 +428,13 @@ fn build_treemap(
 ) {
     const MIN_AVG_CHILD_AREA: f64 = 16.0;
 
+    // A stale or corrupt index (e.g. a cached layout referencing indices
+    // from a snapshot that shrank after a full re-scan) must never panic
+    // the render loop — bail out of this branch instead.
+    if node_idx as usize >= config.nodes.len() {
+        return;
+    }
+
     let node = &config.nodes[node_idx as usize];
     if node.size == 0
         || rect.width() < PIXEL_PRECISION_LIMIT
@@ -449,6 +459,11 @@ fn build_treemap(
     let mut children = SmallVec::<[u32; 16]>::new();
     let mut curr = node.first_child;
     while curr != NO_INDEX {
+        // Stop walking a sibling chain that references an index outside
+        // the arena (corrupt/stale linkage) instead of panicking.
+        if curr as usize >= config.nodes.len() {
+            break;
+        }
         children.push(curr);
         curr = config.nodes[curr as usize].next_sibling;
     }
@@ -710,5 +725,64 @@ mod tests {
         assert_eq!(blocks[0].node_idx, 1);
         assert_eq!(blocks[0].rect.width(), 100.0);
         assert_eq!(blocks[0].rect.height(), 100.0);
+    }
+
+    #[test]
+    fn test_build_treemap_out_of_bounds_root_no_panic() {
+        let pool = StringPool::new();
+        let nodes: Vec<FileNode> = vec![];
+        let config = TreemapConfig {
+            nodes: &nodes,
+            string_pool: &pool,
+            max_depth: 20,
+        };
+        let mut blocks = Vec::new();
+        // A stale node_idx into an empty arena must bail out, not panic.
+        build_treemap(&config, 5, Rect::NOTHING, 0, &mut blocks);
+        assert!(blocks.is_empty());
+    }
+
+    #[test]
+    fn test_build_treemap_corrupt_child_index_no_panic() {
+        let mut pool = StringPool::new();
+        let r = pool.get_or_insert(b"r");
+        let mut nodes = vec![FileNode::new(r, None, true, false, 0, 0)];
+        nodes[0].size = 1000;
+        nodes[0].first_child = 999_999; // out-of-bounds sibling — must not panic
+        let config = TreemapConfig {
+            nodes: &nodes,
+            string_pool: &pool,
+            max_depth: 20,
+        };
+        let mut blocks = Vec::new();
+        let rect = Rect::from_min_size(eframe::egui::Pos2::ZERO, eframe::egui::vec2(100.0, 100.0));
+        build_treemap(&config, 0, rect, 0, &mut blocks);
+        // No valid children reachable → root rendered as a single fallback block.
+        assert_eq!(blocks.len(), 1);
+        assert_eq!(blocks[0].node_idx, 0);
+    }
+
+    #[test]
+    fn test_build_treemap_happy_path_unchanged() {
+        let mut pool = StringPool::new();
+        let r = pool.get_or_insert(b"r");
+        let f = pool.get_or_insert(b"f.png");
+        let mut nodes = vec![
+            FileNode::new(r, None, true, false, 0, 0),
+            FileNode::new(f, Some(0), false, false, 0, 0),
+        ];
+        nodes[0].first_child = 1;
+        nodes[0].size = 1000;
+        nodes[1].size = 1000;
+        let config = TreemapConfig {
+            nodes: &nodes,
+            string_pool: &pool,
+            max_depth: 20,
+        };
+        let mut blocks = Vec::new();
+        let rect = Rect::from_min_size(eframe::egui::Pos2::ZERO, eframe::egui::vec2(100.0, 100.0));
+        build_treemap(&config, 0, rect, 0, &mut blocks);
+        assert_eq!(blocks.len(), 1);
+        assert_eq!(blocks[0].node_idx, 1);
     }
 }

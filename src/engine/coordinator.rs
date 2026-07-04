@@ -45,6 +45,11 @@ impl SharedState {
             extension_stats: ArcSwap::new(Arc::new(Vec::new())),
         }
     }
+
+    /// Publish a new immutable snapshot atomically.
+    pub fn store_snapshot(&self, snapshot: FileArenaSnapshot) {
+        self.current_snapshot.store(Arc::new(snapshot));
+    }
 }
 
 pub struct Coordinator {
@@ -238,7 +243,7 @@ impl Coordinator {
                     string_pool: Arc::new(string_pool.clone()),
                     dir_counts,
                 };
-                self.shared_state.current_snapshot.store(Arc::new(snapshot));
+                self.shared_state.store_snapshot(snapshot);
 
                 // Publish background sorted statistics
                 let mut stats_vec: Vec<(CompactString, u64, u32)> = ext_map
@@ -262,7 +267,7 @@ impl Coordinator {
             string_pool: Arc::new(string_pool),
             dir_counts,
         };
-        self.shared_state.current_snapshot.store(Arc::new(snapshot));
+        self.shared_state.store_snapshot(snapshot);
 
         let mut stats_vec: Vec<(CompactString, u64, u32)> = ext_map
             .into_iter()

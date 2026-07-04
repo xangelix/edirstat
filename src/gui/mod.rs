@@ -432,9 +432,7 @@ impl GuiApp {
             nodes: Arc::new(crate::arena::NodeStorage::Mmapped(arena)),
             string_pool: Arc::new(string_pool),
         };
-        self.shared_state
-            .current_snapshot
-            .store(Arc::new(loaded_snapshot));
+        self.shared_state.store_snapshot(loaded_snapshot);
         self.current_scan_path = Some(path);
         self.scan_start_time = None;
 

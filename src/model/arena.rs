@@ -373,17 +373,43 @@ impl FileArenaSnapshot {
     }
 }
 
+/// Walk the tree top-down from the true root (node 0).
+///
+/// An in-place rescan leaves orphaned nodes resident in the arena
+/// (their `parent` pointer still set but unlinked from the child chain)
 #[must_use]
 pub fn precompute_dir_counts(nodes: &[FileNode]) -> Vec<u32> {
-    let mut counts = vec![0; nodes.len()];
-    for idx in (0..nodes.len()).rev() {
-        let node = &nodes[idx];
-        if node.is_directory()
-            && let Some(parent) = node.parent_opt()
-        {
-            let parent_idx = parent as usize;
-            if parent_idx < counts.len() {
-                counts[parent_idx] += 1 + counts[idx];
+    let mut counts = vec![0u32; nodes.len()];
+    if nodes.is_empty() {
+        return counts;
+    }
+
+    // Post-order via an explicit stack: on the "leave" visit (after all
+    // descendants), add this directory's subtree count to its parent.
+    let mut stack: Vec<(u32, bool)> = Vec::with_capacity(64);
+    stack.push((0, false));
+    while let Some((idx, is_leave)) = stack.pop() {
+        if idx as usize >= nodes.len() {
+            continue;
+        }
+        let node = &nodes[idx as usize];
+        if is_leave {
+            if node.is_directory() && node.parent != NO_INDEX {
+                let parent_idx = node.parent as usize;
+                if parent_idx < counts.len() {
+                    counts[parent_idx] += 1 + counts[idx as usize];
+                }
+            }
+        } else {
+            // Schedule the leave-visit, then descend into the child chain.
+            stack.push((idx, true));
+            let mut curr = node.first_child;
+            while curr != NO_INDEX {
+                if curr as usize >= nodes.len() {
+                    break;
+                }
+                stack.push((curr, false));
+                curr = nodes[curr as usize].next_sibling;
             }
         }
     }
@@ -647,6 +673,62 @@ mod tests {
         assert_eq!(clean_unc_path(r"\\?\unc\server\share"), r"\\server\share");
         assert_eq!(clean_unc_path("/home/tux/test"), "/home/tux/test");
         assert_eq!(clean_unc_path(r"\\server\share"), r"\\server\share");
+    }
+
+    #[test]
+    fn test_precompute_dir_counts_normal() {
+        let mut pool = StringPool::new();
+        let r = pool.get_or_insert(b"root");
+        let keep = pool.get_or_insert(b"keep");
+        let a = pool.get_or_insert(b"a.bin");
+        let goner = pool.get_or_insert(b"goner");
+        let big = pool.get_or_insert(b"big.bin");
+        let mut nodes = vec![
+            FileNode::new(r, None, true, false, 0, 0),        // 0 root
+            FileNode::new(keep, Some(0), true, false, 0, 0),  // 1
+            FileNode::new(a, Some(1), false, false, 0, 0),    // 2
+            FileNode::new(goner, Some(0), true, false, 0, 0), // 3
+            FileNode::new(big, Some(3), false, false, 0, 0),  // 4
+        ];
+        nodes[0].first_child = 1;
+        nodes[1].next_sibling = 3;
+        nodes[3].next_sibling = NO_INDEX;
+        nodes[1].first_child = 2;
+        nodes[3].first_child = 4;
+        let counts = precompute_dir_counts(&nodes);
+        assert_eq!(counts[0], 2, "root has 2 subdirs (keep + goner)");
+        assert_eq!(counts[1], 0);
+        assert_eq!(counts[3], 0);
+    }
+
+    #[test]
+    fn test_precompute_dir_counts_ignores_orphans() {
+        // Simulates the arena state after an in-place rescan prunes `goner`:
+        // it is unlinked from root's child chain but its `parent` pointer is
+        // intentionally left intact (resetting it would make the table treat it
+        // as a ghost root via `row_parent`). It must NOT be counted.
+        let mut pool = StringPool::new();
+        let r = pool.get_or_insert(b"root");
+        let keep = pool.get_or_insert(b"keep");
+        let a = pool.get_or_insert(b"a.bin");
+        let goner = pool.get_or_insert(b"goner");
+        let mut nodes = vec![
+            FileNode::new(r, None, true, false, 0, 0),
+            FileNode::new(keep, Some(0), true, false, 0, 0),
+            FileNode::new(a, Some(1), false, false, 0, 0),
+            FileNode::new(goner, Some(0), true, false, 0, 0),
+        ];
+        nodes[0].first_child = 1; // root -> keep only (goner severed)
+        nodes[1].next_sibling = NO_INDEX;
+        nodes[1].first_child = 2;
+        nodes[3].first_child = NO_INDEX;
+        nodes[3].next_sibling = NO_INDEX; // parent stays Some(0)
+        let counts = precompute_dir_counts(&nodes);
+        assert_eq!(
+            counts[0], 1,
+            "orphaned goner must not inflate root's subdir count"
+        );
+        assert_eq!(counts[3], 0, "orphaned goner itself is never visited");
     }
 }
 

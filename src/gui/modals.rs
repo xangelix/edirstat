@@ -50,10 +50,45 @@ fn collect_descendants(nodes: &[crate::arena::FileNode], idx: u32, out: &mut Vec
     }
     let mut curr = nodes[idx as usize].first_child;
     while curr != crate::arena::NO_INDEX {
+        if curr as usize >= nodes.len() {
+            break;
+        }
         out.push(curr);
         collect_descendants(nodes, curr, out);
         curr = nodes[curr as usize].next_sibling;
     }
+}
+
+/// Detach `idx` from its parent's child chain in-place.
+///
+/// Walks the parent's children to find the predecessor of `idx` and splices
+/// `idx` out, or skips `idx` as the parent's new `first_child` if it was first.
+/// Does not mutate `idx`'s own fields — the caller is responsible for zeroing
+/// them. Returns `true` if `idx` was found and unlinked.
+const fn unlink_child(nodes: &mut [crate::arena::FileNode], idx: u32) -> bool {
+    const NO_INDEX: u32 = crate::arena::NO_INDEX;
+    if idx as usize >= nodes.len() {
+        return false;
+    }
+    let parent = nodes[idx as usize].parent;
+    if parent == NO_INDEX || parent as usize >= nodes.len() {
+        return false; // root or already detached
+    }
+    let successor = nodes[idx as usize].next_sibling;
+    if nodes[parent as usize].first_child == idx {
+        nodes[parent as usize].first_child = successor;
+        return true;
+    }
+    let mut prev = nodes[parent as usize].first_child;
+    while prev != NO_INDEX && (prev as usize) < nodes.len() {
+        let following = nodes[prev as usize].next_sibling;
+        if following == idx {
+            nodes[prev as usize].next_sibling = successor;
+            return true;
+        }
+        prev = following;
+    }
+    false
 }
 
 struct WalkCtx<'a> {
@@ -238,9 +273,7 @@ impl GuiApp {
             string_pool: current_snap.string_pool.clone(),
             dir_counts,
         };
-        self.shared_state
-            .current_snapshot
-            .store(std::sync::Arc::new(new_snapshot));
+        self.shared_state.store_snapshot(new_snapshot);
     }
 
     pub(crate) fn execute_deletion(
@@ -1628,15 +1661,23 @@ impl GuiApp {
         self.scan_start_time = Some(std::time::Instant::now());
         self.total_scan_duration = None;
         let current_snap = self.shared_state.current_snapshot.load();
-        let mut valid_indices = Vec::new();
+
+        // Classify each target: re-scan directories that still exist, and prune
+        // any that have been deleted/moved since the last scan.
+        let mut targets: Vec<(u32, Option<std::path::PathBuf>)> = Vec::new();
         for &idx in dir_indices {
+            if idx as usize >= current_snap.nodes.len() {
+                continue; // stale index referring to a node that no longer exists
+            }
             let path_str = current_snap.get_full_path(idx);
             let path = std::path::PathBuf::from(path_str);
-            if path.exists() && path.is_dir() {
-                valid_indices.push((idx, path));
+            if path.is_dir() {
+                targets.push((idx, Some(path)));
+            } else {
+                targets.push((idx, None));
             }
         }
-        if valid_indices.is_empty() {
+        if targets.is_empty() {
             return;
         }
 
@@ -1650,8 +1691,12 @@ impl GuiApp {
             let mut cloned_nodes = current_snap.nodes.to_vec();
             let mut string_pool = (*current_snap.string_pool).clone();
 
-            for (dir_idx, path) in valid_indices {
-                // 1. Collect and delete old descendants of dir_idx
+            for (dir_idx, path_opt) in targets {
+                if dir_idx as usize >= cloned_nodes.len() {
+                    continue; // snapshot changed shape between classification and clone
+                }
+
+                // 1. Collect old descendants of dir_idx
                 let mut descendants = Vec::new();
                 collect_descendants(&cloned_nodes, dir_idx, &mut descendants);
 
@@ -1677,6 +1722,10 @@ impl GuiApp {
                         files_removed += 1;
                     }
                 }
+                // A pruned directory itself is gone for good, so account for it.
+                if path_opt.is_none() && cloned_nodes[dir_idx as usize].is_directory() {
+                    dirs_removed += 1;
+                }
 
                 traversal_stats
                     .files_scanned
@@ -1695,56 +1744,68 @@ impl GuiApp {
                     cloned_nodes[idx].file_count = 0;
                     cloned_nodes[idx].first_child = crate::arena::NO_INDEX;
                     cloned_nodes[idx].next_sibling = crate::arena::NO_INDEX;
-                    // Do NOT set parent to NO_INDEX to avoid them being treated as ghost root nodes
                 }
 
-                cloned_nodes[dir_idx as usize].first_child = crate::arena::NO_INDEX;
                 cloned_nodes[dir_idx as usize].size = 0;
                 cloned_nodes[dir_idx as usize].file_count = 0;
 
-                // 2. Scan the directory recursively on disk and append new nodes
-                let mut last_child_map = vec![crate::arena::NO_INDEX; cloned_nodes.len()];
+                if let Some(path) = path_opt {
+                    // 2. Directory still exists: clear its children and re-walk from disk.
+                    cloned_nodes[dir_idx as usize].first_child = crate::arena::NO_INDEX;
 
-                // --- BUILD ANCESTORS FOR CYCLE DETECTION ---
-                let mut ancestors: smallvec::SmallVec<[(u64, u64); 16]> = smallvec::smallvec![];
-                for ancestor_path in path.ancestors() {
-                    if let Ok(meta) = std::fs::metadata(ancestor_path) {
-                        ancestors.push(crate::engine::traversal::get_file_id(&meta));
+                    let mut last_child_map = vec![crate::arena::NO_INDEX; cloned_nodes.len()];
+
+                    // --- BUILD ANCESTORS FOR CYCLE DETECTION ---
+                    let mut ancestors: smallvec::SmallVec<[(u64, u64); 16]> = smallvec::smallvec![];
+                    for ancestor_path in path.ancestors() {
+                        if let Ok(meta) = std::fs::metadata(ancestor_path) {
+                            ancestors.push(crate::engine::traversal::get_file_id(&meta));
+                        }
                     }
-                }
-                // Reverse so that the root ancestor is first and the target path is last
-                ancestors.reverse();
+                    // Reverse so that the root ancestor is first and the target path is last
+                    ancestors.reverse();
 
-                let mut walk_ctx = WalkCtx {
-                    cloned_nodes: &mut cloned_nodes,
-                    string_pool: &mut string_pool,
-                    last_child_map: &mut last_child_map,
-                    traversal_stats: &traversal_stats,
-                    ancestors: &mut ancestors,
-                };
-                walk_dir(&path, dir_idx, dir_idx, &mut walk_ctx);
+                    let mut walk_ctx = WalkCtx {
+                        cloned_nodes: &mut cloned_nodes,
+                        string_pool: &mut string_pool,
+                        last_child_map: &mut last_child_map,
+                        traversal_stats: &traversal_stats,
+                        ancestors: &mut ancestors,
+                    };
+                    walk_dir(&path, dir_idx, dir_idx, &mut walk_ctx);
 
-                // 3. Now propagate the new size/counts of dir_idx to all its ancestors!
-                let new_size = cloned_nodes[dir_idx as usize].size;
-                let new_file_count = cloned_nodes[dir_idx as usize].file_count;
+                    // 3. Propagate the new size/counts of dir_idx to all its ancestors!
+                    let new_size = cloned_nodes[dir_idx as usize].size;
+                    let new_file_count = cloned_nodes[dir_idx as usize].file_count;
 
-                let mut current_parent = cloned_nodes[dir_idx as usize].parent_opt();
-                while let Some(p_idx) = current_parent {
-                    let p_node = &mut cloned_nodes[p_idx as usize];
-                    p_node.size += new_size;
-                    p_node.file_count += new_file_count;
-                    current_parent = p_node.parent_opt();
+                    let mut current_parent = cloned_nodes[dir_idx as usize].parent_opt();
+                    while let Some(p_idx) = current_parent {
+                        let p_node = &mut cloned_nodes[p_idx as usize];
+                        p_node.size += new_size;
+                        p_node.file_count += new_file_count;
+                        current_parent = p_node.parent_opt();
+                    }
+                } else {
+                    // 2. Directory was deleted: detach it from its parent's child
+                    // chain and fully zero it so it no longer appears in the tree
+                    // or the treemap. Ancestor sizes were already rolled back above
+                    // and the new contribution is 0, so no further propagation needed.
+                    unlink_child(&mut cloned_nodes, dir_idx);
+                    cloned_nodes[dir_idx as usize].first_child = crate::arena::NO_INDEX;
+                    cloned_nodes[dir_idx as usize].next_sibling = crate::arena::NO_INDEX;
+                    cloned_nodes[dir_idx as usize].parent = crate::arena::NO_INDEX;
                 }
             }
 
-            // 4. Swap snapshot
+            // 4. Swap snapshot (always, so generation-keyed caches rebuild even
+            //    when every target was a no-op prune of an already-empty folder).
             let dir_counts = Arc::new(precompute_dir_counts(&cloned_nodes));
             let new_snapshot = FileArenaSnapshot {
                 nodes: Arc::new(NodeStorage::Owned(cloned_nodes)),
                 string_pool: Arc::new(string_pool),
                 dir_counts,
             };
-            state.current_snapshot.store(Arc::new(new_snapshot));
+            state.store_snapshot(new_snapshot);
 
             state.is_scanning.store(false, Ordering::SeqCst);
         });
@@ -1849,8 +1910,83 @@ mod tests {
     use std::sync::Arc;
 
     use super::*;
+    use crate::arena::{FileNode, NO_INDEX, StringPool};
     use crate::coordinator::{Coordinator, SharedState};
     use crate::engine::traversal::TraversalEngine;
+
+    /// Build a `root(0) -> a(1) -> b(2) -> c(3)` sibling chain under the root.
+    fn three_child_chain() -> (StringPool, Vec<FileNode>) {
+        let mut pool = StringPool::new();
+        let r = pool.get_or_insert(b"r");
+        let a = pool.get_or_insert(b"a");
+        let b = pool.get_or_insert(b"b");
+        let c = pool.get_or_insert(b"c");
+        let mut nodes = vec![
+            FileNode::new(r, None, true, false, 0, 0),
+            FileNode::new(a, Some(0), true, false, 0, 0),
+            FileNode::new(b, Some(0), true, false, 0, 0),
+            FileNode::new(c, Some(0), true, false, 0, 0),
+        ];
+        nodes[0].first_child = 1;
+        nodes[1].next_sibling = 2;
+        nodes[2].next_sibling = 3;
+        nodes[3].next_sibling = NO_INDEX;
+        (pool, nodes)
+    }
+
+    #[test]
+    fn test_unlink_child_middle() {
+        let (_pool, mut nodes) = three_child_chain();
+        assert!(unlink_child(&mut nodes, 2)); // remove b
+        assert_eq!(nodes[0].first_child, 1);
+        assert_eq!(nodes[1].next_sibling, 3); // a now links directly to c
+        assert_eq!(nodes[3].next_sibling, NO_INDEX);
+    }
+
+    #[test]
+    fn test_unlink_child_first() {
+        let (_pool, mut nodes) = three_child_chain();
+        assert!(unlink_child(&mut nodes, 1)); // remove a (first child)
+        assert_eq!(nodes[0].first_child, 2); // b is now first
+        assert_eq!(nodes[2].next_sibling, 3);
+    }
+
+    #[test]
+    fn test_unlink_child_last() {
+        let (_pool, mut nodes) = three_child_chain();
+        assert!(unlink_child(&mut nodes, 3)); // remove c (last child)
+        assert_eq!(nodes[0].first_child, 1);
+        assert_eq!(nodes[1].next_sibling, 2);
+        assert_eq!(nodes[2].next_sibling, NO_INDEX);
+    }
+
+    #[test]
+    fn test_unlink_child_only() {
+        let mut pool = StringPool::new();
+        let r = pool.get_or_insert(b"r");
+        let a = pool.get_or_insert(b"a");
+        let mut nodes = vec![
+            FileNode::new(r, None, true, false, 0, 0),
+            FileNode::new(a, Some(0), true, false, 0, 0),
+        ];
+        nodes[0].first_child = 1;
+        nodes[1].next_sibling = NO_INDEX;
+        assert!(unlink_child(&mut nodes, 1));
+        assert_eq!(nodes[0].first_child, NO_INDEX);
+    }
+
+    #[test]
+    fn test_unlink_child_root_returns_false() {
+        let (_pool, mut nodes) = three_child_chain();
+        // The root has no parent, so it cannot be unlinked.
+        assert!(!unlink_child(&mut nodes, 0));
+    }
+
+    #[test]
+    fn test_unlink_child_out_of_bounds_returns_false() {
+        let (_pool, mut nodes) = three_child_chain();
+        assert!(!unlink_child(&mut nodes, 999));
+    }
 
     #[test]
     fn test_execute_softlinking() -> Result<(), crate::EdirstatError> {
