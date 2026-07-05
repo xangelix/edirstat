@@ -371,6 +371,50 @@ impl FileArenaSnapshot {
             parts.join("/")
         }
     }
+
+    /// Inverse of [`get_full_path`]: resolve an absolute path back to its node
+    /// index by walking the tree from the root. A rescan re-indexes every node
+    /// *under* the refreshed directory (new nodes are appended), so index-keyed
+    /// UI state such as `expanded_rows` cannot survive across a refresh on its
+    /// own — callers capture paths first, then re-resolve them with this.
+    ///
+    /// Returns `None` if the path does not exist in this snapshot.
+    #[must_use]
+    pub fn resolve_path_index(&self, path: &str) -> Option<u32> {
+        if self.nodes.is_empty() {
+            return None;
+        }
+        // Strip the scan-root prefix (`get_full_path(0)`) and walk the remaining
+        // path components down from the root, matching each child by base name.
+        let root_path = self.get_full_path(0);
+        let relative = path.strip_prefix(&root_path)?;
+        let mut curr = 0u32;
+        for component in relative.split(['/', '\\']) {
+            if component.is_empty() {
+                continue;
+            }
+            curr = self.find_child_by_name(curr, component)?;
+        }
+        Some(curr)
+    }
+
+    /// Find the immediate child of `parent` whose base name equals `name`.
+    fn find_child_by_name(&self, parent: u32, name: &str) -> Option<u32> {
+        let node = self.nodes.get(parent as usize)?;
+        let mut curr = node.first_child;
+        while curr != NO_INDEX {
+            let child = self.nodes.get(curr as usize)?;
+            if self
+                .string_pool
+                .get(child.name_id)
+                .is_some_and(|n| n == name)
+            {
+                return Some(curr);
+            }
+            curr = child.next_sibling;
+        }
+        None
+    }
 }
 
 /// Walk the tree top-down from the true root (node 0).
@@ -729,6 +773,65 @@ mod tests {
             "orphaned goner must not inflate root's subdir count"
         );
         assert_eq!(counts[3], 0, "orphaned goner itself is never visited");
+    }
+
+    #[test]
+    fn test_resolve_path_index_roundtrip() {
+        let mut pool = StringPool::new();
+        let root = pool.get_or_insert(b"/root");
+        let a = pool.get_or_insert(b"a");
+        let b = pool.get_or_insert(b"b");
+        let c = pool.get_or_insert(b"c");
+        let d = pool.get_or_insert(b"d");
+        let mut nodes = vec![
+            FileNode::new(root, None, true, false, 0, 0),  // 0 /root
+            FileNode::new(a, Some(0), true, false, 0, 0),  // 1 /root/a
+            FileNode::new(b, Some(0), false, false, 0, 0), // 2 /root/b
+            FileNode::new(c, Some(1), true, false, 0, 0),  // 3 /root/a/c
+            FileNode::new(d, Some(1), false, false, 0, 0), // 4 /root/a/d
+        ];
+        nodes[0].first_child = 1;
+        nodes[1].next_sibling = 2;
+        nodes[1].first_child = 3;
+        nodes[3].next_sibling = 4;
+        let snapshot = FileArenaSnapshot {
+            nodes: Arc::new(NodeStorage::Owned(nodes)),
+            string_pool: Arc::new(pool),
+            dir_counts: Arc::new(vec![]),
+        };
+
+        assert_eq!(snapshot.resolve_path_index("/root"), Some(0));
+        assert_eq!(snapshot.resolve_path_index("/root/a"), Some(1));
+        assert_eq!(snapshot.resolve_path_index("/root/b"), Some(2));
+        assert_eq!(snapshot.resolve_path_index("/root/a/c"), Some(3));
+        assert_eq!(snapshot.resolve_path_index("/root/a/d"), Some(4));
+
+        // get_full_path and resolve_path_index must be exact inverses.
+        for idx in 0..5u32 {
+            let path = snapshot.get_full_path(idx);
+            assert_eq!(snapshot.resolve_path_index(&path), Some(idx));
+        }
+    }
+
+    #[test]
+    fn test_resolve_path_index_missing() {
+        let mut pool = StringPool::new();
+        let root = pool.get_or_insert(b"/root");
+        let a = pool.get_or_insert(b"a");
+        let mut nodes = vec![
+            FileNode::new(root, None, true, false, 0, 0),
+            FileNode::new(a, Some(0), true, false, 0, 0),
+        ];
+        nodes[0].first_child = 1;
+        let snapshot = FileArenaSnapshot {
+            nodes: Arc::new(NodeStorage::Owned(nodes)),
+            string_pool: Arc::new(pool),
+            dir_counts: Arc::new(vec![]),
+        };
+
+        assert_eq!(snapshot.resolve_path_index("/root/nope"), None);
+        assert_eq!(snapshot.resolve_path_index("/wrong/root"), None);
+        assert_eq!(snapshot.resolve_path_index(""), None);
     }
 }
 

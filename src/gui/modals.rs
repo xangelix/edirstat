@@ -1662,6 +1662,17 @@ impl GuiApp {
         self.total_scan_duration = None;
         let current_snap = self.shared_state.current_snapshot.load();
 
+        // Snapshot the currently-expanded folders as *paths* (not indices) so the
+        // render loop can re-expand them after the rescan re-indexes the target
+        // subtrees. See the update loop in `GuiApp` / `resolve_path_index`.
+        let expanded_paths: std::collections::HashSet<String, ahash::RandomState> = self
+            .table_state
+            .expanded_rows
+            .iter()
+            .map(|idx| current_snap.get_full_path(idx))
+            .collect();
+        self.pending_expand_restore = Some(expanded_paths);
+
         // Classify each target: re-scan directories that still exist, and prune
         // any that have been deleted/moved since the last scan.
         let mut targets: Vec<(u32, Option<std::path::PathBuf>)> = Vec::new();

@@ -139,6 +139,12 @@ pub struct GuiApp {
     pub(crate) last_rendered_snapshot_ptr: usize,
     pub(crate) last_extension_stats_ptr: usize,
 
+    /// Directories that were expanded when a rescan started, captured as paths
+    /// (not indices) so they can be re-resolved after the rescan re-indexes the
+    /// refreshed subtree. Consumed by the render loop when the next snapshot lands.
+    pub(crate) pending_expand_restore:
+        Option<std::collections::HashSet<String, ahash::RandomState>>,
+
     /// Caches (Node Index, User String, Group String, Permissions String)
     pub(crate) unix_metadata_cache: Option<(u32, String, String, String)>,
 
@@ -298,6 +304,7 @@ impl GuiApp {
             hovered_node_idx: None,
             last_rendered_snapshot_ptr: 0,
             last_extension_stats_ptr: 0,
+            pending_expand_restore: None,
 
             unix_metadata_cache: None,
 
@@ -365,6 +372,7 @@ impl GuiApp {
         self.scroll_to_selected = false;
         self.last_rendered_snapshot_ptr = 0;
         self.last_extension_stats_ptr = 0;
+        self.pending_expand_restore = None;
 
         self.unix_metadata_cache = None;
 
@@ -740,6 +748,20 @@ impl eframe::App for GuiApp {
 
         if self.last_rendered_snapshot_ptr != snapshot_ptr {
             self.table_state.filter_cache_dirty = true;
+            // A rescan re-indexes every node under the refreshed directory, which
+            // would otherwise collapse the expanded folders there. If a rescan
+            // captured the expanded paths, re-resolve them against this snapshot.
+            if let Some(paths) = self.pending_expand_restore.take() {
+                self.table_state.expanded_rows.clear();
+                self.table_state.expanded_rows.insert(0); // keep the scan root expanded
+                for path in &paths {
+                    if let Some(idx) = snapshot.resolve_path_index(path)
+                        && idx != 0
+                    {
+                        self.table_state.expanded_rows.insert(idx);
+                    }
+                }
+            }
             self.last_rendered_snapshot_ptr = snapshot_ptr;
         }
 
