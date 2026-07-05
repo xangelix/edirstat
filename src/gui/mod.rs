@@ -837,7 +837,10 @@ impl eframe::App for GuiApp {
             }
         }
 
-        if !is_scanning && let Some(start) = self.scan_start_time {
+        // Re-load `is_scanning` here instead of reusing the frame-level snapshot
+        // captured near the top of the frame
+        let is_scanning_now = self.shared_state.is_scanning.load(Ordering::SeqCst);
+        if !is_scanning_now && let Some(start) = self.scan_start_time {
             self.total_scan_duration = Some(start.elapsed());
             self.scan_start_time = None;
         }
