@@ -198,3 +198,97 @@ jobs:
       #     files: edirstat-macos-${{ matrix.target }}.zip
       #   env:
       #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  deploy-itchio:
+    name: Deploy to itch.io (Multivers & Installers)
+    runs-on: ubuntu-latest
+    needs: [build-windows]
+    container:
+      image: registry.gitlab.com/xangelix-pub/containers/arch-rust-nightly-pin-common:latest
+      options: --user root # How I wish this were GitLab
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v7
+
+      - name: Cache dependencies
+        uses: swatinem/rust-cache@v2
+
+      - name: Configure safe directory for Git
+        run: git config --global --add safe.directory "*"
+
+      - name: Download Windows Installer Artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: edirstat-setup-x86_64.exe
+          path: staging-windows-installer
+
+      - name: Run multivers compilation script
+        run: ./scripts/build_local_multivers.sh
+
+      - name: Build Arch Linux Pacman Package as tux user
+        run: |
+          # 1. Determine version
+          VERSION="${{ github.event.release.tag_name }}"
+          VERSION="${VERSION#v}"
+
+          # 2. Stage binary in /home/tux matching manual source name
+          cp target/x86_64-unknown-linux-gnu/release/edirstat_multivers /home/tux/edirstat-$VERSION-portable-x86_64
+          chown tux:tux /home/tux/edirstat-$VERSION-portable-x86_64
+
+          # 3. Clone and build as the tux user to bypass makepkg root restriction
+          sudo -u tux -i bash -c "
+            cd /home/tux
+            rm -rf edirstat-bin
+            git clone https://aur.archlinux.org/edirstat-bin.git
+            cd edirstat-bin
+            
+            # Place precompiled binary in build directory
+            cp /home/tux/edirstat-$VERSION-portable-x86_64 ./
+            
+            # Update version properties
+            sed -i 's/^pkgver=.*/pkgver='$VERSION'/' PKGBUILD
+            sed -i 's/^pkgrel=.*/pkgrel=1/' PKGBUILD
+            
+            # Automatically resolve checksums for the local binary and download metadata
+            updpkgsums
+            
+            # Build and package
+            makepkg -s --noconfirm
+          "
+
+          # 4. Copy the compiled package back to workspace
+          mkdir -p staging-linux-installer
+          cp /home/tux/edirstat-bin/*.pkg.tar.zst staging-linux-installer/
+
+      - name: Package and Deploy to itch.io
+        env:
+          BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
+        run: |
+          # 1. Determine version
+          VERSION="${{ github.event.release.tag_name }}"
+          VERSION="${VERSION#v}" # strip 'v' prefix if present
+          echo "Deploying version: $VERSION"
+
+          # 2. Stage Linux binary
+          mkdir -p staging-linux
+          cp target/x86_64-unknown-linux-gnu/release/edirstat_multivers staging-linux/edirstat
+          chmod +x staging-linux/edirstat
+
+          # 3. Stage Windows binary
+          mkdir -p staging-windows
+          cp target/x86_64-pc-windows-gnu/release/edirstat_multivers.exe staging-windows/edirstat.exe
+
+          # 4. Ensure butler is available in PATH, downloading it as a fallback if necessary
+          if ! command -v butler &> /dev/null; then
+            echo "butler not found in PATH, installing..."
+            curl -L -o butler.zip https://broth.itch.zone/butler/linux-amd64/LATEST/archive/default
+            unzip -o butler.zip -d /usr/local/bin
+            rm butler.zip
+          fi
+
+          # 5. Push all packages to itch.io
+          butler push staging-windows/ xangelix/edirstat:windows-portable --userversion "$VERSION"
+          butler push staging-windows-installer/ xangelix/edirstat:windows-setup --userversion "$VERSION"
+          butler push staging-linux/ xangelix/edirstat:linux-portable --userversion "$VERSION"
+          butler push staging-linux-installer/ xangelix/edirstat:linux-setup --userversion "$VERSION"
