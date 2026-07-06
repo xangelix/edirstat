@@ -73,6 +73,7 @@ pub struct GuiApp {
     pub(crate) delete_node_indices: Vec<u32>,
     pub(crate) search_query: String,
     pub(crate) monospace_paths: bool,
+    pub(crate) treemap_borders: bool,
     pub(crate) left_panel_collapsed: bool,
     pub(crate) right_panel_collapsed: bool,
 
@@ -258,6 +259,7 @@ impl GuiApp {
             delete_node_indices: Vec::new(),
             search_query: String::new(),
             monospace_paths: prefs.monospace_paths,
+            treemap_borders: prefs.treemap_borders,
             left_panel_collapsed: false,
             right_panel_collapsed: false,
             filter_case_sensitive: false,
@@ -914,6 +916,7 @@ impl eframe::App for GuiApp {
                     });
 
                     ui.checkbox(&mut self.highlight_duplicates, t!("highlight-duplicates"));
+                    ui.checkbox(&mut self.treemap_borders, t!("treemap-borders"));
                     ui.checkbox(&mut self.deletion_confirmation, t!("deletion-confirmation"));
                     ui.checkbox(&mut self.trash_confirmation, t!("trash-confirmation"));
 
@@ -1259,6 +1262,7 @@ impl eframe::App for GuiApp {
             time_format: self.time_format.clone(),
             deletion_confirmation: self.deletion_confirmation,
             trash_confirmation: self.trash_confirmation,
+            treemap_borders: self.treemap_borders,
         };
 
         if current_prefs != self.last_saved_preferences {
@@ -1391,6 +1395,7 @@ impl GuiApp {
                             scroll_to_selected: &mut self.scroll_to_selected,
                             deduplicator_results: Some(&self.deduplicator_results),
                         };
+                        self.treemap_chart.draw_borders = self.treemap_borders;
                         self.treemap_chart.render(ui, snapshot, &mut context);
 
                         // Content-Aware Sync (Selections)
@@ -1612,6 +1617,7 @@ impl GuiApp {
                                 scroll_to_selected: &mut self.scroll_to_selected,
                                 deduplicator_results: Some(&self.deduplicator_results),
                             };
+                            self.treemap_chart.draw_borders = self.treemap_borders;
                             self.treemap_chart.render(ui, snapshot, &mut context);
 
                             // Content-Aware Sync (Selections)

@@ -14,6 +14,7 @@ idle = Bezczynny
 # View Menu Options
 monospace-paths = Ścieżki o stałej szerokości
 highlight-duplicates = ✨ Wyróżnij duplikaty
+treemap-borders = 🔳 Obramowania mapy drzewa
 deletion-confirmation = 🗑 Potwierdzenie usuwania
 trash-confirmation = ♻ Potwierdzenie przenoszenia do kosza
 time-format = 🕒 Format czasu

@@ -18,6 +18,8 @@ pub struct UserPreferences {
     pub deletion_confirmation: bool,
     #[serde(default = "default_true")]
     pub trash_confirmation: bool,
+    #[serde(default)]
+    pub treemap_borders: bool,
 }
 
 const fn default_true() -> bool {
@@ -32,6 +34,7 @@ impl Default for UserPreferences {
             time_format: TimeFormat::default(),
             deletion_confirmation: true,
             trash_confirmation: true,
+            treemap_borders: false,
         }
     }
 }
@@ -73,11 +76,13 @@ mod tests {
         assert!(prefs.trash_confirmation);
         assert!(!prefs.monospace_paths);
         assert!(!prefs.highlight_duplicates);
+        assert!(!prefs.treemap_borders);
     }
 
     #[test]
     fn test_deserialize_legacy_config() -> Result<(), toml::de::Error> {
         // Legacy config missing the confirmation fields should default to true
+        // and missing treemap_borders should default to false
         let legacy_toml = r"
             monospace_paths = true
             highlight_duplicates = false
@@ -87,6 +92,7 @@ mod tests {
         assert!(!prefs.highlight_duplicates);
         assert!(prefs.deletion_confirmation);
         assert!(prefs.trash_confirmation);
+        assert!(!prefs.treemap_borders);
 
         Ok(())
     }

@@ -13,6 +13,7 @@ pub const COLOR_SCAN_COMPLETE: Color32 = Color32::from_rgb(34, 197, 94); // Gree
 pub const GLOW_OUTER_BASE: Color32 = Color32::from_rgb(246, 92, 92); // Gentle red
 pub const GLOW_INNER_CORE: Color32 = Color32::from_rgb(253, 181, 181); // Even lighter red
 pub const TREEMAP_DIR_FALLBACK: Color32 = Color32::from_gray(100);
+pub const TREEMAP_BORDER_COLOR: Color32 = Color32::from_rgb(22, 24, 28);
 
 // Deletion Modal
 pub const DELETION_BORDER: Color32 = Color32::from_rgb(220, 38, 38); // Dark red

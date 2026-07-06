@@ -14,6 +14,7 @@ idle = Bereit
 # View Menu Options
 monospace-paths = Monospace-Pfade
 highlight-duplicates = ✨ Duplikate hervorheben
+treemap-borders = 🔳 Treemap-Rahmen
 deletion-confirmation = 🗑 Bestätigung vor Löschen
 trash-confirmation = ♻ Bestätigung vor In-den-Papierkorb-Verschieben
 time-format = 🕒 Zeitformat

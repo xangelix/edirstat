@@ -14,6 +14,7 @@ idle = Inactief
 # View Menu Options
 monospace-paths = Monospace paden
 highlight-duplicates = ✨ Duplicaten markeren
+treemap-borders = 🔳 Randen van treemap
 deletion-confirmation = 🗑 Bevestiging voor verwijderen
 trash-confirmation = ♻ Bevestiging voor prullenbak
 time-format = 🕒 Tijdnotatie

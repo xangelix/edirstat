@@ -14,6 +14,7 @@ idle = Inactivo
 # View Menu Options
 monospace-paths = Rutas monoespaciadas
 highlight-duplicates = ✨ Resaltar duplicados
+treemap-borders = 🔳 Bordes del mapa de árbol
 deletion-confirmation = 🗑 Confirmación de eliminación
 trash-confirmation = ♻ Confirmación de papelera
 time-format = 🕒 Formato de hora

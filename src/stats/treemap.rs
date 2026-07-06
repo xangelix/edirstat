@@ -17,6 +17,7 @@ pub struct TreemapChart {
     pub cached_blocks: Vec<TreemapBlock>,
     pub last_snapshot_ptr: usize,
     pub last_rect: Rect,
+    pub draw_borders: bool,
 }
 
 impl TreemapChart {
@@ -26,6 +27,7 @@ impl TreemapChart {
             cached_blocks: Vec::new(),
             last_snapshot_ptr: 0,
             last_rect: Rect::NOTHING,
+            draw_borders: false,
         }
     }
 }
@@ -150,6 +152,51 @@ impl StatComponent for TreemapChart {
         // GPU Batching: Consolidate static blocks into exactly ONE single mesh submission to the GPU
         let mut combined_mesh = eframe::egui::Mesh::default();
         for block in &self.cached_blocks {
+            let mut render_rect = block.rect;
+            let mut draw_border = false;
+
+            if self.draw_borders && block.rect.width() > 2.0 && block.rect.height() > 2.0 {
+                draw_border = true;
+                render_rect = block.rect.shrink(1.0);
+            }
+
+            if draw_border {
+                let border_color = crate::colors::TREEMAP_BORDER_COLOR;
+                let base_vertex_idx = combined_mesh.vertices.len() as u32;
+
+                combined_mesh.vertices.push(eframe::egui::epaint::Vertex {
+                    pos: block.rect.left_top(),
+                    uv: eframe::egui::epaint::WHITE_UV,
+                    color: border_color,
+                });
+                combined_mesh.vertices.push(eframe::egui::epaint::Vertex {
+                    pos: block.rect.right_top(),
+                    uv: eframe::egui::epaint::WHITE_UV,
+                    color: border_color,
+                });
+                combined_mesh.vertices.push(eframe::egui::epaint::Vertex {
+                    pos: block.rect.right_bottom(),
+                    uv: eframe::egui::epaint::WHITE_UV,
+                    color: border_color,
+                });
+                combined_mesh.vertices.push(eframe::egui::epaint::Vertex {
+                    pos: block.rect.left_bottom(),
+                    uv: eframe::egui::epaint::WHITE_UV,
+                    color: border_color,
+                });
+
+                combined_mesh.add_triangle(
+                    base_vertex_idx,
+                    base_vertex_idx + 1,
+                    base_vertex_idx + 2,
+                );
+                combined_mesh.add_triangle(
+                    base_vertex_idx,
+                    base_vertex_idx + 2,
+                    base_vertex_idx + 3,
+                );
+            }
+
             let fill_color = block.color;
             let color_light = fill_color.gamma_multiply(1.15);
             let color_dark = fill_color.gamma_multiply(0.75);
@@ -157,22 +204,22 @@ impl StatComponent for TreemapChart {
             let base_vertex_idx = combined_mesh.vertices.len() as u32;
 
             combined_mesh.vertices.push(eframe::egui::epaint::Vertex {
-                pos: block.rect.left_top(),
+                pos: render_rect.left_top(),
                 uv: eframe::egui::epaint::WHITE_UV,
                 color: color_light,
             });
             combined_mesh.vertices.push(eframe::egui::epaint::Vertex {
-                pos: block.rect.right_top(),
+                pos: render_rect.right_top(),
                 uv: eframe::egui::epaint::WHITE_UV,
                 color: color_light,
             });
             combined_mesh.vertices.push(eframe::egui::epaint::Vertex {
-                pos: block.rect.right_bottom(),
+                pos: render_rect.right_bottom(),
                 uv: eframe::egui::epaint::WHITE_UV,
                 color: color_dark,
             });
             combined_mesh.vertices.push(eframe::egui::epaint::Vertex {
-                pos: block.rect.left_bottom(),
+                pos: render_rect.left_bottom(),
                 uv: eframe::egui::epaint::WHITE_UV,
                 color: color_dark,
             });

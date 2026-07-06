@@ -14,6 +14,7 @@ idle = Inattivo
 # View Menu Options
 monospace-paths = Percorsi a spaziatura fissa
 highlight-duplicates = ✨ Evidenzia duplicati
+treemap-borders = 🔳 Bordi della treemap
 deletion-confirmation = 🗑 Conferma eliminazione
 trash-confirmation = ♻ Conferma spostamento nel cestino
 time-format = 🕒 Formato orario

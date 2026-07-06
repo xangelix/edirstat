@@ -14,6 +14,7 @@ idle = Inactif
 # View Menu Options
 monospace-paths = Polices à espacement fixe
 highlight-duplicates = ✨ Mettre en évidence les doublons
+treemap-borders = 🔳 Bordures de la treemap
 deletion-confirmation = 🗑 Confirmation de suppression
 trash-confirmation = ♻ Confirmation de mise à la corbeille
 time-format = 🕒 Format de l'heure
