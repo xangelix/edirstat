@@ -22,7 +22,7 @@ language = 💬 Sprache
 layout-mode = Layout-Modus:
 classic-layout = Klassisches Layout
 windirstat-layout = WinDirStat-Layout
-vis-mode-treemap = 📊 Treemap
+vis-mode-treemap = 📊 Baumdiagramm
 vis-mode-plots = 📈 Diagramme
 select-plot-label = Diagramm auswählen:
 vis-mode-deduplicator = 👥 Duplikatsuche
@@ -30,18 +30,18 @@ search-filter-label = 🔍 Filter:
 
 # Panel Toggles
 toggle-left-panel = { $collapsed ->
-    [true] ▶ Linkes Panel anzeigen (F9)
-   *[false] ◀ Linkes Panel ausblenden (F9)
+    [true] ▶ Linkes Tafel anzeigen (F9)
+   *[false] ◀ Linkes Tafel ausblenden (F9)
 }
 
 toggle-right-panel = { $collapsed ->
     [true] { $is_classic ->
-        [true] ◀ Rechtes Panel anzeigen (F11)
-       *[false] ▶ Erweiterungspanel anzeigen (F11)
+        [true] ◀ Rechte Tafel anzeigen (F11)
+       *[false] ▶ Erweiterungstafel anzeigen (F11)
     }
    *[false] { $is_classic ->
-        [true] ▶ Rechtes Panel ausblenden (F11)
-       *[false] ◀ Erweiterungspanel ausblenden (F11)
+        [true] ▶ Rechte Tafel ausblenden (F11)
+       *[false] ◀ Erweiterungstafel ausblenden (F11)
     }
 }
 
@@ -52,8 +52,8 @@ about = ℹ Über eDirStat
 scanning-disk = Dateisystem wird gescannt...
 scan-complete = Scan abgeschlossen
 path-label = Pfad: { $path }
-worker-threads = ⚡ { $count } Worker-Threads
-worker-threads-hover = Die Anzahl der parallelen CPU-Kerne für das Durchsuchen des Verzeichnisses (Work-Stealing).
+worker-threads = ⚡ { $count } Arbeiter-Threads
+worker-threads-hover = Die Anzahl der parallelen Prozessorkerne für das Durchsuchen des Verzeichnisses (Work-Stealing).
 
 # Stats Panel (Bottom)
 directories-count = 📁 Ordner: { $count }
@@ -71,14 +71,14 @@ selection-items = Auswahl: { $count ->
 
 # Plot Types
 plot-size-distribution = 📊 Dateigrößenverteilung
-plot-age-size = 🌌 Dateialter vs. Dateigröße
+plot-age-size = 🌌 Dateialter verglichen mit Dateigröße
 plot-dir-composition = 🍰 Verzeichniszusammensetzung
 plot-extension-boxplot = 📦 Dateigrößen nach Erweiterung
 plot-temporal-timeline = ⏱ Verknüpfte zeitliche Verläufe
 plot-deduplicator-waste = 👥 Duplikat-Platzverschwendung nach Erweiterung
 
 # --- Deduplicator Strings ---
-dedup-desc = Suchen und sicheres Entfernen von Byte-für-Byte identischen Dateien mithilfe kryptografisch sicherer BLAKE3-Hashes.
+dedup-desc = Suchen und sicheres Entfernen von Dateien mit identischem Inhalt mithilfe kryptografisch sicherer BLAKE3-Hashes.
 dedup-how-it-works = ℹ Funktionsweise
 dedup-min-size = Mindestgröße:
 dedup-ignore-system = Systemdateien ignorieren
@@ -89,7 +89,7 @@ dedup-cancelled-msg = Scan wurde abgebrochen. Starten Sie einen neuen Scan, um D
 dedup-analyzing = Analysiere Dateien...
 dedup-no-duplicates = Keine Duplikate gefunden. Verringern Sie die Mindestgröße oder scannen Sie einen anderen Ordner.
 no-permission = Keine Berechtigung
-hardlink-badge = Hardlink
+hardlink-badge = Harte Verknüpfung
 dedup-select-items = 🎯 Elemente auswählen...
 dedup-select-all-but-oldest = 🎯 Alle außer der ältesten
 dedup-select-all-but-newest = 🎯 Alle außer der neuesten
@@ -101,8 +101,8 @@ dedup-select-all-but-pref = 🎯 Alle außer dem bevorzugten Verzeichnis
 dedup-clear-selection = ❌ Auswahl aufheben
 dedup-link-menu = 🔗 Verknüpfen... ({ $count } Dateien)
 dedup-link-menu-disabled = 🔗 Verknüpfen... (0 Dateien)
-dedup-link-hardlinks = 🔗 Ausgewählte durch Hardlinks ersetzen
-dedup-link-softlinks = 🔗 Ausgewählte durch Softlinks ersetzen
+dedup-link-hardlinks = 🔗 Ausgewählte durch harte Verknüpfung ersetzen
+dedup-link-softlinks = 🔗 Ausgewählte durch symbolische Verknüpfungen ersetzen
 dedup-remove-menu = 🗑 Löschen... ({ $count } Dateien, { $size })
 dedup-remove-menu-disabled = 🗑 Löschen... (0 Dateien)
 dedup-remove-trash = ♻ Ausgewählte in den Papierkorb verschieben
@@ -120,7 +120,7 @@ dedup-phase1-size = Phase 1/7: Dateien nach Größe gruppieren...
 dedup-phase1-filter = Phase 1/7: Ausschlusskriterien filtern...
 dedup-phase2-prefix = Phase 2/7: Hashing der Dateianfänge (erste 4KB)...
 dedup-phase3-midpoint = Phase 3/7: Hashing der Dateimitten...
-dedup-phase4-suffix = Phase 4/7: Hashing der Dateiendungen...
+dedup-phase4-suffix = Phase 4/7: Hashing der Dateiendungen (letzte 4KB)...
 dedup-phase5-multirange = Phase 5/7: Mehrbereichs-Hashing großer Dateien...
 dedup-phase6-full = Phase 6/7: Vollständiges BLAKE3-Hashing der verbleibenden Kandidaten...
 dedup-phase7-validation = Phase 7/7: Abschließende Überprüfung der Zeitstempel...
@@ -180,7 +180,7 @@ explorer-action-refresh-directory = 🔄 Ordner aktualisieren
 
 # Explorer Empty State
 explorer-empty-state = Klicken Sie auf 'Verzeichnis scannen', um die Speicherplatzbelegung zu analysieren.
-placeholder-treemap = Das gescannte Dateisystem wird hier als Treemap visualisiert.
+placeholder-treemap = Das gescannte Dateisystem wird hier als Baumdiagramm visualisiert.
 placeholder-plots = Das gescannte Dateisystem wird hier grafisch dargestellt.
 
 # --- Extensions Panel ---
@@ -225,8 +225,8 @@ modal-process-single = Sie sind im Begriff, den folgenden Pfad zu verarbeiten:
 modal-delete-title = ⚠ WARNUNG: DAUERHAFTES LÖSCHEN
 modal-delete-header = ⚠ Warnung: Dauerhaftes Löschen!
 modal-delete-info = Gesamtgröße: { $size }
-modal-delete-warning = Dies ist ein rekursiver Löschvorgang. Alle Dateien, Ordner und Unterverzeichnisse unter den ausgewählten Pfaden werden dauerhaft gelöscht und können nicht wiederhergestellt werden (der Papierkorb wird umgangen).
-modal-delete-checkbox = Ich verstehe, dass Dateien dauerhaft gelöscht werden und nicht wiederhergestellt werden können.
+modal-delete-warning = Dies ist ein rekursiver Löschvorgang. Alle Dateien, Ordner und Unterverzeichnisse innerhalb der ausgewählten Pfade werden dauerhaft gelöscht und können nicht wiederhergestellt werden (der Papierkorb wird umgangen).
+modal-delete-checkbox = Ich verstehe, dass Daten dauerhaft gelöscht werden und nicht wiederhergestellt werden können.
 modal-delete-confirm = 🗑 Ja, dauerhaft löschen
 
 modal-trash-title = ♻ IN DEN PAPIERKORB VERSCHIEBEN
@@ -248,21 +248,21 @@ modal-trash-duplicates-header = ♻ Duplikate in den Papierkorb verschieben
 modal-trash-duplicates-info = Freizugebender Speicherplatz insgesamt: { $size }
 modal-trash-duplicates-warning = Alle ausgewählten Dateien werden in den Papierkorb verschoben.
 modal-trash-duplicates-checkbox = Ich bestätige, dass ich diese Dateien in den Papierkorb verschieben möchte.
-modal-trash-duplicates-confirm = ♻ Ja, Ausgewählte in den Papierkorb verschieben
+modal-trash-duplicates-confirm = ♻ Ja, ausgewählte Dateien in den Papierkorb verschieben
 
-modal-hardlink-duplicates-title = 🔗 DUPLIKATE DURCH HARDLINKS ERSETZEN
-modal-hardlink-duplicates-header = 🔗 Duplikate durch Hardlinks ersetzen
+modal-hardlink-duplicates-title = 🔗 DUPLIKATE DURCH HARTE VERKNÜPFUNGEN ERSETZEN
+modal-hardlink-duplicates-header = 🔗 Duplikate durch harte Verknüpfungen ersetzen
 modal-hardlink-duplicates-info = Zu verarbeitende Dateien insgesamt: { $count }. Kumulierte virtuelle Größe: { $size }
-modal-hardlink-duplicates-warning = Dies löscht die ausgewählten Duplikate und ersetzt sie durch Hardlinks auf Dateisystemebene, die auf die verbleibende Originaldatei der jeweiligen Gruppe verweisen. Dadurch bleiben die Dateien visuell erhalten, während der physische Speicherplatz freigegeben wird.
-modal-hardlink-duplicates-checkbox = Ich bestätige, dass ich die ausgewählten Dateien durch Hardlinks ersetzen möchte.
-modal-hardlink-duplicates-confirm = 🔗 Ja, durch Hardlinks ersetzen
+modal-hardlink-duplicates-warning = Dies löscht die ausgewählten Duplikate und ersetzt sie durch harte Verknüpfungen (Hardlinks) auf Dateisystemebene, die auf die verbleibende Originaldatei der jeweiligen Gruppe verweisen. Dadurch bleiben die Dateien visuell erhalten, während der physische Speicherplatz freigegeben wird.
+modal-hardlink-duplicates-checkbox = Ich bestätige, dass ich die ausgewählten Dateien durch harte Verknüpfungen ersetzen möchte.
+modal-hardlink-duplicates-confirm = 🔗 Ja, durch harte Verknüpfungen ersetzen
 
-modal-softlink-duplicates-title = 🔗 DUPLIKATE DURCH SOFTLINKS ERSETZEN
-modal-softlink-duplicates-header = 🔗 Duplikate durch Softlinks ersetzen
+modal-softlink-duplicates-title = 🔗 DUPLIKATE DURCH SYMBOLISCHE VERKNÜPFUNGEN ERSETZEN
+modal-softlink-duplicates-header = 🔗 Duplikate durch symbolische Verknüpfungen ersetzen
 modal-softlink-duplicates-info = Zu verarbeitende Dateien insgesamt: { $count }. Kumulierte virtuelle Größe: { $size }
-modal-softlink-duplicates-warning = Dies löscht die ausgewählten Duplikate und ersetzt sie durch Softlinks (symbolische Links) auf Dateisystemebene, die auf die verbleibende Originaldatei verweisen. Dadurch bleiben die Dateien visuell erhalten, während der physische Speicherplatz freigegeben wird.
-modal-softlink-duplicates-checkbox = Ich bestätige, dass ich die ausgewählten Dateien durch Softlinks ersetzen möchte.
-modal-softlink-duplicates-confirm = 🔗 Ja, durch Softlinks ersetzen
+modal-softlink-duplicates-warning = Dies löscht die ausgewählten Duplikate und ersetzt sie durch symbolische Verknüpfungen (Softlinks) auf Dateisystemebene, die auf die verbleibende Originaldatei verweisen. Dadurch bleiben die Dateien visuell erhalten, während der physische Speicherplatz freigegeben wird.
+modal-softlink-duplicates-checkbox = Ich bestätige, dass ich die ausgewählten Dateien durch symbolische Verknüpfungen ersetzen möchte.
+modal-softlink-duplicates-confirm = 🔗 Ja, durch symbolische Verknüpfung ersetzen
 
 # Path Does Not Exist Modal
 modal-path-not-exist-title = ❌ Pfad existiert nicht!
@@ -273,9 +273,9 @@ modal-cancel-btn = Abbrechen
 
 # Elevation Recommended Modal
 modal-elevation-title = ⚠ Administratorrechte empfohlen
-modal-elevation-desc = eDirStat wird standardmäßig mit normalen Benutzerrechten ausgeführt. Windows schränkt jedoch den direkten Zugriff auf physische Datenträger-Handles streng auf Administrator-Konten ein.
+modal-elevation-desc = eDirStat wird standardmäßig mit normalen Benutzerrechten ausgeführt. Windows setzt jedoch Administratorrechte vorraus um direkt auf den Datenträger zuzugreifen.
 modal-elevation-mft-disabled = NTFS-MFT-Treiber unter Windows deaktiviert
-modal-elevation-mft-desc = Ohne Administratorrechte kann der direkte MFT-Scanner nicht initialisiert werden. Die Dateianalyse greift auf den standardmäßigen Verzeichnisdurchlauf zurück, was die Scan-Performance um das Bis zu 20-Fache verringert.
+modal-elevation-mft-desc = Ohne Administratorrechte kann der direkte MFT-Scanner nicht initialisiert werden. Die Dateianalyse greift auf den standardmäßigen Verzeichnisdurchlauf zurück, was den Scan bis zu 20 mal langsamer macht.
 modal-elevation-relaunch-prompt = Möchten Sie die Anwendung jetzt mit Administratorrechten neu starten?
 modal-elevation-continue-std = Als Standardbenutzer fortfahren
 modal-elevation-relaunch-btn = 🛡 Als Administrator neu starten
@@ -284,9 +284,9 @@ modal-elevation-relaunch-btn = 🛡 Als Administrator neu starten
 modal-about-title = ℹ Über eDirStat
 modal-about-author = Von: Cody Wyatt Neiman (xangelix) <neiman@cody.to>
 modal-about-desc1 = Ein hochperformantes Tool zur Analyse von Speicherplatz und Deduplizierung, geschrieben in Rust.
-modal-about-desc2 = Bietet parallelen Verzeichnisdurchlauf mit Work-Stealing, komprimierte Snapshots ohne Parsing-Aufwand beim Laden sowie interaktive Treemaps.
-modal-about-desc3 = Die integrierte Deduplizierung führt eine mehrstufige Hashing-Pipeline aus, um Duplikate sicher zu isolieren, freizugebenden Speicherplatz zu ermitteln und bestehende Hardlinks zu berücksichtigen.
-modal-about-licenses-btn = Open-Source-Lizenzen anzeigen
+modal-about-desc2 = Bietet parallelen Verzeichnisdurchlauf mit Work-Stealing, komprimierte Schnappschüsse ohne Aufwand für Syntaxanalyse beim Laden sowie interaktive Baumdiagramme.
+modal-about-desc3 = Die integrierte Deduplizierung führt eine mehrstufige Hashing-Pipeline aus um Duplikate sicher zu finden und freizugebenden Speicherplatz unter Berücksichtigung bestehender Verknüpfungen zu ermitteln.
+modal-about-licenses-btn = Quelloffene Lizenzen anzeigen
 modal-about-version = v{ $version }
 
 # How Deduplication Works Modal
@@ -294,11 +294,11 @@ modal-how-dedup-title = ℹ Funktionsweise der Deduplizierung
 modal-how-dedup-desc1 = Anstatt die Bytes jeder Datei direkt miteinander vergleichen (was langsame, paarweise O(N²)-Scans erfordert), nutzt dieses System eine optimierte 7-stufige Pipeline zur sicheren und effizienten Identifizierung identischer Inhalte.
 modal-how-dedup-pipeline-title = Die 7-stufige Pipeline:
 modal-how-dedup-why-title = Warum reicht das aus?
-modal-how-dedup-why-desc1 = Dieser mehrstufige Filter stellt sicher, dass nur Dateien mit absolut identischer Größe, identischem Anfang, identischem Ende und verteilten Blockstichproben vollständig gelesen werden. Schließlich bietet der Vergleich eines kryptografischen 256-Bit BLAKE3-Hashes ein Sicherheitsniveau auf Augenhöhe mit gängigen Datenübertragungsprotokollen, was paarweise Vergleiche überflüssig macht.
+modal-how-dedup-why-desc1 = Dank diesem mehrstufigen Filter wird sichergestellt, dass nur Dateien vollständig gelesen werden, welche überhaupt gleich sein können. Hierzu wird zunächst die Dateigröße verglichen, anschließend wird der Dateianfang und das Dateiende verglichen. Zum Schluss werden noch einige verteilte Stichproben aus den Dateien verglichen. Nur wenn dies alles identisch ist, wird zum vergleichen der Dateien ein kryptografischer 256-Bit BLAKE3-Hash der gesamten Datei verwendet. Dieser Hash bietet ein vergleichbares Sicherheitsniveau zu gänigen sicheren Dateiübertragungsprotokollen. Auf einen paarweisen Binärvergleich von zwei Dateien wird daher verzichtet.
 
 # How Deduplication Works Steps
 modal-how-dedup-step1-title = 1. Aufteilung nach Größe
-modal-how-dedup-step1-desc = Dateien werden nach ihrer genauen Bytegröße gruppiert. Dateien mit einzigartiger Größe werden sofort aussortiert, um Festplattenzugriffe komplett zu vermeiden.
+modal-how-dedup-step1-desc = Dateien werden nach ihrer genauen Größe gruppiert. Dateien mit einzigartiger Größe werden sofort aussortiert, um Festplattenzugriffe komplett zu vermeiden.
 modal-how-dedup-step2-title = 2. Präfix-Hashing
 modal-how-dedup-step2-desc = Die ersten 4KB der verbleibenden Kandidaten werden gehasht. Dadurch werden Dateien mit unterschiedlichen Headern oder Metadatenstrukturen schnell aussortiert.
 modal-how-dedup-step3-title = 3. Mittelpunkt-Hashing
@@ -308,12 +308,12 @@ modal-how-dedup-step4-desc = Die letzten 4KB werden gehasht. Dies ist hocheffekt
 modal-how-dedup-step5-title = 5. Mehrbereichs-Hashing
 modal-how-dedup-step5-desc = Große Dateien (über 100MB) werden in regelmäßigen Abständen stichprobenartig über ihre gesamte Länge gehasht, um die Konsistenz zu prüfen, ohne die Datei komplett lesen zu müssen.
 modal-how-dedup-step6-title = 6. Vollständiges BLAKE3-Hashing
-modal-how-dedup-step6-desc = Für die verbleibenden Kandidaten wird ein vollständiger BLAKE3-Hash berechnet. Wegen der extremen Kollisionsresistenz eines 256-Bit-Raumes bedeuten identische Hashes mit astronomischer Sicherheit identische Inhalte, was paarweise Byte-Vergleiche erübrigt.
-modal-how-dedup-step7-title = 7. Zeitstempel-Validierung
-modal-how-dedup-step7-desc = Unmittelbar vor der Anzeige oder Durchführung einer Deduplizierungsaktion prüft die Anwendung die Zeitstempel der Dateien, um sich gegen Änderungen abzusichern, die seit der Erstellung des Snapshots stattgefunden haben.
+modal-how-dedup-step6-desc = Für die verbleibenden Kandidaten wird ein vollständiger BLAKE3-Hash berechnet. Wegen der extrem großen Kollisionsresistenz dieses 256 Bit Hashes, bedeuten identische Hashes mit sehr hoher Wahrscheinlichkeit identische Inhalte. Dies erübrigt paarweise Binärvergleiche.
+modal-how-dedup-step7-title = 7. Zeitstempel Prüfung
+modal-how-dedup-step7-desc = Unmittelbar vor der Anzeige oder Durchführung einer Deduplizierungsaktion prüft die Anwendung die Zeitstempel der Dateien, um sich gegen Änderungen abzusichern die seit der Erstellung des Schnappschusses stattgefunden haben.
 
 # Open Source Licenses Modal
-modal-licenses-title = 📜 Open-Source-Lizenzen
+modal-licenses-title = 📜 Quelloffene Lizenzen
 modal-licenses-desc = Folgende Drittanbieter-Bibliotheken werden in dieser Anwendung verwendet:
 
 
@@ -328,7 +328,7 @@ explorer-hdr-created = Erstellt
 explorer-hdr-modified = Geändert
 
 # Update Checker
-update-checking = Nach Updates suchen...
+update-checking = Nach Aktualisierungen suchen...
 update-available = Neue Version { $version } verfügbar!
 update-up-to-date = Sie sind auf dem neuesten Stand
-update-failed = Update-Prüfung fehlgeschlagen: { $error }
+update-failed = Aktualisierungsprüfung fehlgeschlagen: { $error }
