@@ -331,4 +331,10 @@ explorer-hdr-modified = Modificado
 update-checking = A procurar atualizações...
 update-available = Nova versão { $version } disponível!
 update-up-to-date = Já se encontra atualizado
-update-failed = Falha ao procurar atualizações: { $error }
+update-failed = Falha ao procurar updates: { $error }
+
+# Themes
+theme = 🎨 Tema
+theme-dark = Escuro
+theme-high-contrast = Alto Contraste
+theme-light = Claro

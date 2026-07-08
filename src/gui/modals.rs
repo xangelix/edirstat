@@ -708,8 +708,8 @@ impl GuiApp {
                         .collect();
                     Some(ModalConfig {
                         title: t!("modal-delete-title"),
-                        border_color: theme::DELETION_BORDER,
-                        warning_color: theme::DELETION_WARNING,
+                        border_color: theme::get_deletion_border(),
+                        warning_color: theme::get_deletion_warning(),
                         header: t!("modal-delete-header").into_owned(),
                         info_msg: t!("modal-delete-info", { "size" => size_str.as_str() })
                             .into_owned(),
@@ -742,8 +742,8 @@ impl GuiApp {
                         .collect();
                     Some(ModalConfig {
                         title: t!("modal-trash-title"),
-                        border_color: theme::TRASH_BORDER,
-                        warning_color: theme::TRASH_WARNING,
+                        border_color: theme::get_trash_border(),
+                        warning_color: theme::get_trash_warning(),
                         header: t!("modal-trash-header").into_owned(),
                         info_msg: t!("modal-trash-info", { "size" => size_str.as_str() })
                             .into_owned(),
@@ -776,8 +776,8 @@ impl GuiApp {
                         .collect();
                     Some(ModalConfig {
                         title: t!("modal-delete-duplicates-title"),
-                        border_color: theme::DELETION_BORDER,
-                        warning_color: theme::DELETION_WARNING,
+                        border_color: theme::get_deletion_border(),
+                        warning_color: theme::get_deletion_warning(),
                         header: t!("modal-delete-duplicates-header").into_owned(),
                         info_msg:
                             t!("modal-delete-duplicates-info", { "size" => size_str.as_str() })
@@ -811,8 +811,8 @@ impl GuiApp {
                         .collect();
                     Some(ModalConfig {
                         title: t!("modal-trash-duplicates-title"),
-                        border_color: theme::TRASH_BORDER,
-                        warning_color: theme::TRASH_WARNING,
+                        border_color: theme::get_trash_border(),
+                        warning_color: theme::get_trash_warning(),
                         header: t!("modal-trash-duplicates-header").into_owned(),
                         info_msg:
                             t!("modal-trash-duplicates-info", { "size" => size_str.as_str() })
@@ -846,8 +846,8 @@ impl GuiApp {
                         .collect();
                     Some(ModalConfig {
                         title: t!("modal-hardlink-duplicates-title"),
-                        border_color: theme::BUTTON_ORANGE,
-                        warning_color: theme::BUTTON_ORANGE_HOVER,
+                        border_color: theme::get_button_orange(),
+                        warning_color: theme::get_button_orange_hover(),
                         header: t!("modal-hardlink-duplicates-header").into_owned(),
                         info_msg: t!("modal-hardlink-duplicates-info", {
                             "count" => idxs.len(),
@@ -883,8 +883,8 @@ impl GuiApp {
                         .collect();
                     Some(ModalConfig {
                         title: t!("modal-softlink-duplicates-title"),
-                        border_color: theme::BUTTON_ORANGE,
-                        warning_color: theme::BUTTON_ORANGE_HOVER,
+                        border_color: theme::get_button_orange(),
+                        warning_color: theme::get_button_orange_hover(),
                         header: t!("modal-softlink-duplicates-header").into_owned(),
                         info_msg: t!("modal-softlink-duplicates-info", {
                             "count" => idxs.len(),
@@ -913,7 +913,7 @@ impl GuiApp {
                 .title_bar(false) // Disable default system title bar for uniform styling
                 .frame(
                     egui::Frame::window(&ctx.global_style())
-                        .fill(theme::BG_WINDOW_SLATE)
+                        .fill(theme::get_bg_window())
                         .stroke(egui::Stroke::new(
                             1.2f32,
                             egui::Color32::from_rgb(74, 85, 104),
@@ -952,7 +952,7 @@ impl GuiApp {
                     ui.painter().hline(
                         rect.left()..=rect.right(),
                         rect.center().y,
-                        egui::Stroke::new(1.0f32, theme::STROKE_BORDER_SLATE),
+                        egui::Stroke::new(1.0f32, theme::get_stroke_border()),
                     );
 
                     // Modal Content Frame
@@ -995,12 +995,12 @@ impl GuiApp {
                                     ui.add_space(8.0);
 
                                     // Display list of selected items inside a high-contrast container
-                                    let path_bg = theme::BG_PANEL_SLATE;
+                                    let path_bg = theme::get_bg_panel();
                                     egui::Frame::new()
                                         .fill(path_bg)
                                         .stroke(egui::Stroke::new(
                                             1.0f32,
-                                            theme::STROKE_BORDER_SLATE,
+                                            theme::get_stroke_border(),
                                         ))
                                         .inner_margin(egui::Margin::same(12))
                                         .corner_radius(4.0)
@@ -1172,7 +1172,7 @@ impl GuiApp {
                 .title_bar(false) // Disable default system title bar to match custom styles
                 .frame(
                     egui::Frame::window(&ctx.global_style())
-                        .fill(theme::BG_WINDOW_SLATE)
+                        .fill(theme::get_bg_window())
                         .stroke(egui::Stroke::new(
                             1.2f32,
                             egui::Color32::from_rgb(74, 85, 104),
@@ -1211,7 +1211,7 @@ impl GuiApp {
                     ui.painter().hline(
                         rect.left()..=rect.right(),
                         rect.center().y,
-                        egui::Stroke::new(1.0f32, theme::STROKE_BORDER_SLATE),
+                        egui::Stroke::new(1.0f32, theme::get_stroke_border()),
                     );
 
                     // Content Area
@@ -1225,14 +1225,14 @@ impl GuiApp {
 
                                 // Warning highlight box
                                 egui::Frame::new()
-                                    .fill(theme::BG_PANEL_SLATE)
-                                    .stroke(egui::Stroke::new(1.0f32, theme::STROKE_BORDER_SLATE))
+                                    .fill(theme::get_bg_panel())
+                                    .stroke(egui::Stroke::new(1.0f32, theme::get_stroke_border()))
                                     .inner_margin(egui::Margin::same(12))
                                     .corner_radius(4.0)
                                     .show(ui, |ui| {
                                         ui.set_min_width(ui.available_width());
                                         ui.horizontal(|ui| {
-                                            ui.colored_label(theme::WARNING_RED, "⚡");
+                                            ui.colored_label(theme::get_warning_red(), "⚡");
                                             ui.vertical(|ui| {
                                                 ui.strong(t!("modal-elevation-mft-disabled"));
                                                 ui.small(t!("modal-elevation-mft-desc"));
@@ -1255,7 +1255,7 @@ impl GuiApp {
                                             .color(theme::COLOR_WHITE)
                                             .strong(),
                                     )
-                                    .fill(theme::BUTTON_ORANGE);
+                                    .fill(theme::get_button_orange());
 
                                     if ui.add(relaunch_btn).clicked() {
                                         #[cfg(target_os = "windows")]
@@ -1283,7 +1283,7 @@ impl GuiApp {
                 .title_bar(false) // Disable default system title bar
                 .frame(
                     egui::Frame::window(&ctx.global_style())
-                        .fill(theme::BG_WINDOW_SLATE)
+                        .fill(theme::get_bg_window())
                         .stroke(egui::Stroke::new(
                             1.2f32,
                             egui::Color32::from_rgb(74, 85, 104),
@@ -1322,7 +1322,7 @@ impl GuiApp {
                     ui.painter().hline(
                         rect.left()..=rect.right(),
                         rect.center().y,
-                        egui::Stroke::new(1.0f32, theme::STROKE_BORDER_SLATE),
+                        egui::Stroke::new(1.0f32, theme::get_stroke_border()),
                     );
 
                     // Content Area
@@ -1357,10 +1357,10 @@ impl GuiApp {
                                 ui.label(egui::RichText::new(t!("modal-about-author")));
                                 ui.add_space(12.0);
 
-                                let info_bg = theme::BG_PANEL_SLATE;
+                                let info_bg = theme::get_bg_panel();
                                 egui::Frame::new()
                                     .fill(info_bg)
-                                    .stroke(egui::Stroke::new(1.0f32, theme::STROKE_BORDER_SLATE))
+                                    .stroke(egui::Stroke::new(1.0f32, theme::get_stroke_border()))
                                     .inner_margin(egui::Margin::same(12))
                                     .corner_radius(4.0)
                                     .show(ui, |ui| {
@@ -1396,7 +1396,7 @@ impl GuiApp {
                 .title_bar(false) // Disable default system title bar
                 .frame(
                     egui::Frame::window(&ctx.global_style())
-                        .fill(theme::BG_WINDOW_SLATE)
+                        .fill(theme::get_bg_window())
                         .stroke(egui::Stroke::new(
                             1.2f32,
                             egui::Color32::from_rgb(74, 85, 104),
@@ -1435,7 +1435,7 @@ impl GuiApp {
                     ui.painter().hline(
                         rect.left()..=rect.right(),
                         rect.center().y,
-                        egui::Stroke::new(1.0f32, theme::STROKE_BORDER_SLATE),
+                        egui::Stroke::new(1.0f32, theme::get_stroke_border()),
                     );
 
                     // Content Area
@@ -1499,10 +1499,10 @@ impl GuiApp {
 
                                             for (title, desc) in steps {
                                                 egui::Frame::new()
-                                                    .fill(theme::BG_PANEL_SLATE)
+                                                    .fill(theme::get_bg_panel())
                                                     .stroke(egui::Stroke::new(
                                                         1.0f32,
-                                                        theme::STROKE_BORDER_SLATE,
+                                                        theme::get_stroke_border(),
                                                     ))
                                                     .inner_margin(egui::Margin::same(10))
                                                     .corner_radius(4.0)
@@ -1551,7 +1551,7 @@ impl GuiApp {
                 .title_bar(false)
                 .frame(
                     egui::Frame::window(&ctx.global_style())
-                        .fill(theme::BG_WINDOW_SLATE)
+                        .fill(theme::get_bg_window())
                         .stroke(egui::Stroke::new(
                             1.2f32,
                             egui::Color32::from_rgb(74, 85, 104),
@@ -1590,7 +1590,7 @@ impl GuiApp {
                     ui.painter().hline(
                         rect.left()..=rect.right(),
                         rect.center().y,
-                        egui::Stroke::new(1.0f32, theme::STROKE_BORDER_SLATE),
+                        egui::Stroke::new(1.0f32, theme::get_stroke_border()),
                     );
 
                     // Modal Content Frame
@@ -1869,12 +1869,12 @@ impl GuiApp {
             }
             Some(Ok(Some(new_version))) => {
                 ui.horizontal(|ui| {
-                    ui.colored_label(theme::BUTTON_ORANGE, "✨");
+                    ui.colored_label(theme::get_button_orange(), "✨");
                     ui.hyperlink_to(
                         egui::RichText::new(
                             t!("update-available", { "version" => new_version.as_str() }),
                         )
-                        .color(theme::BUTTON_ORANGE)
+                        .color(theme::get_button_orange())
                         .strong(),
                         "https://github.com/xangelix/edirstat/releases/latest",
                     );

@@ -74,6 +74,7 @@ pub struct GuiApp {
     pub(crate) search_query: String,
     pub(crate) monospace_paths: bool,
     pub(crate) treemap_borders: bool,
+    pub(crate) theme: theme::AppTheme,
     pub(crate) left_panel_collapsed: bool,
     pub(crate) right_panel_collapsed: bool,
 
@@ -260,6 +261,7 @@ impl GuiApp {
             search_query: String::new(),
             monospace_paths: prefs.monospace_paths,
             treemap_borders: prefs.treemap_borders,
+            theme: prefs.theme,
             left_panel_collapsed: false,
             right_panel_collapsed: false,
             filter_case_sensitive: false,
@@ -624,7 +626,7 @@ impl GuiApp {
                         #[allow(clippy::cast_possible_truncation)]
                         let pulse = 0.5f64.mul_add((time * 6.0).sin(), 0.5) as f32;
                         let alpha = 0.6f32.mul_add(pulse, 0.4);
-                        let warning_red = theme::WARNING_RED;
+                        let warning_red = theme::get_warning_red();
                         let glow_color = warning_red.linear_multiply(alpha * 0.15);
                         let text_color = warning_red.linear_multiply(0.4f32.mul_add(pulse, 0.6));
 
@@ -661,7 +663,7 @@ impl GuiApp {
                             ui.set_max_width(450.0);
                             ui.heading(
                                 egui::RichText::new(t!("dedup-warning-no-original"))
-                                    .color(theme::WARNING_RED)
+                                    .color(theme::get_warning_red())
                                     .strong(),
                             );
                             ui.label(t!("dedup-warning-details"));
@@ -673,7 +675,7 @@ impl GuiApp {
                                     for (filename, nodes) in &fully_selected_groups_info {
                                         ui.vertical(|ui| {
                                             ui.horizontal(|ui| {
-                                                ui.colored_label(theme::WARNING_RED, "🔥");
+                                                ui.colored_label(theme::get_warning_red(), "🔥");
                                                 ui.strong(filename);
                                                 ui.weak(t!(
                                                     "dedup-copies-selected",
@@ -857,8 +859,8 @@ impl eframe::App for GuiApp {
             ctx.request_repaint_after(Duration::from_millis(50));
         }
 
-        // Apply dark style
-        theme::setup_custom_style(&ctx);
+        // Apply custom style
+        theme::setup_custom_style(&ctx, self.theme);
 
         // Top Control Panel
         egui::Panel::top("top_panel").show(ui, |ui| {
@@ -919,6 +921,22 @@ impl eframe::App for GuiApp {
                     ui.checkbox(&mut self.treemap_borders, t!("treemap-borders"));
                     ui.checkbox(&mut self.deletion_confirmation, t!("deletion-confirmation"));
                     ui.checkbox(&mut self.trash_confirmation, t!("trash-confirmation"));
+
+                    ui.menu_button(t!("theme"), |ui| {
+                        let themes = [
+                            (theme::AppTheme::Dark, t!("theme-dark")),
+                            (theme::AppTheme::HighContrast, t!("theme-high-contrast")),
+                            (theme::AppTheme::Light, t!("theme-light")),
+                        ];
+                        for (app_theme, label) in themes {
+                            let is_selected = self.theme == app_theme;
+                            if ui.selectable_label(is_selected, label).clicked() {
+                                self.theme = app_theme;
+                                theme::clear_color_cache();
+                                ui.close_kind(egui::UiKind::Menu);
+                            }
+                        }
+                    });
 
                     ui.menu_button(t!("time-format"), |ui| {
                         for format in crate::model::time_utils::CommonTimeFormat::ALL {
@@ -1010,9 +1028,21 @@ impl eframe::App for GuiApp {
                     let pulse = 0.5f64.mul_add((time * 3.0).sin(), 0.5) as f32; // gentle pulsing between 0.0 and 1.0
 
                     // Pulsing background and border with theme's scanning color
-                    let fill_color = theme::COLOR_SCANNING.linear_multiply(pulse * 0.12 + 0.04);
-                    let border_color = theme::COLOR_SCANNING.linear_multiply(pulse * 0.35 + 0.15);
-                    let text_color = theme::COLOR_WHITE.linear_multiply(pulse * 0.15 + 0.85);
+                    let fill_color =
+                        theme::get_color_scanning().linear_multiply(pulse * 0.12 + 0.04);
+                    let border_color =
+                        theme::get_color_scanning().linear_multiply(pulse * 0.35 + 0.15);
+                    let text_color = if theme::get_current_theme() == theme::AppTheme::Light {
+                        egui::Color32::from_rgb(28, 28, 30)
+                    } else {
+                        theme::COLOR_WHITE.linear_multiply(pulse * 0.15 + 0.85)
+                    };
+                    let hover_active_text = if theme::get_current_theme() == theme::AppTheme::Light
+                    {
+                        egui::Color32::from_rgb(28, 28, 30)
+                    } else {
+                        theme::COLOR_WHITE
+                    };
 
                     ui.scope(|ui| {
                         ui.style_mut().visuals.button_frame = true;
@@ -1026,19 +1056,19 @@ impl eframe::App for GuiApp {
 
                         // Hovered state (bright purple highlight)
                         ui.style_mut().visuals.widgets.hovered.weak_bg_fill =
-                            theme::COLOR_SCANNING.linear_multiply(0.25);
+                            theme::get_color_scanning().linear_multiply(0.25);
                         ui.style_mut().visuals.widgets.hovered.bg_stroke =
-                            egui::Stroke::new(1.0f32, theme::COLOR_SCANNING);
+                            egui::Stroke::new(1.0f32, theme::get_color_scanning());
                         ui.style_mut().visuals.widgets.hovered.fg_stroke =
-                            egui::Stroke::new(1.0f32, theme::COLOR_WHITE);
+                            egui::Stroke::new(1.0f32, hover_active_text);
 
                         // Active state (clicked)
                         ui.style_mut().visuals.widgets.active.weak_bg_fill =
-                            theme::COLOR_SCANNING.linear_multiply(0.35);
+                            theme::get_color_scanning().linear_multiply(0.35);
                         ui.style_mut().visuals.widgets.active.bg_stroke =
-                            egui::Stroke::new(1.0f32, theme::COLOR_SCANNING);
+                            egui::Stroke::new(1.0f32, theme::get_color_scanning());
                         ui.style_mut().visuals.widgets.active.fg_stroke =
-                            egui::Stroke::new(1.0f32, theme::COLOR_WHITE);
+                            egui::Stroke::new(1.0f32, hover_active_text);
 
                         ui.button(egui::RichText::new(scan_btn_text).strong())
                     })
@@ -1093,9 +1123,9 @@ impl eframe::App for GuiApp {
                 // Live status display
                 if is_scanning {
                     ui.spinner();
-                    ui.colored_label(theme::COLOR_SCANNING, t!("scanning-disk"));
+                    ui.colored_label(theme::get_color_scanning(), t!("scanning-disk"));
                 } else if self.current_scan_path.is_some() {
-                    ui.colored_label(theme::COLOR_SCAN_COMPLETE, t!("scan-complete"));
+                    ui.colored_label(theme::get_color_scan_complete(), t!("scan-complete"));
                 } else {
                     ui.label(t!("idle"));
                 }
@@ -1115,7 +1145,7 @@ impl eframe::App for GuiApp {
                     let badge_text = t!("worker-threads", {
                         "count" => threads
                     });
-                    ui.colored_label(theme::GLOW_INNER_CORE, badge_text)
+                    ui.colored_label(theme::get_glow_inner_core(), badge_text)
                         .on_hover_text(t!("worker-threads-hover"));
                 });
 
@@ -1263,6 +1293,7 @@ impl eframe::App for GuiApp {
             deletion_confirmation: self.deletion_confirmation,
             trash_confirmation: self.trash_confirmation,
             treemap_borders: self.treemap_borders,
+            theme: self.theme,
         };
 
         if current_prefs != self.last_saved_preferences {
@@ -1788,29 +1819,80 @@ fn render_custom_op_button(
             .scope(|ui| {
                 ui.style_mut().visuals.button_frame = true;
 
-                // Inactive (subtle tint, extremely faded border)
-                ui.style_mut().visuals.widgets.inactive.weak_bg_fill =
-                    hover_color.linear_multiply(0.04);
-                ui.style_mut().visuals.widgets.inactive.bg_stroke =
-                    egui::Stroke::new(1.0f32, hover_color.linear_multiply(0.12));
-                ui.style_mut().visuals.widgets.inactive.fg_stroke =
-                    egui::Stroke::new(1.0f32, ui.visuals().widgets.inactive.text_color());
+                let active_theme = theme::get_current_theme();
+                if active_theme == theme::AppTheme::HighContrast {
+                    // Inactive (black background, strong colored borders & icon)
+                    ui.style_mut().visuals.widgets.inactive.weak_bg_fill =
+                        egui::Color32::from_rgb(0, 0, 0);
+                    ui.style_mut().visuals.widgets.inactive.bg_stroke =
+                        egui::Stroke::new(2.0, hover_color);
+                    ui.style_mut().visuals.widgets.inactive.fg_stroke =
+                        egui::Stroke::new(1.5, hover_color);
 
-                // Hovered (soft fill, subtle stroke, full hover color for icon)
-                ui.style_mut().visuals.widgets.hovered.weak_bg_fill =
-                    hover_color.linear_multiply(0.12);
-                ui.style_mut().visuals.widgets.hovered.bg_stroke =
-                    egui::Stroke::new(1.0f32, hover_color.linear_multiply(0.4));
-                ui.style_mut().visuals.widgets.hovered.fg_stroke =
-                    egui::Stroke::new(1.0f32, hover_color);
+                    // Hovered (dark gray background, yellow border/icon)
+                    ui.style_mut().visuals.widgets.hovered.weak_bg_fill =
+                        egui::Color32::from_rgb(40, 40, 40);
+                    ui.style_mut().visuals.widgets.hovered.bg_stroke =
+                        egui::Stroke::new(2.0, egui::Color32::from_rgb(255, 255, 0));
+                    ui.style_mut().visuals.widgets.hovered.fg_stroke =
+                        egui::Stroke::new(1.5, egui::Color32::from_rgb(255, 255, 0));
 
-                // Active (pressed)
-                ui.style_mut().visuals.widgets.active.weak_bg_fill =
-                    hover_color.linear_multiply(0.24);
-                ui.style_mut().visuals.widgets.active.bg_stroke =
-                    egui::Stroke::new(1.0f32, hover_color.linear_multiply(0.6));
-                ui.style_mut().visuals.widgets.active.fg_stroke =
-                    egui::Stroke::new(1.0f32, hover_color);
+                    // Active (cyan background, white text/border)
+                    ui.style_mut().visuals.widgets.active.weak_bg_fill =
+                        egui::Color32::from_rgb(0, 0, 180);
+                    ui.style_mut().visuals.widgets.active.bg_stroke =
+                        egui::Stroke::new(2.0, egui::Color32::from_rgb(235, 235, 235));
+                    ui.style_mut().visuals.widgets.active.fg_stroke =
+                        egui::Stroke::new(1.5, egui::Color32::from_rgb(235, 235, 235));
+                } else if active_theme == theme::AppTheme::Light {
+                    // Inactive (white background, strong colored icon)
+                    ui.style_mut().visuals.widgets.inactive.weak_bg_fill =
+                        egui::Color32::from_rgb(255, 255, 255);
+                    ui.style_mut().visuals.widgets.inactive.bg_stroke =
+                        egui::Stroke::new(1.0, hover_color.linear_multiply(0.4));
+                    ui.style_mut().visuals.widgets.inactive.fg_stroke =
+                        egui::Stroke::new(1.2, hover_color);
+
+                    // Hovered (soft gray background, strong colored icon/border)
+                    ui.style_mut().visuals.widgets.hovered.weak_bg_fill =
+                        egui::Color32::from_rgb(230, 230, 235);
+                    ui.style_mut().visuals.widgets.hovered.bg_stroke =
+                        egui::Stroke::new(1.0, hover_color);
+                    ui.style_mut().visuals.widgets.hovered.fg_stroke =
+                        egui::Stroke::new(1.2, hover_color);
+
+                    // Active (pressed)
+                    ui.style_mut().visuals.widgets.active.weak_bg_fill =
+                        egui::Color32::from_rgb(209, 209, 214);
+                    ui.style_mut().visuals.widgets.active.bg_stroke =
+                        egui::Stroke::new(1.0, hover_color);
+                    ui.style_mut().visuals.widgets.active.fg_stroke =
+                        egui::Stroke::new(1.2, hover_color);
+                } else {
+                    // Dark theme (original subtle styling)
+                    ui.style_mut().visuals.widgets.inactive.weak_bg_fill =
+                        hover_color.linear_multiply(0.04);
+                    ui.style_mut().visuals.widgets.inactive.bg_stroke =
+                        egui::Stroke::new(1.0f32, hover_color.linear_multiply(0.12));
+                    ui.style_mut().visuals.widgets.inactive.fg_stroke =
+                        egui::Stroke::new(1.0f32, ui.visuals().widgets.inactive.text_color());
+
+                    // Hovered (soft fill, subtle stroke, full hover color for icon)
+                    ui.style_mut().visuals.widgets.hovered.weak_bg_fill =
+                        hover_color.linear_multiply(0.12);
+                    ui.style_mut().visuals.widgets.hovered.bg_stroke =
+                        egui::Stroke::new(1.0f32, hover_color.linear_multiply(0.4));
+                    ui.style_mut().visuals.widgets.hovered.fg_stroke =
+                        egui::Stroke::new(1.0f32, hover_color);
+
+                    // Active (pressed)
+                    ui.style_mut().visuals.widgets.active.weak_bg_fill =
+                        hover_color.linear_multiply(0.24);
+                    ui.style_mut().visuals.widgets.active.bg_stroke =
+                        egui::Stroke::new(1.0f32, hover_color.linear_multiply(0.6));
+                    ui.style_mut().visuals.widgets.active.fg_stroke =
+                        egui::Stroke::new(1.0f32, hover_color);
+                }
 
                 // Set button padding to make it a nice square
                 ui.spacing_mut().button_padding = egui::vec2(6.0, 4.0);

@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
 
-use crate::model::time_utils::TimeFormat;
+use crate::{gui::theme::AppTheme, model::time_utils::TimeFormat};
 
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -20,6 +20,8 @@ pub struct UserPreferences {
     pub trash_confirmation: bool,
     #[serde(default)]
     pub treemap_borders: bool,
+    #[serde(default)]
+    pub theme: AppTheme,
 }
 
 const fn default_true() -> bool {
@@ -35,6 +37,7 @@ impl Default for UserPreferences {
             deletion_confirmation: true,
             trash_confirmation: true,
             treemap_borders: false,
+            theme: AppTheme::default(),
         }
     }
 }
@@ -77,6 +80,7 @@ mod tests {
         assert!(!prefs.monospace_paths);
         assert!(!prefs.highlight_duplicates);
         assert!(!prefs.treemap_borders);
+        assert_eq!(prefs.theme, AppTheme::Dark);
     }
 
     #[test]
@@ -93,6 +97,7 @@ mod tests {
         assert!(prefs.deletion_confirmation);
         assert!(prefs.trash_confirmation);
         assert!(!prefs.treemap_borders);
+        assert_eq!(prefs.theme, AppTheme::Dark);
 
         Ok(())
     }
@@ -103,6 +108,7 @@ mod tests {
             deletion_confirmation: false,
             trash_confirmation: false,
             monospace_paths: true,
+            theme: AppTheme::Light,
             ..Default::default()
         };
 

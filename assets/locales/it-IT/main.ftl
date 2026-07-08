@@ -332,3 +332,9 @@ update-checking = Verifica aggiornamenti in corso...
 update-available = Nuova versione { $version } disponibile!
 update-up-to-date = L'applicazione è aggiornata
 update-failed = Verifica aggiornamenti fallita: { $error }
+
+# Themes
+theme = 🎨 Tema
+theme-dark = Scuro
+theme-high-contrast = Contrasto elevato
+theme-light = Chiaro

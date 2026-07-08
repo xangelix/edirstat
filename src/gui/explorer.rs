@@ -13,7 +13,10 @@ use fluent_zero::t;
 use smallvec::SmallVec;
 
 use super::{ActiveModal, GuiApp, theme};
-use crate::arena::{FileArenaSnapshot, NO_INDEX};
+use crate::{
+    arena::{FileArenaSnapshot, NO_INDEX},
+    colors::{AppTheme, get_current_theme},
+};
 
 struct TableProviderRow<'a> {
     cleaned_name: std::borrow::Cow<'a, str>,
@@ -578,7 +581,11 @@ impl GuiApp {
             if has_children {
                 let arrow = if is_expanded { "[-]" } else { "[+]" };
                 let rich_arrow = egui::RichText::new(arrow).monospace();
-                let label = ui.selectable_label(is_expanded, rich_arrow);
+                let label = ui.add(
+                    egui::Button::new(rich_arrow)
+                        .frame(false)
+                        .selected(is_expanded),
+                );
                 if label.clicked() {
                     if is_expanded {
                         self.table_state.expanded_rows.remove(node_idx);
@@ -640,12 +647,19 @@ impl GuiApp {
         let row_id = ui.id().with(("tree_row", node_idx));
         let response = ui.interact(interactive_rect, row_id, egui::Sense::click());
 
-        // Draw professional background selection / hover highlights over the FULL row (for seamless visual style)
         if is_selected {
-            let fill_color = ui.visuals().selection.bg_fill.linear_multiply(0.12);
+            let fill_color = match get_current_theme() {
+                AppTheme::HighContrast => egui::Color32::from_rgb(80, 80, 0),
+                AppTheme::Light => egui::Color32::from_rgb(204, 229, 255),
+                AppTheme::Dark => ui.visuals().selection.bg_fill.linear_multiply(0.12),
+            };
             ui.painter().rect_filled(rect, 4.0, fill_color);
         } else if response.hovered() {
-            let hover_color = ui.visuals().widgets.hovered.bg_fill.linear_multiply(0.04);
+            let hover_color = match get_current_theme() {
+                AppTheme::HighContrast => egui::Color32::from_rgb(65, 65, 65),
+                AppTheme::Light => egui::Color32::from_rgb(225, 238, 254),
+                AppTheme::Dark => ui.visuals().widgets.hovered.bg_fill.linear_multiply(0.04),
+            };
             ui.painter().rect_filled(rect, 4.0, hover_color);
         }
 
@@ -668,7 +682,7 @@ impl GuiApp {
 
         // Draw vertical indentation guidelines to visually track nested guidelines
         let painter = ui.painter();
-        let stroke = egui::Stroke::new(1.0f32, theme::INDENT_GUIDELINE);
+        let stroke = egui::Stroke::new(1.0f32, theme::get_indent_guideline());
         for i in 0..indent_level {
             #[allow(clippy::cast_precision_loss)]
             let x = (i as f32).mul_add(16.0, rect.min.x) + 8.0;
@@ -845,11 +859,22 @@ impl GuiApp {
                                 highlight_rect.max.x = ui.clip_rect().max.x;
                             }
                             if is_selected {
-                                let fill_color = visuals.selection.bg_fill.linear_multiply(0.20);
+                                let fill_color = match get_current_theme() {
+                                    AppTheme::HighContrast => egui::Color32::from_rgb(80, 80, 0),
+                                    AppTheme::Light => egui::Color32::from_rgb(204, 229, 255),
+                                    AppTheme::Dark => {
+                                        visuals.selection.bg_fill.linear_multiply(0.20)
+                                    }
+                                };
                                 ui.painter().rect_filled(highlight_rect, 0.0, fill_color);
                             } else if is_hovered {
-                                let hover_color =
-                                    visuals.widgets.hovered.bg_fill.linear_multiply(0.08);
+                                let hover_color = match get_current_theme() {
+                                    AppTheme::HighContrast => egui::Color32::from_rgb(65, 65, 65),
+                                    AppTheme::Light => egui::Color32::from_rgb(225, 238, 254),
+                                    AppTheme::Dark => {
+                                        visuals.widgets.hovered.bg_fill.linear_multiply(0.08)
+                                    }
+                                };
                                 ui.painter().rect_filled(highlight_rect, 0.0, hover_color);
                             }
                         };
@@ -961,8 +986,21 @@ impl GuiApp {
                             let mut colored_rect = bar_rect;
                             colored_rect.max.x = colored_rect.min.x + colored_width;
 
-                            let bg_color = ui.visuals().widgets.noninteractive.bg_fill;
-                            ui.painter().rect_filled(bar_rect, 0.0, bg_color);
+                            let bg_color = match get_current_theme() {
+                                AppTheme::HighContrast => egui::Color32::from_rgb(45, 45, 45),
+                                _ => ui.visuals().widgets.noninteractive.bg_fill,
+                            };
+                            if get_current_theme() == AppTheme::HighContrast {
+                                ui.painter().rect(
+                                    bar_rect,
+                                    0.0,
+                                    bg_color,
+                                    egui::Stroke::new(1.0, egui::Color32::from_rgb(235, 235, 235)),
+                                    egui::StrokeKind::Outside,
+                                );
+                            } else {
+                                ui.painter().rect_filled(bar_rect, 0.0, bg_color);
+                            }
 
                             if pct > 0.0 {
                                 let ext_color = if node.is_directory() {

@@ -332,3 +332,9 @@ update-checking = Controleren op updates...
 update-available = Nieuwe versie { $version } beschikbaar!
 update-up-to-date = U bent up-to-date
 update-failed = Updatecontrole mislukt: { $error }
+
+# Themes
+theme = 🎨 Thema
+theme-dark = Donker
+theme-high-contrast = Hoog contrast
+theme-light = Licht

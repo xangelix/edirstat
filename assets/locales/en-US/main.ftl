@@ -332,3 +332,9 @@ update-checking = Checking for updates...
 update-available = New version { $version } available!
 update-up-to-date = You are up to date
 update-failed = Update check failed: { $error }
+
+# Themes
+theme = 🎨 Theme
+theme-dark = Dark
+theme-high-contrast = High Contrast
+theme-light = Light

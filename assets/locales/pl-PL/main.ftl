@@ -337,3 +337,9 @@ update-checking = Sprawdzanie aktualizacji...
 update-available = Nowa wersja { $version } jest dostępna!
 update-up-to-date = Masz najnowszą wersję
 update-failed = Błąd sprawdzania aktualizacji: { $error }
+
+# Themes
+theme = 🎨 Motyw
+theme-dark = Ciemny
+theme-high-contrast = Wysoki kontrast
+theme-light = Jasny

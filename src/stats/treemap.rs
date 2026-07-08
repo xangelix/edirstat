@@ -2,7 +2,10 @@ use eframe::egui::{Color32, Rect, pos2};
 use smallvec::SmallVec;
 
 use super::{StatComponent, StatContext, StatsChart};
-use crate::arena::{FileNode, NO_INDEX, StringPool};
+use crate::{
+    arena::{FileNode, NO_INDEX, StringPool},
+    colors,
+};
 
 const TRUNCATE_DEPTH: usize = 30000;
 const PIXEL_PRECISION_LIMIT: f32 = 0.2;
@@ -161,7 +164,7 @@ impl StatComponent for TreemapChart {
             }
 
             if draw_border {
-                let border_color = crate::colors::TREEMAP_BORDER_COLOR;
+                let border_color = colors::get_treemap_border_color();
                 let base_vertex_idx = combined_mesh.vertices.len() as u32;
 
                 combined_mesh.vertices.push(eframe::egui::epaint::Vertex {
@@ -232,11 +235,16 @@ impl StatComponent for TreemapChart {
 
         // Dynamic overlays for highlights
         if let Some(block) = hovered_block {
-            let stroke = eframe::egui::Stroke::new(1.5f32, crate::colors::COLOR_WHITE);
+            let hover_stroke_color = if colors::get_current_theme() == colors::AppTheme::Light {
+                eframe::egui::Color32::BLACK
+            } else {
+                colors::COLOR_WHITE
+            };
+            let stroke = eframe::egui::Stroke::new(1.5f32, hover_stroke_color);
             painter.rect(
                 block.rect,
                 0.0,
-                crate::colors::COLOR_TRANSPARENT,
+                colors::COLOR_TRANSPARENT,
                 stroke,
                 eframe::egui::StrokeKind::Inside,
             );
@@ -360,23 +368,23 @@ fn draw_glow(ui: &eframe::egui::Ui, painter: &eframe::egui::Painter, rect: efram
 
     // 1. Draw Outer Expanding Glow (grows and fades)
     let glow_alpha = 0.20f64.mul_add(pulse, 0.1);
-    let glow_color = crate::colors::GLOW_OUTER_BASE.gamma_multiply(glow_alpha as f32);
+    let glow_color = colors::get_glow_outer_base().gamma_multiply(glow_alpha as f32);
     let glow_thickness = 6.0f32.mul_add(pulse as f32, 4.0); // Oscillates thickness
     painter.rect(
         rect,
         0.0,
-        crate::colors::COLOR_TRANSPARENT,
+        colors::COLOR_TRANSPARENT,
         eframe::egui::Stroke::new(glow_thickness, glow_color),
         eframe::egui::StrokeKind::Outside,
     );
 
     // 2. Draw Inner Sharp Contrast Core (stays crisp)
-    let core_color = crate::colors::GLOW_INNER_CORE;
+    let core_color = colors::get_glow_inner_core();
     let core_thickness = 1.0f32.mul_add(pulse as f32, 1.5);
     painter.rect(
         rect,
         0.0,
-        crate::colors::COLOR_TRANSPARENT,
+        colors::COLOR_TRANSPARENT,
         eframe::egui::Stroke::new(core_thickness, core_color),
         eframe::egui::StrokeKind::Inside,
     );
@@ -437,7 +445,7 @@ fn recurse_child(
     if is_leaf_or_too_small {
         let name = config.string_pool.get(child.name_id).unwrap_or("");
         let ext = crate::arena::get_ext_slice(name);
-        let color = crate::colors::get_color_for_extension(ext);
+        let color = colors::get_color_for_extension(ext);
         blocks.push(TreemapBlock {
             rect: child_rect,
             node_idx: child_idx,
@@ -493,7 +501,7 @@ fn build_treemap(
     if !node.is_directory() || depth >= config.max_depth {
         let name = config.string_pool.get(node.name_id).unwrap_or("");
         let ext = crate::arena::get_ext_slice(name);
-        let color = crate::colors::get_color_for_extension(ext);
+        let color = colors::get_color_for_extension(ext);
 
         blocks.push(TreemapBlock {
             rect,
@@ -516,7 +524,7 @@ fn build_treemap(
     }
 
     if children.is_empty() {
-        let color = crate::colors::TREEMAP_DIR_FALLBACK;
+        let color = colors::get_treemap_dir_fallback();
         blocks.push(TreemapBlock {
             rect,
             node_idx,
@@ -533,7 +541,7 @@ fn build_treemap(
     if avg_area_per_child < MIN_AVG_CHILD_AREA {
         let name = config.string_pool.get(node.name_id).unwrap_or("");
         let ext = crate::arena::get_ext_slice(name);
-        let color = crate::colors::get_color_for_extension(ext);
+        let color = colors::get_color_for_extension(ext);
         blocks.push(TreemapBlock {
             rect,
             node_idx,
