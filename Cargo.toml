@@ -63,7 +63,7 @@ open = "5.3.6"
 parking_lot = { version = "0.12.5", features = ["hardware-lock-elision"] }
 prettier-bytes = "0.2.1"
 rayon = "1.12.0"
-regex = { version = "1.12.4", features = ["use_std"] }
+regex = { version = "1.13.0", features = ["use_std"] }
 rfd = "0.17.2"
 serde = { version = "1.0.228", features = ["derive"] }
 smallvec = "1.15.2"
@@ -83,7 +83,7 @@ semver = { version = "1", optional = true }
 
 # feature: profile-tracy
 tracy-client = { version = "0.18.4", optional = true }
-sysinfo = { version = "0.39.5", default-features = false, features = ["disk"] }
+sysinfo = { version = "0.39.6", default-features = false, features = ["disk"] }
 
 [target.'cfg(target_family = "unix")'.dependencies]
 uzers = "0.12.2"
