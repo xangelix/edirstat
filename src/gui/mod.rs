@@ -64,6 +64,7 @@ pub struct GuiApp {
 
     // Command listener channels for decoupled operations
     pub(crate) command_rx: std::sync::mpsc::Receiver<crate::gui::operations::AppCommand>,
+    pub(crate) command_tx: std::sync::mpsc::Sender<crate::gui::operations::AppCommand>,
 
     // Unified TableOperations set
     pub(crate) operations: egui_table_kit::operations::TableOperations,
@@ -230,7 +231,9 @@ impl GuiApp {
                 Box::new(crate::gui::operations::TrashSelectedOp::new(
                     command_tx.clone(),
                 )),
-                Box::new(crate::gui::operations::DeleteSelectedOp::new(command_tx)),
+                Box::new(crate::gui::operations::DeleteSelectedOp::new(
+                    command_tx.clone(),
+                )),
             ]);
 
         #[cfg(not(test))]
@@ -255,6 +258,7 @@ impl GuiApp {
             traversal_engine,
             table_state: egui_table_kit::state::TableState::new("edirstat_hierarchical_table", 0),
             command_rx,
+            command_tx,
             operations,
             focus_node_idx: None,
             delete_node_indices: Vec::new(),
@@ -709,6 +713,278 @@ impl GuiApp {
             });
         });
     }
+
+    pub(crate) fn process_commands(
+        &mut self,
+        ctx: &egui::Context,
+        snapshot: &Arc<FileArenaSnapshot>,
+    ) {
+        while let Ok(command) = self.command_rx.try_recv() {
+            match command {
+                crate::gui::operations::AppCommand::ScrollToSelected => {
+                    self.scroll_to_selected = true;
+                }
+                crate::gui::operations::AppCommand::RefreshSubtrees(dirs) => {
+                    self.refresh_directory_subtrees(&dirs);
+                }
+                crate::gui::operations::AppCommand::ShowTrashModal(nodes) => {
+                    self.delete_node_indices = nodes;
+                    if self.trash_confirmation {
+                        self.active_modal = Some(ActiveModal::Trash);
+                        self.delete_confirm_checked = false;
+                        self.remember_confirmation = false;
+                    } else {
+                        self.execute_deletion(&self.delete_node_indices.clone(), true, ctx);
+                        self.delete_node_indices.clear();
+                    }
+                }
+                crate::gui::operations::AppCommand::ShowDeleteModal(nodes) => {
+                    self.delete_node_indices = nodes;
+                    if self.deletion_confirmation {
+                        self.active_modal = Some(ActiveModal::Delete);
+                        self.delete_confirm_checked = false;
+                        self.remember_confirmation = false;
+                    } else {
+                        self.execute_deletion(&self.delete_node_indices.clone(), false, ctx);
+                        self.delete_node_indices.clear();
+                    }
+                }
+                crate::gui::operations::AppCommand::BackgroundOpCompleted(result) => {
+                    match result {
+                        crate::gui::operations::BackgroundOpResult::Deletion {
+                            successfully_deleted,
+                            failures,
+                            to_trash,
+                            snapshot: op_snapshot,
+                        } => {
+                            if to_trash {
+                                if !successfully_deleted.is_empty() {
+                                    crate::gui::toast_success(format!(
+                                        "Moved {} item(s) to trash",
+                                        successfully_deleted.len()
+                                    ));
+                                }
+                                if !failures.is_empty() {
+                                    let perm_count =
+                                        failures.iter().filter(|&(_, _, is_perm)| *is_perm).count();
+                                    if perm_count == failures.len() {
+                                        crate::gui::toast_error(format!(
+                                            "Failed to move {} item(s) to trash (Permission Denied). Try running with elevated privileges.",
+                                            failures.len()
+                                        ));
+                                    } else if perm_count > 0 {
+                                        crate::gui::toast_error(format!(
+                                            "Failed to move {} item(s) to trash ({} due to Permission Denied).",
+                                            failures.len(),
+                                            perm_count
+                                        ));
+                                    } else {
+                                        crate::gui::toast_error(format!(
+                                            "Failed to move {} item(s) to trash",
+                                            failures.len()
+                                        ));
+                                    }
+                                }
+                            } else {
+                                if !successfully_deleted.is_empty() {
+                                    crate::gui::toast_success(format!(
+                                        "Permanently deleted {} item(s)",
+                                        successfully_deleted.len()
+                                    ));
+                                }
+                                if !failures.is_empty() {
+                                    let perm_count =
+                                        failures.iter().filter(|&(_, _, is_perm)| *is_perm).count();
+                                    if perm_count == failures.len() {
+                                        crate::gui::toast_error(format!(
+                                            "Failed to delete {} item(s) (Permission Denied). Try running with elevated privileges.",
+                                            failures.len()
+                                        ));
+                                    } else if perm_count > 0 {
+                                        crate::gui::toast_error(format!(
+                                            "Failed to delete {} item(s) ({} due to Permission Denied).",
+                                            failures.len(),
+                                            perm_count
+                                        ));
+                                    } else {
+                                        crate::gui::toast_error(format!(
+                                            "Failed to delete {} item(s)",
+                                            failures.len()
+                                        ));
+                                    }
+                                }
+                            }
+
+                            if Arc::ptr_eq(snapshot, &op_snapshot)
+                                && !successfully_deleted.is_empty()
+                            {
+                                {
+                                    let mut results = self.deduplicator_results.write();
+                                    for group in &mut results.groups {
+                                        let mut i = 0;
+                                        while i < group.nodes.len() {
+                                            if successfully_deleted.contains(&group.nodes[i]) {
+                                                group.nodes.remove(i);
+                                                if i < group.file_ids.len() {
+                                                    group.file_ids.remove(i);
+                                                }
+                                            } else {
+                                                i += 1;
+                                            }
+                                        }
+                                    }
+                                    results.groups.retain(|group| group.nodes.len() >= 2);
+                                    results.rebuild_flat_rows(snapshot);
+                                }
+
+                                self.selected_duplicates
+                                    .retain(|idx| !successfully_deleted.contains(idx));
+
+                                // Clean up selections inside RoaringBitmap
+                                for &idx in &successfully_deleted {
+                                    self.table_state.selected_rows.remove(idx);
+                                }
+
+                                self.remove_nodes_from_snapshot(&successfully_deleted);
+                            }
+                        }
+                        crate::gui::operations::BackgroundOpResult::Hardlinking {
+                            successfully_linked,
+                            failures,
+                            snapshot: op_snapshot,
+                        } => {
+                            if !successfully_linked.is_empty() {
+                                crate::gui::toast_success(format!(
+                                    "Successfully replaced {} duplicate(s) with hardlinks",
+                                    successfully_linked.len()
+                                ));
+                            }
+                            if !failures.is_empty() {
+                                let perm_count =
+                                    failures.iter().filter(|&(_, _, is_perm)| *is_perm).count();
+                                if perm_count == failures.len() {
+                                    crate::gui::toast_error(format!(
+                                        "Failed to hardlink {} duplicate(s) (Permission Denied).",
+                                        failures.len()
+                                    ));
+                                } else if perm_count > 0 {
+                                    crate::gui::toast_error(format!(
+                                        "Failed to hardlink {} duplicate(s) ({} due to Permission Denied).",
+                                        failures.len(),
+                                        perm_count
+                                    ));
+                                } else {
+                                    crate::gui::toast_error(format!(
+                                        "Failed to hardlink {} duplicate(s)",
+                                        failures.len()
+                                    ));
+                                }
+                            }
+
+                            if Arc::ptr_eq(snapshot, &op_snapshot)
+                                && !successfully_linked.is_empty()
+                            {
+                                {
+                                    let mut results = self.deduplicator_results.write();
+                                    for group in &mut results.groups {
+                                        let has_any = group
+                                            .nodes
+                                            .iter()
+                                            .any(|n| successfully_linked.contains(n));
+                                        if has_any {
+                                            for (i, &node_idx) in group.nodes.iter().enumerate() {
+                                                let path_str = snapshot.get_full_path(node_idx);
+                                                if let Ok(meta) = std::fs::metadata(path_str) {
+                                                    let file_id =
+                                                        crate::engine::traversal::get_file_id(
+                                                            &meta,
+                                                        );
+                                                    if i < group.file_ids.len() {
+                                                        group.file_ids[i] = file_id;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    results.rebuild_flat_rows(snapshot);
+                                }
+
+                                self.selected_duplicates
+                                    .retain(|idx| !successfully_linked.contains(idx));
+                            }
+                        }
+                        crate::gui::operations::BackgroundOpResult::Softlinking {
+                            successfully_linked,
+                            failures,
+                            snapshot: op_snapshot,
+                        } => {
+                            if !successfully_linked.is_empty() {
+                                crate::gui::toast_success(format!(
+                                    "Successfully replaced {} duplicate(s) with softlinks",
+                                    successfully_linked.len()
+                                ));
+                            }
+                            if !failures.is_empty() {
+                                let perm_count =
+                                    failures.iter().filter(|&(_, _, is_perm)| *is_perm).count();
+                                if perm_count == failures.len() {
+                                    crate::gui::toast_error(format!(
+                                        "Failed to softlink {} duplicate(s) (Permission Denied).",
+                                        failures.len()
+                                    ));
+                                } else if perm_count > 0 {
+                                    crate::gui::toast_error(format!(
+                                        "Failed to softlink {} duplicate(s) ({} due to Permission Denied).",
+                                        failures.len(),
+                                        perm_count
+                                    ));
+                                } else {
+                                    crate::gui::toast_error(format!(
+                                        "Failed to softlink {} duplicate(s)",
+                                        failures.len()
+                                    ));
+                                }
+                            }
+
+                            if Arc::ptr_eq(snapshot, &op_snapshot)
+                                && !successfully_linked.is_empty()
+                            {
+                                {
+                                    let mut results = self.deduplicator_results.write();
+                                    for group in &mut results.groups {
+                                        let mut i = 0;
+                                        while i < group.nodes.len() {
+                                            if successfully_linked.contains(&group.nodes[i]) {
+                                                group.nodes.remove(i);
+                                                if i < group.file_ids.len() {
+                                                    group.file_ids.remove(i);
+                                                }
+                                            } else {
+                                                i += 1;
+                                            }
+                                        }
+                                    }
+                                    results.groups.retain(|group| group.nodes.len() >= 2);
+                                    results.rebuild_flat_rows(snapshot);
+                                }
+
+                                self.selected_duplicates
+                                    .retain(|idx| !successfully_linked.contains(idx));
+
+                                // Clean up selections inside RoaringBitmap
+                                for &idx in &successfully_linked {
+                                    self.table_state.selected_rows.remove(idx);
+                                }
+
+                                self.remove_nodes_from_snapshot(&successfully_linked);
+                            }
+                        }
+                    }
+                    self.active_modal = None;
+                }
+            }
+        }
+    }
 }
 
 impl eframe::App for GuiApp {
@@ -783,7 +1059,7 @@ impl eframe::App for GuiApp {
                     self.delete_confirm_checked = false;
                     self.remember_confirmation = false;
                 } else {
-                    self.execute_deletion(&self.delete_node_indices.clone(), false, &snapshot);
+                    self.execute_deletion(&self.delete_node_indices.clone(), false, &ctx);
                     self.delete_node_indices.clear();
                 }
             } else {
@@ -792,45 +1068,14 @@ impl eframe::App for GuiApp {
                     self.delete_confirm_checked = false;
                     self.remember_confirmation = false;
                 } else {
-                    self.execute_deletion(&self.delete_node_indices.clone(), true, &snapshot);
+                    self.execute_deletion(&self.delete_node_indices.clone(), true, &ctx);
                     self.delete_node_indices.clear();
                 }
             }
         }
 
         // --- Handle Table commands sent from standard and context-menu operations ---
-        while let Ok(command) = self.command_rx.try_recv() {
-            match command {
-                crate::gui::operations::AppCommand::ScrollToSelected => {
-                    self.scroll_to_selected = true;
-                }
-                crate::gui::operations::AppCommand::RefreshSubtrees(dirs) => {
-                    self.refresh_directory_subtrees(&dirs);
-                }
-                crate::gui::operations::AppCommand::ShowTrashModal(nodes) => {
-                    self.delete_node_indices = nodes;
-                    if self.trash_confirmation {
-                        self.active_modal = Some(ActiveModal::Trash);
-                        self.delete_confirm_checked = false;
-                        self.remember_confirmation = false;
-                    } else {
-                        self.execute_deletion(&self.delete_node_indices.clone(), true, &snapshot);
-                        self.delete_node_indices.clear();
-                    }
-                }
-                crate::gui::operations::AppCommand::ShowDeleteModal(nodes) => {
-                    self.delete_node_indices = nodes;
-                    if self.deletion_confirmation {
-                        self.active_modal = Some(ActiveModal::Delete);
-                        self.delete_confirm_checked = false;
-                        self.remember_confirmation = false;
-                    } else {
-                        self.execute_deletion(&self.delete_node_indices.clone(), false, &snapshot);
-                        self.delete_node_indices.clear();
-                    }
-                }
-            }
-        }
+        self.process_commands(&ctx, &snapshot);
 
         // Background Modal polling processing for custom TableOperations
         for op_group in &mut self.operations.groups {

@@ -319,7 +319,7 @@ impl std::ops::Deref for NodeStorage {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FileArenaSnapshot {
     /// Read-only snapshot of the nodes
     pub nodes: Arc<NodeStorage>,

@@ -1390,7 +1390,7 @@ impl GuiApp {
                             self.execute_deletion(
                                 &self.delete_node_indices.clone(),
                                 true,
-                                snapshot,
+                                ui.ctx(),
                             );
                             self.delete_node_indices.clear();
                         }
@@ -1413,7 +1413,7 @@ impl GuiApp {
                             self.execute_deletion(
                                 &self.delete_node_indices.clone(),
                                 false,
-                                snapshot,
+                                ui.ctx(),
                             );
                             self.delete_node_indices.clear();
                         }
@@ -1740,7 +1740,7 @@ impl GuiApp {
                                 self.execute_deletion(
                                     &self.delete_node_indices.clone(),
                                     true,
-                                    snapshot,
+                                    ui.ctx(),
                                 );
                                 self.delete_node_indices.clear();
                             }
@@ -1763,7 +1763,7 @@ impl GuiApp {
                                 self.execute_deletion(
                                     &self.delete_node_indices.clone(),
                                     false,
-                                    snapshot,
+                                    ui.ctx(),
                                 );
                                 self.delete_node_indices.clear();
                             }

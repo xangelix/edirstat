@@ -9,7 +9,7 @@ use fluent_zero::t;
 use super::{GuiApp, theme};
 use crate::arena::{FileArenaSnapshot, NodeStorage, precompute_dir_counts};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ActiveModal {
     Delete,
     Trash,
@@ -20,6 +20,7 @@ pub enum ActiveModal {
     SoftlinkDuplicates,
     HowItWorks,
     AdminWarning,
+    Processing(String),
 }
 
 fn count_nested_stats(
@@ -280,135 +281,100 @@ impl GuiApp {
         &mut self,
         target_indices: &[u32],
         to_trash: bool,
-        snapshot: &FileArenaSnapshot,
+        ctx: &egui::Context,
     ) {
-        let mut successfully_deleted = Vec::new();
-        let mut failures = Vec::new();
+        if target_indices.is_empty() {
+            return;
+        }
+
+        let snapshot = self.shared_state.current_snapshot.load().clone();
+
+        let mut targets = Vec::new();
         for &idx in target_indices {
             let path_str = snapshot.get_full_path(idx);
-            let path = std::path::Path::new(&path_str);
-            if path.exists() {
-                let result = if to_trash {
-                    trash::delete(path).map_err(|e| (e.to_string(), is_permission_denied_trash(&e)))
-                } else if path.is_dir() {
-                    std::fs::remove_dir_all(path)
-                        .map_err(|e| (e.to_string(), is_permission_denied_io(&e)))
-                } else {
-                    std::fs::remove_file(path)
-                        .map_err(|e| (e.to_string(), is_permission_denied_io(&e)))
-                };
+            let path_buf = std::path::PathBuf::from(path_str);
+            if path_buf.file_name().is_none() {
+                continue;
+            }
+            targets.push((idx, path_buf));
+        }
 
-                if let Err((err_msg, is_perm)) = result {
-                    println!(
-                        "Failed to delete/trash path {}: {}",
-                        path.display(),
-                        err_msg
-                    );
-                    failures.push((path_str, err_msg, is_perm));
+        let msg = if to_trash {
+            t!("modal-processing-trash").into_owned()
+        } else {
+            t!("modal-processing-deletion").into_owned()
+        };
+        self.active_modal = Some(ActiveModal::Processing(msg));
+
+        let command_tx = self.command_tx.clone();
+        let ctx_clone = ctx.clone();
+        let snapshot_clone = snapshot;
+
+        std::thread::spawn(move || {
+            let mut successfully_deleted = Vec::new();
+            let mut failures = Vec::new();
+
+            for (idx, path) in targets {
+                if path.exists() {
+                    let result = if to_trash {
+                        trash::delete(&path)
+                            .map_err(|e| (e.to_string(), is_permission_denied_trash(&e)))
+                    } else if path.is_dir() {
+                        std::fs::remove_dir_all(&path)
+                            .map_err(|e| (e.to_string(), is_permission_denied_io(&e)))
+                    } else {
+                        std::fs::remove_file(&path)
+                            .map_err(|e| (e.to_string(), is_permission_denied_io(&e)))
+                    };
+
+                    if let Err((err_msg, is_perm)) = result {
+                        println!(
+                            "Failed to delete/trash path {}: {}",
+                            path.display(),
+                            err_msg
+                        );
+                        failures.push((path.to_string_lossy().into_owned(), err_msg, is_perm));
+                    } else {
+                        successfully_deleted.push(idx);
+                    }
                 } else {
                     successfully_deleted.push(idx);
                 }
-            } else {
-                successfully_deleted.push(idx);
-            }
-        }
-
-        if to_trash {
-            if !successfully_deleted.is_empty() {
-                crate::gui::toast_success(format!(
-                    "Moved {} item(s) to trash",
-                    successfully_deleted.len()
-                ));
-            }
-            if !failures.is_empty() {
-                let perm_count = failures.iter().filter(|&(_, _, is_perm)| *is_perm).count();
-                if perm_count == failures.len() {
-                    crate::gui::toast_error(format!(
-                        "Failed to move {} item(s) to trash (Permission Denied). Try running with elevated privileges.",
-                        failures.len()
-                    ));
-                } else if perm_count > 0 {
-                    crate::gui::toast_error(format!(
-                        "Failed to move {} item(s) to trash ({} due to Permission Denied).",
-                        failures.len(),
-                        perm_count
-                    ));
-                } else {
-                    crate::gui::toast_error(format!(
-                        "Failed to move {} item(s) to trash",
-                        failures.len()
-                    ));
-                }
-            }
-        } else {
-            if !successfully_deleted.is_empty() {
-                crate::gui::toast_success(format!(
-                    "Permanently deleted {} item(s)",
-                    successfully_deleted.len()
-                ));
-            }
-            if !failures.is_empty() {
-                let perm_count = failures.iter().filter(|&(_, _, is_perm)| *is_perm).count();
-                if perm_count == failures.len() {
-                    crate::gui::toast_error(format!(
-                        "Failed to delete {} item(s) (Permission Denied). Try running with elevated privileges.",
-                        failures.len()
-                    ));
-                } else if perm_count > 0 {
-                    crate::gui::toast_error(format!(
-                        "Failed to delete {} item(s) ({} due to Permission Denied).",
-                        failures.len(),
-                        perm_count
-                    ));
-                } else {
-                    crate::gui::toast_error(format!("Failed to delete {} item(s)", failures.len()));
-                }
-            }
-        }
-
-        if !successfully_deleted.is_empty() {
-            {
-                let mut results = self.deduplicator_results.write();
-                for group in &mut results.groups {
-                    let mut i = 0;
-                    while i < group.nodes.len() {
-                        if successfully_deleted.contains(&group.nodes[i]) {
-                            group.nodes.remove(i);
-                            if i < group.file_ids.len() {
-                                group.file_ids.remove(i);
-                            }
-                        } else {
-                            i += 1;
-                        }
-                    }
-                }
-                results.groups.retain(|group| group.nodes.len() >= 2);
-                results.rebuild_flat_rows(snapshot);
             }
 
-            self.selected_duplicates
-                .retain(|idx| !successfully_deleted.contains(idx));
+            let result = crate::gui::operations::BackgroundOpResult::Deletion {
+                successfully_deleted,
+                failures,
+                to_trash,
+                snapshot: snapshot_clone,
+            };
 
-            // Clean up selections inside RoaringBitmap
-            for &idx in &successfully_deleted {
-                self.table_state.selected_rows.remove(idx);
-            }
-
-            self.remove_nodes_from_snapshot(&successfully_deleted);
-        }
+            let _ = command_tx.send(crate::gui::operations::AppCommand::BackgroundOpCompleted(
+                result,
+            ));
+            ctx_clone.request_repaint();
+        });
     }
 
-    pub(crate) fn execute_hardlinking(
-        &mut self,
-        target_indices: &[u32],
-        snapshot: &FileArenaSnapshot,
-    ) {
-        let mut successfully_linked = Vec::new();
+    pub(crate) fn execute_hardlinking(&mut self, target_indices: &[u32], ctx: &egui::Context) {
+        if target_indices.is_empty() {
+            return;
+        }
+
+        let snapshot = self.shared_state.current_snapshot.load().clone();
+
+        let mut links = Vec::new();
         let mut failures = Vec::new();
-        let results_guard = self.deduplicator_results.read();
 
         for &idx in target_indices {
-            let Some(group) = results_guard.groups.iter().find(|g| g.nodes.contains(&idx)) else {
+            let Some(group) = self
+                .deduplicator_results
+                .read()
+                .groups
+                .iter()
+                .find(|g| g.nodes.contains(&idx))
+                .cloned()
+            else {
                 failures.push((
                     format!("Index {idx}"),
                     "Not found in any duplicate group".to_string(),
@@ -429,219 +395,193 @@ impl GuiApp {
 
             let src_path_str = snapshot.get_full_path(src_idx);
             let dst_path_str = snapshot.get_full_path(idx);
-            let src_path = std::path::Path::new(&src_path_str);
-            let dst_path = std::path::Path::new(&dst_path_str);
+            let src_path = std::path::PathBuf::from(src_path_str);
+            let dst_path = std::path::PathBuf::from(dst_path_str);
+            if src_path.file_name().is_none() || dst_path.file_name().is_none() {
+                failures.push((
+                    format!("Index {idx}"),
+                    "Invalid system root or empty path".to_string(),
+                    false,
+                ));
+                continue;
+            }
+            links.push((idx, src_path, dst_path));
+        }
 
-            if src_path.exists() && dst_path.exists() {
-                let temp_dst = dst_path.with_extension("tmp_hl_bak");
-                match std::fs::rename(dst_path, &temp_dst) {
-                    Err(e) => {
-                        failures.push((dst_path_str, e.to_string(), is_permission_denied_io(&e)));
+        // Set modal state
+        self.active_modal = Some(ActiveModal::Processing(
+            t!("modal-processing-hardlink").into_owned(),
+        ));
+
+        let command_tx = self.command_tx.clone();
+        let ctx_clone = ctx.clone();
+        let snapshot_clone = snapshot;
+
+        std::thread::spawn(move || {
+            let mut successfully_linked = Vec::new();
+
+            for (idx, src_path, dst_path) in links {
+                if src_path.exists() && dst_path.exists() {
+                    let temp_dst = dst_path.with_extension("tmp_hl_bak");
+                    match std::fs::rename(&dst_path, &temp_dst) {
+                        Err(e) => {
+                            failures.push((
+                                dst_path.to_string_lossy().into_owned(),
+                                e.to_string(),
+                                is_permission_denied_io(&e),
+                            ));
+                        }
+                        Ok(()) => {
+                            match std::fs::hard_link(&src_path, &dst_path) {
+                                Ok(()) => {
+                                    let _ = std::fs::remove_file(&temp_dst);
+                                    successfully_linked.push(idx);
+                                }
+                                Err(e) => {
+                                    // Restore backup on failure
+                                    let _ = std::fs::rename(&temp_dst, &dst_path);
+                                    failures.push((
+                                        dst_path.to_string_lossy().into_owned(),
+                                        format!("Failed to create hard link: {e}"),
+                                        is_permission_denied_io(&e),
+                                    ));
+                                }
+                            }
+                        }
                     }
-                    Ok(()) => {
-                        match std::fs::hard_link(src_path, dst_path) {
+                } else {
+                    failures.push((
+                        dst_path.to_string_lossy().into_owned(),
+                        "Source or destination path does not exist".to_string(),
+                        false,
+                    ));
+                }
+            }
+
+            let result = crate::gui::operations::BackgroundOpResult::Hardlinking {
+                successfully_linked,
+                failures,
+                snapshot: snapshot_clone,
+            };
+
+            let _ = command_tx.send(crate::gui::operations::AppCommand::BackgroundOpCompleted(
+                result,
+            ));
+            ctx_clone.request_repaint();
+        });
+    }
+
+    pub(crate) fn execute_softlinking(&mut self, target_indices: &[u32], ctx: &egui::Context) {
+        if target_indices.is_empty() {
+            return;
+        }
+
+        let snapshot = self.shared_state.current_snapshot.load().clone();
+
+        let mut links = Vec::new();
+        let mut failures = Vec::new();
+
+        for &idx in target_indices {
+            let Some(group) = self
+                .deduplicator_results
+                .read()
+                .groups
+                .iter()
+                .find(|g| g.nodes.contains(&idx))
+                .cloned()
+            else {
+                failures.push((
+                    format!("Index {idx}"),
+                    "Not found in any duplicate group".to_string(),
+                    false,
+                ));
+                continue;
+            };
+
+            // Find a source node in the group that is NOT being replaced to link against
+            let Some(&src_idx) = group.nodes.iter().find(|&&n| !target_indices.contains(&n)) else {
+                failures.push((
+                    format!("Index {idx}"),
+                    "No remaining source file in group".to_string(),
+                    false,
+                ));
+                continue;
+            };
+
+            let src_path_str = snapshot.get_full_path(src_idx);
+            let dst_path_str = snapshot.get_full_path(idx);
+            let src_path = std::path::PathBuf::from(src_path_str);
+            let dst_path = std::path::PathBuf::from(dst_path_str);
+            if src_path.file_name().is_none() || dst_path.file_name().is_none() {
+                failures.push((
+                    format!("Index {idx}"),
+                    "Invalid system root or empty path".to_string(),
+                    false,
+                ));
+                continue;
+            }
+            links.push((idx, src_path, dst_path));
+        }
+
+        // Set modal state
+        self.active_modal = Some(ActiveModal::Processing(
+            t!("modal-processing-softlink").into_owned(),
+        ));
+
+        let command_tx = self.command_tx.clone();
+        let ctx_clone = ctx.clone();
+        let snapshot_clone = snapshot;
+
+        std::thread::spawn(move || {
+            let mut successfully_linked = Vec::new();
+
+            for (idx, src_path, dst_path) in links {
+                if src_path.exists() && dst_path.exists() {
+                    let temp_dst = dst_path.with_extension("tmp_sl_bak");
+                    if let Err(e) = std::fs::rename(&dst_path, &temp_dst) {
+                        failures.push((
+                            dst_path.to_string_lossy().into_owned(),
+                            e.to_string(),
+                            is_permission_denied_io(&e),
+                        ));
+                    } else {
+                        let symlink_result = Self::symlink(&src_path, &dst_path);
+                        match symlink_result {
                             Ok(()) => {
                                 let _ = std::fs::remove_file(&temp_dst);
                                 successfully_linked.push(idx);
                             }
                             Err(e) => {
                                 // Restore backup on failure
-                                let _ = std::fs::rename(&temp_dst, dst_path);
+                                let _ = std::fs::rename(&temp_dst, &dst_path);
                                 failures.push((
-                                    dst_path_str,
-                                    format!("Failed to create hard link: {e}"),
+                                    dst_path.to_string_lossy().into_owned(),
+                                    format!("Failed to create symlink: {e}"),
                                     is_permission_denied_io(&e),
                                 ));
                             }
                         }
                     }
-                }
-            } else {
-                failures.push((
-                    dst_path_str,
-                    "Source or destination path does not exist".to_string(),
-                    false,
-                ));
-            }
-        }
-
-        if !successfully_linked.is_empty() {
-            crate::gui::toast_success(format!(
-                "Successfully replaced {} duplicate(s) with hardlinks",
-                successfully_linked.len()
-            ));
-        }
-        if !failures.is_empty() {
-            let perm_count = failures.iter().filter(|&(_, _, is_perm)| *is_perm).count();
-            if perm_count == failures.len() {
-                crate::gui::toast_error(format!(
-                    "Failed to hardlink {} duplicate(s) (Permission Denied).",
-                    failures.len()
-                ));
-            } else if perm_count > 0 {
-                crate::gui::toast_error(format!(
-                    "Failed to hardlink {} duplicate(s) ({} due to Permission Denied).",
-                    failures.len(),
-                    perm_count
-                ));
-            } else {
-                crate::gui::toast_error(format!(
-                    "Failed to hardlink {} duplicate(s)",
-                    failures.len()
-                ));
-            }
-        }
-
-        if !successfully_linked.is_empty() {
-            drop(results_guard);
-            {
-                let mut results = self.deduplicator_results.write();
-                for group in &mut results.groups {
-                    let has_any = group.nodes.iter().any(|n| successfully_linked.contains(n));
-                    if has_any {
-                        for (i, &node_idx) in group.nodes.iter().enumerate() {
-                            let path_str = snapshot.get_full_path(node_idx);
-                            if let Ok(meta) = std::fs::metadata(path_str) {
-                                let file_id = crate::engine::traversal::get_file_id(&meta);
-                                if i < group.file_ids.len() {
-                                    group.file_ids[i] = file_id;
-                                }
-                            }
-                        }
-                    }
-                }
-                results.rebuild_flat_rows(snapshot);
-            }
-
-            self.selected_duplicates
-                .retain(|idx| !successfully_linked.contains(idx));
-        }
-    }
-
-    pub(crate) fn execute_softlinking(
-        &mut self,
-        target_indices: &[u32],
-        snapshot: &FileArenaSnapshot,
-    ) {
-        let mut successfully_linked = Vec::new();
-        let mut failures = Vec::new();
-        let results_guard = self.deduplicator_results.read();
-
-        for &idx in target_indices {
-            let Some(group) = results_guard.groups.iter().find(|g| g.nodes.contains(&idx)) else {
-                failures.push((
-                    format!("Index {idx}"),
-                    "Not found in any duplicate group".to_string(),
-                    false,
-                ));
-                continue;
-            };
-
-            // Find a source node in the group that is NOT being replaced to link against
-            let Some(&src_idx) = group.nodes.iter().find(|&&n| !target_indices.contains(&n)) else {
-                failures.push((
-                    format!("Index {idx}"),
-                    "No remaining source file in group".to_string(),
-                    false,
-                ));
-                continue;
-            };
-
-            let src_path_str = snapshot.get_full_path(src_idx);
-            let dst_path_str = snapshot.get_full_path(idx);
-            let src_path = std::path::Path::new(&src_path_str);
-            let dst_path = std::path::Path::new(&dst_path_str);
-
-            if src_path.exists() && dst_path.exists() {
-                let temp_dst = dst_path.with_extension("tmp_sl_bak");
-                if let Err(e) = std::fs::rename(dst_path, &temp_dst) {
-                    failures.push((dst_path_str, e.to_string(), is_permission_denied_io(&e)));
                 } else {
-                    let symlink_result = Self::symlink(src_path, dst_path);
-
-                    match symlink_result {
-                        Ok(()) => {
-                            let _ = std::fs::remove_file(&temp_dst);
-                            successfully_linked.push(idx);
-                        }
-                        Err(e) => {
-                            // Restore backup on failure
-                            let _ = std::fs::rename(&temp_dst, dst_path);
-                            failures.push((
-                                dst_path_str,
-                                format!("Failed to create symlink: {e}"),
-                                is_permission_denied_io(&e),
-                            ));
-                        }
-                    }
+                    failures.push((
+                        dst_path.to_string_lossy().into_owned(),
+                        "Source or destination path does not exist".to_string(),
+                        false,
+                    ));
                 }
-            } else {
-                failures.push((
-                    dst_path_str,
-                    "Source or destination path does not exist".to_string(),
-                    false,
-                ));
             }
-        }
 
-        if !successfully_linked.is_empty() {
-            crate::gui::toast_success(format!(
-                "Successfully replaced {} duplicate(s) with softlinks",
-                successfully_linked.len()
+            let result = crate::gui::operations::BackgroundOpResult::Softlinking {
+                successfully_linked,
+                failures,
+                snapshot: snapshot_clone,
+            };
+
+            let _ = command_tx.send(crate::gui::operations::AppCommand::BackgroundOpCompleted(
+                result,
             ));
-        }
-        if !failures.is_empty() {
-            let perm_count = failures.iter().filter(|&(_, _, is_perm)| *is_perm).count();
-            if perm_count == failures.len() {
-                crate::gui::toast_error(format!(
-                    "Failed to softlink {} duplicate(s) (Permission Denied).",
-                    failures.len()
-                ));
-            } else if perm_count > 0 {
-                crate::gui::toast_error(format!(
-                    "Failed to softlink {} duplicate(s) ({} due to Permission Denied).",
-                    failures.len(),
-                    perm_count
-                ));
-            } else {
-                crate::gui::toast_error(format!(
-                    "Failed to softlink {} duplicate(s)",
-                    failures.len()
-                ));
-            }
-        }
-
-        if !successfully_linked.is_empty() {
-            drop(results_guard);
-            {
-                let mut results = self.deduplicator_results.write();
-                for group in &mut results.groups {
-                    let mut i = 0;
-                    while i < group.nodes.len() {
-                        if successfully_linked.contains(&group.nodes[i]) {
-                            group.nodes.remove(i);
-                            if i < group.file_ids.len() {
-                                group.file_ids.remove(i);
-                            }
-                        } else {
-                            i += 1;
-                        }
-                    }
-                }
-                results.groups.retain(|group| group.nodes.len() >= 2);
-                results.rebuild_flat_rows(snapshot);
-            }
-
-            self.selected_duplicates
-                .retain(|idx| !successfully_linked.contains(idx));
-
-            // Clean up selections inside RoaringBitmap
-            for &idx in &successfully_linked {
-                self.table_state.selected_rows.remove(idx);
-            }
-
-            self.remove_nodes_from_snapshot(&successfully_linked);
-        }
+            ctx_clone.request_repaint();
+        });
     }
 
     #[cfg(target_family = "unix")]
@@ -1087,7 +1027,7 @@ impl GuiApp {
                                                     self.execute_deletion(
                                                         &self.delete_node_indices.clone(),
                                                         false,
-                                                        snapshot,
+                                                        ctx,
                                                     );
                                                     self.delete_node_indices.clear();
                                                 }
@@ -1098,7 +1038,7 @@ impl GuiApp {
                                                     self.execute_deletion(
                                                         &self.delete_node_indices.clone(),
                                                         true,
-                                                        snapshot,
+                                                        ctx,
                                                     );
                                                     self.delete_node_indices.clear();
                                                 }
@@ -1106,7 +1046,7 @@ impl GuiApp {
                                                     self.execute_deletion(
                                                         &self.delete_duplicates_indices.clone(),
                                                         false,
-                                                        snapshot,
+                                                        ctx,
                                                     );
                                                     self.delete_duplicates_indices.clear();
                                                 }
@@ -1114,26 +1054,25 @@ impl GuiApp {
                                                     self.execute_deletion(
                                                         &self.delete_duplicates_indices.clone(),
                                                         true,
-                                                        snapshot,
+                                                        ctx,
                                                     );
                                                     self.delete_duplicates_indices.clear();
                                                 }
                                                 DeletionAction::HardlinkDuplicates => {
                                                     self.execute_hardlinking(
                                                         &self.delete_duplicates_indices.clone(),
-                                                        snapshot,
+                                                        ctx,
                                                     );
                                                     self.delete_duplicates_indices.clear();
                                                 }
                                                 DeletionAction::SoftlinkDuplicates => {
                                                     self.execute_softlinking(
                                                         &self.delete_duplicates_indices.clone(),
-                                                        snapshot,
+                                                        ctx,
                                                     );
                                                     self.delete_duplicates_indices.clear();
                                                 }
                                             }
-                                            self.active_modal = None;
                                         }
                                     });
                                 } else {
@@ -1270,6 +1209,37 @@ impl GuiApp {
             if !open {
                 self.active_modal = None;
             }
+        }
+
+        // Render Processing Modal
+        if let Some(ActiveModal::Processing(ref msg)) = self.active_modal {
+            let mut open = true;
+            egui::Window::new(t!("modal-processing-title"))
+                .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+                .collapsible(false)
+                .resizable(false)
+                .default_width(320.0)
+                .open(&mut open)
+                .title_bar(false)
+                .frame(
+                    egui::Frame::window(&ctx.global_style())
+                        .fill(theme::get_bg_window())
+                        .stroke(egui::Stroke::new(
+                            1.2f32,
+                            egui::Color32::from_rgb(74, 85, 104),
+                        ))
+                        .inner_margin(egui::Margin::same(24))
+                        .corner_radius(8.0),
+                )
+                .show(ctx, |ui| {
+                    ui.vertical_centered(|ui| {
+                        ui.add_space(8.0);
+                        ui.spinner();
+                        ui.add_space(16.0);
+                        ui.heading(msg);
+                        ui.add_space(8.0);
+                    });
+                });
         }
 
         // Render Help -> About Modal Popup
@@ -2057,7 +2027,18 @@ mod tests {
         };
 
         // Execute softlinking
-        app.execute_softlinking(&[target_node_idx], &snapshot);
+        app.execute_softlinking(&[target_node_idx], &egui::Context::default());
+
+        // Wait for the background task to complete and process the completed message
+        let command = app.command_rx.recv().map_err(|_e| {
+            crate::EdirstatError::OutOfRange("Failed to receive completed command")
+        })?;
+
+        // Put the command back into the app's channel queue and call the actual process_commands handler
+        app.command_tx
+            .send(command)
+            .map_err(|_e| crate::EdirstatError::OutOfRange("Failed to send completed command"))?;
+        app.process_commands(&egui::Context::default(), &snapshot);
 
         // Verify the softlink exists and points to the first file
         let target_path = snapshot.get_full_path(target_node_idx);

@@ -12,6 +12,26 @@ use fluent_zero::t;
 
 use crate::{arena::FileArenaSnapshot, coordinator::SharedState};
 
+#[derive(Debug, Clone)]
+pub enum BackgroundOpResult {
+    Deletion {
+        successfully_deleted: Vec<u32>,
+        failures: Vec<(String, String, bool)>, // (path, error_msg, is_permission_denied)
+        to_trash: bool,
+        snapshot: Arc<FileArenaSnapshot>,
+    },
+    Hardlinking {
+        successfully_linked: Vec<u32>,
+        failures: Vec<(String, String, bool)>, // (path, error_msg, is_permission_denied)
+        snapshot: Arc<FileArenaSnapshot>,
+    },
+    Softlinking {
+        successfully_linked: Vec<u32>,
+        failures: Vec<(String, String, bool)>, // (path, error_msg, is_permission_denied)
+        snapshot: Arc<FileArenaSnapshot>,
+    },
+}
+
 /// Decoupled actions sent from the `TableOperations` directly to the main `GuiApp` loop.
 #[derive(Debug, Clone)]
 pub enum AppCommand {
@@ -19,6 +39,7 @@ pub enum AppCommand {
     ScrollToSelected,
     ShowTrashModal(Vec<u32>),
     ShowDeleteModal(Vec<u32>),
+    BackgroundOpCompleted(BackgroundOpResult),
 }
 
 // Helper to retrieve the current snapshot safely
