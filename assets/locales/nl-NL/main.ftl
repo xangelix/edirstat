@@ -338,3 +338,4 @@ theme = 🎨 Thema
 theme-dark = Donker
 theme-high-contrast = Hoog contrast
 theme-light = Licht
+theme-system = Systeem

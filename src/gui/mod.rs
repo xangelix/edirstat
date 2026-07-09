@@ -74,7 +74,7 @@ pub struct GuiApp {
     pub(crate) search_query: String,
     pub(crate) monospace_paths: bool,
     pub(crate) treemap_borders: bool,
-    pub(crate) theme: theme::AppTheme,
+    pub(crate) theme: theme::ThemePreference,
     pub(crate) left_panel_collapsed: bool,
     pub(crate) right_panel_collapsed: bool,
 
@@ -924,14 +924,18 @@ impl eframe::App for GuiApp {
 
                     ui.menu_button(t!("theme"), |ui| {
                         let themes = [
-                            (theme::AppTheme::Dark, t!("theme-dark")),
-                            (theme::AppTheme::HighContrast, t!("theme-high-contrast")),
-                            (theme::AppTheme::Light, t!("theme-light")),
+                            (theme::ThemePreference::System, t!("theme-system")),
+                            (theme::ThemePreference::Dark, t!("theme-dark")),
+                            (
+                                theme::ThemePreference::HighContrast,
+                                t!("theme-high-contrast"),
+                            ),
+                            (theme::ThemePreference::Light, t!("theme-light")),
                         ];
-                        for (app_theme, label) in themes {
-                            let is_selected = self.theme == app_theme;
+                        for (pref, label) in themes {
+                            let is_selected = self.theme == pref;
                             if ui.selectable_label(is_selected, label).clicked() {
-                                self.theme = app_theme;
+                                self.theme = pref;
                                 theme::clear_color_cache();
                                 ui.close_kind(egui::UiKind::Menu);
                             }

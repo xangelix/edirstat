@@ -338,3 +338,4 @@ theme = 🎨 Tema
 theme-dark = Oscuro
 theme-high-contrast = Alto contraste
 theme-light = Claro
+theme-system = Sistema

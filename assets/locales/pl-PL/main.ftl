@@ -343,3 +343,4 @@ theme = 🎨 Motyw
 theme-dark = Ciemny
 theme-high-contrast = Wysoki kontrast
 theme-light = Jasny
+theme-system = Systemowy

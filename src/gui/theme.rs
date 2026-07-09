@@ -71,6 +71,15 @@ pub enum AppTheme {
     Light,
 }
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum ThemePreference {
+    #[default]
+    System,
+    Dark,
+    HighContrast,
+    Light,
+}
+
 thread_local! {
     static CURRENT_THEME: std::cell::Cell<AppTheme> = const { std::cell::Cell::new(AppTheme::Dark) };
 
@@ -306,9 +315,21 @@ pub fn get_color_for_extension(ext: &str) -> egui::Color32 {
 }
 
 // Custom Glassmorphic styling settings for multiple themes
-pub fn setup_custom_style(ctx: &egui::Context, theme: AppTheme) {
-    set_current_theme(theme);
-    let mut visuals = match theme {
+pub fn setup_custom_style(ctx: &egui::Context, theme_pref: ThemePreference) {
+    let resolved_theme = match theme_pref {
+        ThemePreference::System => {
+            if ctx.global_style().visuals.dark_mode {
+                AppTheme::Dark
+            } else {
+                AppTheme::Light
+            }
+        }
+        ThemePreference::Dark => AppTheme::Dark,
+        ThemePreference::HighContrast => AppTheme::HighContrast,
+        ThemePreference::Light => AppTheme::Light,
+    };
+    set_current_theme(resolved_theme);
+    let mut visuals = match resolved_theme {
         AppTheme::Dark => {
             let mut v = egui::Visuals::dark();
             v.panel_fill = BG_PANEL_SLATE;
