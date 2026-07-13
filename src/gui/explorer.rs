@@ -1,11 +1,10 @@
-use std::sync::atomic::Ordering;
+use std::sync::{Arc, atomic::Ordering};
 
 use eframe::egui;
 use egui_table_kit::{
     error::TableError,
     filter::Filter,
-    header::HeaderTrait as _,
-    operations::{HeaderIter, RowCallback, RowHierarchy, TableProvider},
+    operations::{HeaderIter, RowCallback, RowHierarchy},
     state::TableState,
 };
 use fixedbitset::FixedBitSet;
@@ -17,24 +16,6 @@ use crate::{
     arena::{FileArenaSnapshot, NO_INDEX},
     colors::{AppTheme, get_current_theme},
 };
-
-struct TableProviderRow<'a> {
-    cleaned_name: std::borrow::Cow<'a, str>,
-}
-
-impl egui_table_kit::operations::Row for TableProviderRow<'_> {
-    fn cell(&self, col_index: usize) -> Option<egui_table_kit::operations::TableCell<'_>> {
-        if col_index == 0 {
-            Some((std::borrow::Cow::Borrowed(self.cleaned_name.as_ref()), None))
-        } else {
-            None
-        }
-    }
-
-    fn column_count(&self) -> usize {
-        1
-    }
-}
 
 pub struct TableProviderWrapper<'a> {
     snapshot: &'a FileArenaSnapshot,
@@ -82,6 +63,112 @@ impl egui_table_kit::operations::TableProvider for TableProviderWrapper<'_> {
         self.snapshot.nodes.len()
     }
 
+    fn cell_at(
+        &self,
+        row_index: usize,
+        col_index: usize,
+    ) -> Result<Option<egui_table_kit::operations::TableCell<'_>>, TableError> {
+        if row_index >= self.snapshot.nodes.len() {
+            return Ok(None);
+        }
+        let node = &self.snapshot.nodes[row_index];
+        let name = self.snapshot.string_pool.get(node.name_id).unwrap_or("");
+
+        let val = match col_index {
+            0 => {
+                if node.parent_opt().is_none() {
+                    crate::model::arena::clean_unc_path(name)
+                } else {
+                    std::borrow::Cow::Borrowed(name)
+                }
+            }
+            1 => {
+                let parent_idx = node.parent;
+                let parent_size = if parent_idx == crate::arena::NO_INDEX {
+                    node.size.max(1)
+                } else {
+                    self.snapshot.nodes[parent_idx as usize].size.max(1)
+                };
+                #[allow(clippy::cast_precision_loss)]
+                let pct = (node.size as f32 / parent_size as f32).clamp(0.0, 1.0);
+                std::borrow::Cow::Owned(format!("{:.1}%", pct * 100.0))
+            }
+            2 => std::borrow::Cow::Owned(
+                prettier_bytes::ByteFormatter::new()
+                    .format(node.size)
+                    .to_string(),
+            ),
+            3 => {
+                if node.is_directory() {
+                    let files_count = node.file_count;
+                    let subdirs_count = *self.snapshot.dir_counts.get(row_index).unwrap_or(&0);
+                    std::borrow::Cow::Owned(format!("{}", files_count + subdirs_count))
+                } else {
+                    std::borrow::Cow::Borrowed("-")
+                }
+            }
+            4 => {
+                if node.is_directory() {
+                    std::borrow::Cow::Owned(format!("{}", node.file_count))
+                } else {
+                    std::borrow::Cow::Borrowed("-")
+                }
+            }
+            5 => {
+                if node.is_directory() {
+                    let subdirs_count = *self.snapshot.dir_counts.get(row_index).unwrap_or(&0);
+                    std::borrow::Cow::Owned(format!("{subdirs_count}"))
+                } else {
+                    std::borrow::Cow::Borrowed("-")
+                }
+            }
+            6 => {
+                if node.has_no_permission() {
+                    std::borrow::Cow::Owned(t!("no-permission").into_owned())
+                } else {
+                    std::borrow::Cow::Owned(crate::model::time_utils::format_epoch(
+                        node.created_timestamp,
+                        &self.time_format,
+                    ))
+                }
+            }
+            7 => {
+                if node.has_no_permission() {
+                    std::borrow::Cow::Owned(t!("no-permission").into_owned())
+                } else {
+                    std::borrow::Cow::Owned(crate::model::time_utils::format_epoch(
+                        node.modified_timestamp,
+                        &self.time_format,
+                    ))
+                }
+            }
+            _ => return Ok(None),
+        };
+
+        Ok(Some((val, None)))
+    }
+
+    fn row_at(
+        &self,
+        index: usize,
+    ) -> Result<Option<egui_table_kit::operations::OwnedRow>, TableError> {
+        if index >= self.snapshot.nodes.len() {
+            return Ok(None);
+        }
+        let mut cells = Vec::with_capacity(8);
+        for col_idx in 0..8 {
+            if let Some((val, hover)) = self.cell_at(index, col_idx)? {
+                cells.push((
+                    compact_str::CompactString::from(val.as_ref()),
+                    hover.map(|h| compact_str::CompactString::from(h.as_ref())),
+                ));
+            } else {
+                cells.push((compact_str::CompactString::default(), None));
+            }
+        }
+        Ok(Some(egui_table_kit::operations::OwnedRow { cells }))
+    }
+
     fn for_selected_rows(
         &self,
         state: &TableState,
@@ -89,28 +176,23 @@ impl egui_table_kit::operations::TableProvider for TableProviderWrapper<'_> {
     ) -> Result<(), TableError> {
         for row_idx in &state.selected_rows {
             if (row_idx as usize) < self.snapshot.nodes.len() {
-                let node = &self.snapshot.nodes[row_idx as usize];
-                let name = self.snapshot.string_pool.get(node.name_id).unwrap_or("");
-                let cleaned_name = if node.parent_opt().is_none() {
-                    crate::model::arena::clean_unc_path(name)
-                } else {
-                    std::borrow::Cow::Borrowed(name)
+                let row = egui_table_kit::operations::BorrowedRow {
+                    provider: self,
+                    row_index: row_idx as usize,
                 };
-                f(&TableProviderRow { cleaned_name })?;
+                f(&row)?;
             }
         }
         Ok(())
     }
 
     fn for_all_rows(&self, f: &mut RowCallback<'_>) -> Result<(), TableError> {
-        for node in self.snapshot.nodes.iter() {
-            let name = self.snapshot.string_pool.get(node.name_id).unwrap_or("");
-            let cleaned_name = if node.parent_opt().is_none() {
-                crate::model::arena::clean_unc_path(name)
-            } else {
-                std::borrow::Cow::Borrowed(name)
+        for row_idx in 0..self.snapshot.nodes.len() {
+            let row = egui_table_kit::operations::BorrowedRow {
+                provider: self,
+                row_index: row_idx,
             };
-            f(&TableProviderRow { cleaned_name })?;
+            f(&row)?;
         }
         Ok(())
     }
@@ -567,7 +649,7 @@ impl GuiApp {
         let horizontal_res = ui.horizontal(|ui| {
             // Indent padding
             #[allow(clippy::cast_precision_loss)]
-            ui.add_space(indent_level as f32 * 16.0);
+            ui.add_space(indent_level as f32 * 22.0);
 
             // Icon & Expand Arrow
             let icon_text = if node.is_symlink() {
@@ -578,24 +660,58 @@ impl GuiApp {
                 "📄"
             };
 
-            if has_children {
-                let arrow = if is_expanded { "[-]" } else { "[+]" };
-                let rich_arrow = egui::RichText::new(arrow).monospace();
-                let label = ui.add(
-                    egui::Button::new(rich_arrow)
-                        .frame(false)
-                        .selected(is_expanded),
-                );
-                if label.clicked() {
-                    if is_expanded {
-                        self.table_state.expanded_rows.remove(node_idx);
+            ui.scope(|ui| {
+                ui.spacing_mut().interact_size.x = 0.0;
+                ui.spacing_mut().button_padding = egui::vec2(2.0, 2.0);
+                ui.spacing_mut().item_spacing.x = 4.0;
+
+                if has_children {
+                    let arrow = if is_expanded { "⏷" } else { "⏵" };
+
+                    // Allocate an exact interactive rectangle
+                    let (rect, response) =
+                        ui.allocate_exact_size(egui::vec2(14.0, 14.0), egui::Sense::click());
+
+                    // Resolve responsive colors based on interaction states
+                    let arrow_color = if response.hovered() {
+                        if is_expanded {
+                            ui.visuals().warn_fg_color.linear_multiply(0.9)
+                        } else {
+                            ui.visuals().widgets.hovered.text_color()
+                        }
+                    } else if is_expanded {
+                        ui.visuals().widgets.active.text_color()
                     } else {
-                        self.table_state.expanded_rows.insert(node_idx);
+                        ui.visuals()
+                            .widgets
+                            .inactive
+                            .text_color()
+                            .linear_multiply(0.5)
+                    };
+
+                    // Draw the glyph centered inside the allocated rectangle
+                    ui.painter().text(
+                        rect.center(),
+                        egui::Align2::CENTER_CENTER,
+                        arrow,
+                        egui::FontId::proportional(11.0),
+                        arrow_color,
+                    );
+
+                    if response.clicked() {
+                        if is_expanded {
+                            self.table_state.expanded_rows.remove(node_idx);
+                        } else {
+                            self.table_state.expanded_rows.insert(node_idx);
+                        }
                     }
+                } else {
+                    let dummy_arrow = egui::RichText::new("⏵").color(egui::Color32::TRANSPARENT);
+                    ui.add_enabled_ui(false, |ui| {
+                        let _ = ui.selectable_label(false, dummy_arrow);
+                    });
                 }
-            } else {
-                ui.add_space(22.0); // Arrow placeholder alignment space matching "[+]"
-            }
+            });
 
             ui.label(icon_text);
 
@@ -641,7 +757,7 @@ impl GuiApp {
         // --- Offset the interaction hitbox strictly to the right of the expand button ---
         let mut interactive_rect = rect;
         #[allow(clippy::cast_precision_loss)]
-        let expand_button_width = (indent_level as f32).mul_add(16.0, 24.0);
+        let expand_button_width = (indent_level as f32).mul_add(22.0, 26.0);
         interactive_rect.min.x += expand_button_width;
 
         let row_id = ui.id().with(("tree_row", node_idx));
@@ -685,7 +801,7 @@ impl GuiApp {
         let stroke = egui::Stroke::new(1.0f32, theme::get_indent_guideline());
         for i in 0..indent_level {
             #[allow(clippy::cast_precision_loss)]
-            let x = (i as f32).mul_add(16.0, rect.min.x) + 8.0;
+            let x = (i as f32).mul_add(22.0, rect.min.x) + 11.0;
 
             // Draw a dashed vertical line
             let dash_length = 2.0;
@@ -740,182 +856,121 @@ impl GuiApp {
             self.table_state.filter_cache_dirty = true; // Mark cache dirty to trigger a rebuild
         }
 
-        let row_height = 24.0;
-        let available_height = ui.available_height();
+        let row_height = 28.0;
 
         let provider = TableProviderWrapper::new(snapshot, self.time_format.clone());
 
-        // 1. Delegate tree flattening, sorting, and search-matching exclusively to egui-table-kit (O(1) after first frame)
         self.table_state.flatten_tree(&provider);
 
-        let modifiers = ui.input(|i| i.modifiers);
-        let visuals = ui.visuals().clone();
+        let columns = vec![
+            egui_table_kit::layout::Column::new(320.0).resizable(true),
+            egui_table_kit::layout::Column::new(140.0)
+                .range(80.0..=400.0)
+                .resizable(true),
+            egui_table_kit::layout::Column::new(90.0)
+                .range(60.0..=200.0)
+                .resizable(true),
+            egui_table_kit::layout::Column::new(70.0)
+                .range(40.0..=150.0)
+                .resizable(true),
+            egui_table_kit::layout::Column::new(70.0)
+                .range(40.0..=150.0)
+                .resizable(true),
+            egui_table_kit::layout::Column::new(70.0)
+                .range(40.0..=150.0)
+                .resizable(true),
+            egui_table_kit::layout::Column::new(150.0)
+                .range(100.0..=300.0)
+                .resizable(true),
+            egui_table_kit::layout::Column::new(150.0)
+                .range(100.0..=300.0)
+                .resizable(true),
+        ];
 
-        egui::ScrollArea::horizontal()
-            .auto_shrink([false; 2])
-            .show(ui, |ui| {
-                let mut builder = egui_extras::TableBuilder::new(ui)
-                    .id_salt("hierarchical_file_table")
-                    .sense(egui::Sense::click())
-                    .striped(true)
-                    .resizable(true)
-                    .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
-                    .column(egui_extras::Column::initial(320.0)) // Name
-                    .column(egui_extras::Column::initial(140.0).range(80.0..=400.0)) // Percentage
-                    .column(egui_extras::Column::initial(90.0).range(60.0..=200.0)) // Size
-                    .column(egui_extras::Column::initial(70.0).range(40.0..=150.0)) // Items
-                    .column(egui_extras::Column::initial(70.0).range(40.0..=150.0)) // Files
-                    .column(egui_extras::Column::initial(70.0).range(40.0..=150.0)) // Subdirs
-                    .column(egui_extras::Column::initial(150.0).range(100.0..=300.0)) // Created
-                    .column(egui_extras::Column::initial(150.0).range(100.0..=300.0)) // Last Modified
-                    .min_scrolled_height(0.0)
-                    .max_scroll_height(available_height);
+        let mut table = egui_table_kit::layout::Table::new()
+            .id_salt("hierarchical_file_table")
+            .num_rows(self.table_state.active_rows.len() as u64)
+            .columns(columns)
+            .headers([egui_table_kit::layout::HeaderRow::new(row_height)]); // Aligned header row to 28.0
 
-                // 2. Programmatic Center Scrolling on TableBuilder
-                if self.scroll_to_selected {
-                    if let Some(selected_idx) = self.selected_node_idx()
-                        && let Some(row_index) = self
-                            .table_state
-                            .active_rows
-                            .iter()
-                            .position(|&node_idx| node_idx == selected_idx as usize)
-                    {
-                        builder = builder.scroll_to_row(row_index, Some(egui::Align::Center));
-                    }
-                    self.scroll_to_selected = false;
+        if self.scroll_to_selected {
+            if let Some(selected_idx) = self.selected_node_idx()
+                && let Some(row_index) = self
+                    .table_state
+                    .active_rows
+                    .iter()
+                    .position(|&node_idx| node_idx == selected_idx as usize)
+            {
+                table = table.scroll_to_row(row_index as u64, Some(egui::Align::Center));
+            }
+            self.scroll_to_selected = false;
+        }
+
+        let snapshot_nodes = Arc::clone(&snapshot.nodes);
+        let snapshot_string_pool = Arc::clone(&snapshot.string_pool);
+        let active_rows = self.table_state.active_rows.clone();
+        let selected_rows = self.table_state.selected_rows.clone();
+        let highlight_duplicates = self.highlight_duplicates;
+        let selected_duplicates = self.selected_duplicates.clone();
+        let monospace_paths = self.monospace_paths;
+        let current_theme = get_current_theme();
+
+        let active_rows_count = active_rows.len();
+
+        let indent_levels: Vec<usize> = active_rows
+            .iter()
+            .map(|&row_idx| {
+                let mut indent_level = 0;
+                let mut curr = snapshot.nodes[row_idx].parent;
+                while curr != crate::arena::NO_INDEX {
+                    indent_level += 1;
+                    curr = snapshot.nodes[curr as usize].parent;
                 }
+                indent_level
+            })
+            .collect();
 
-                // Pass empty slices to automatically disable and hide Highlight Filters
-                let org_colors = &[];
-                let user_colors = &[];
+        let custom_cell_ui = Box::new(
+            move |ui: &mut egui::Ui,
+                  cell_info: &egui_table_kit::layout::CellInfo,
+                  row_data: &dyn egui_table_kit::operations::Row,
+                  text_color: egui::Color32| {
+                if cell_info.col_nr == 0 {
+                    let row_idx = active_rows[cell_info.row_nr as usize];
+                    let node = &snapshot_nodes[row_idx];
+                    let name = snapshot_string_pool.get(node.name_id).unwrap_or("unknown");
 
-                let (responses, table) = match builder.archived_headers(
-                    &self.table_state,
-                    provider.headers(),
-                    24.0,
-                    org_colors,
-                    user_colors,
-                ) {
-                    Ok(result) => result,
-                    Err(e) => {
-                        eprintln!("Failed to render tree headers: {e:?}");
-                        return;
+                    let is_duplicate =
+                        highlight_duplicates && selected_duplicates.contains(&(row_idx as u32));
+                    let is_selected = selected_rows.contains(row_idx as u32);
+
+                    let icon_text = if node.is_symlink() {
+                        "🔗"
+                    } else if node.is_directory() {
+                        "📁"
+                    } else {
+                        "📄"
+                    };
+
+                    let cleaned_name = if node.parent_opt().is_none() {
+                        crate::model::arena::clean_unc_path(name)
+                    } else {
+                        std::borrow::Cow::Borrowed(name)
+                    };
+                    let mut rich_name = egui::RichText::new(&*cleaned_name);
+                    if monospace_paths {
+                        rich_name = rich_name.monospace();
                     }
-                };
+                    if is_selected {
+                        rich_name = rich_name.strong().color(text_color);
+                    } else if is_duplicate {
+                        rich_name = rich_name.color(theme::GLOW_INNER_CORE);
+                    }
 
-                // 3. Process header responses back into state (triggers sorting & dirty-caching)
-                let _ = self.table_state.process_responses(&provider, responses);
-
-                // Sync back to global search text field if modified in the column popup Name filter
-                let name_filter_text = self.table_state.columns[0].response.filtering.search.text();
-                if name_filter_text != self.search_query {
-                    self.search_query = name_filter_text.to_string();
-                }
-
-                let mut next_hovered = None;
-
-                table.body(|body| {
-                    // Populate rows strictly from active_rows (preserves filtered/sorted views)
-                    body.rows(row_height, self.table_state.active_rows.len(), |mut row| {
-                        let r_idx = row.index();
-                        let node_idx = self.table_state.active_rows[r_idx] as u32;
-                        let node = &snapshot.nodes[node_idx as usize];
-                        let name = snapshot.string_pool.get(node.name_id).unwrap_or("unknown");
-
-                        let is_selected = self.table_state.selected_rows.contains(node_idx);
-                        let is_hovered = self.hovered_node_idx == Some(node_idx);
-                        let is_duplicate = self.highlight_duplicates
-                            && self.selected_duplicates.contains(&node_idx);
-
-                        let files_count = if node.is_directory() {
-                            node.file_count
-                        } else {
-                            0
-                        };
-                        let subdirs_count = if node.is_directory() {
-                            *snapshot.dir_counts.get(node_idx as usize).unwrap_or(&0)
-                        } else {
-                            0
-                        };
-                        let items_count = files_count + subdirs_count;
-
-                        let mut row_clicked = false;
-                        let mut row_secondary_clicked = false;
-                        let mut row_hovered_by_mouse = false;
-
-                        let paint_bg = |ui: &mut egui::Ui, col_idx: usize| {
-                            let mut cell_rect = ui.max_rect();
-                            cell_rect.set_height(row_height);
-                            let spacing = ui.spacing().item_spacing.x;
-                            let mut highlight_rect = cell_rect;
-                            if col_idx > 0 {
-                                highlight_rect.min.x -= spacing / 2.0;
-                            } else {
-                                highlight_rect.min.x = ui.clip_rect().min.x;
-                            }
-                            if col_idx < 7 {
-                                highlight_rect.max.x += spacing / 2.0;
-                            } else {
-                                highlight_rect.max.x = ui.clip_rect().max.x;
-                            }
-                            if is_selected {
-                                let fill_color = match get_current_theme() {
-                                    AppTheme::HighContrast => egui::Color32::from_rgb(80, 80, 0),
-                                    AppTheme::Light => egui::Color32::from_rgb(204, 229, 255),
-                                    AppTheme::Dark => {
-                                        visuals.selection.bg_fill.linear_multiply(0.20)
-                                    }
-                                };
-                                ui.painter().rect_filled(highlight_rect, 0.0, fill_color);
-                            } else if is_hovered {
-                                let hover_color = match get_current_theme() {
-                                    AppTheme::HighContrast => egui::Color32::from_rgb(65, 65, 65),
-                                    AppTheme::Light => egui::Color32::from_rgb(225, 238, 254),
-                                    AppTheme::Dark => {
-                                        visuals.widgets.hovered.bg_fill.linear_multiply(0.08)
-                                    }
-                                };
-                                ui.painter().rect_filled(highlight_rect, 0.0, hover_color);
-                            }
-                        };
-
-                        // --- Name Column ---
-                        row.col(|ui| {
-                            paint_bg(ui, 0);
-
-                            if let Some(hierarchy) =
-                                provider.row_hierarchy(&self.table_state, node_idx as usize)
-                            {
-                                self.table_state
-                                    .show_tree_cell(ui, node_idx as usize, hierarchy);
-                            }
-
-                            let icon_text = if node.is_symlink() {
-                                "🔗"
-                            } else if node.is_directory() {
-                                "📁"
-                            } else {
-                                "📄"
-                            };
+                    let response = ui
+                        .horizontal(|ui| {
+                            ui.spacing_mut().item_spacing.x = 4.0;
                             ui.label(icon_text);
-
-                            let cleaned_name = if node.parent_opt().is_none() {
-                                crate::model::arena::clean_unc_path(name)
-                            } else {
-                                std::borrow::Cow::Borrowed(name)
-                            };
-                            let mut rich_name = egui::RichText::new(&*cleaned_name);
-                            if self.monospace_paths {
-                                rich_name = rich_name.monospace();
-                            }
-                            if is_selected {
-                                rich_name = rich_name
-                                    .strong()
-                                    .color(ui.visuals().selection.stroke.color);
-                            } else if is_duplicate {
-                                rich_name = rich_name.color(theme::GLOW_INNER_CORE);
-                            }
-
                             let name_width = ui.available_width().max(50.0);
                             ui.allocate_ui(
                                 egui::vec2(name_width, ui.spacing().interact_size.y),
@@ -924,331 +979,220 @@ impl GuiApp {
                                     ui.label(rich_name);
                                 },
                             );
+                        })
+                        .response;
 
-                            // Offset interaction rect to prevent selection from stealing toggle clicks
-                            let mut cell_rect = ui.max_rect();
-                            let indent = provider
-                                .row_hierarchy(&self.table_state, node_idx as usize)
-                                .map_or(0, |h| h.indent_level);
-                            #[allow(clippy::cast_precision_loss)]
-                            let offset_width = (indent as f32).mul_add(16.0, 16.0);
-                            cell_rect.min.x = (cell_rect.min.x + offset_width).min(cell_rect.max.x);
+                    return Some(response);
+                }
 
-                            let cell_resp = ui.interact(
-                                cell_rect,
-                                ui.id().with(("cell_interact", 0)),
-                                egui::Sense::click(),
-                            );
-                            if cell_resp.hovered() {
-                                row_hovered_by_mouse = true;
-                            }
-                            if cell_resp.clicked() {
-                                row_clicked = true;
-                            }
-                            if cell_resp.secondary_clicked() {
-                                row_secondary_clicked = true;
-                            }
-                            cell_resp.context_menu(|ui| {
-                                self.draw_file_menu_contents(ui, snapshot);
-                            });
-                        });
+                if cell_info.col_nr == 1 {
+                    let row_idx = active_rows[cell_info.row_nr as usize];
+                    let node = &snapshot_nodes[row_idx];
 
-                        // --- Percentage Column ---
-                        row.col(|ui| {
-                            paint_bg(ui, 1);
-                            let mut cell_rect = ui.max_rect();
-                            cell_rect.set_height(row_height);
+                    let parent_idx = node.parent;
+                    let parent_size = if parent_idx == crate::arena::NO_INDEX {
+                        node.size.max(1)
+                    } else {
+                        snapshot_nodes[parent_idx as usize].size.max(1)
+                    };
+                    #[allow(clippy::cast_precision_loss)]
+                    let pct = (node.size as f32 / parent_size as f32).clamp(0.0, 1.0);
 
-                            let parent_idx = node.parent;
-                            let parent_size = if parent_idx == crate::arena::NO_INDEX {
-                                node.size.max(1)
-                            } else {
-                                snapshot.nodes[parent_idx as usize].size.max(1)
-                            };
-                            #[allow(clippy::cast_precision_loss)]
-                            let pct = (node.size as f32 / parent_size as f32).clamp(0.0, 1.0);
+                    // Get the actual full cell rect directly from the cell's Ui
+                    let cell_rect = ui.max_rect();
 
-                            let cell_width = cell_rect.width();
-                            let indent = provider
-                                .row_hierarchy(&self.table_state, node_idx as usize)
-                                .map_or(0, |h| h.indent_level);
-                            #[allow(clippy::cast_precision_loss)]
-                            let inset_x = (indent as f32 * 4.0).min(cell_width * 0.3);
-                            let mut bar_rect = cell_rect;
-                            bar_rect.min.x += inset_x;
+                    let cell_width = cell_rect.width();
+                    let indent = indent_levels[cell_info.row_nr as usize];
+                    #[allow(clippy::cast_precision_loss)]
+                    let inset_x = (indent as f32 * 4.0).min(cell_width * 0.3);
+                    let mut bar_rect = cell_rect;
+                    bar_rect.min.x += inset_x;
 
-                            let bar_height = 14.0;
-                            let vertical_margin = (row_height - bar_height) / 2.0;
-                            bar_rect.min.y += vertical_margin;
-                            bar_rect.max.y -= vertical_margin;
+                    // Symmetric vertical centering math
+                    let bar_height = 14.0;
+                    let vertical_margin = (row_height - bar_height) / 2.0;
+                    bar_rect.min.y += vertical_margin;
+                    bar_rect.max.y = bar_rect.min.y + bar_height;
 
-                            let colored_width = bar_rect.width() * pct;
-                            let mut colored_rect = bar_rect;
-                            colored_rect.max.x = colored_rect.min.x + colored_width;
+                    let colored_width = bar_rect.width() * pct;
+                    let mut colored_rect = bar_rect;
+                    colored_rect.max.x = colored_rect.min.x + colored_width;
 
-                            let bg_color = match get_current_theme() {
-                                AppTheme::HighContrast => egui::Color32::from_rgb(45, 45, 45),
-                                _ => ui.visuals().widgets.noninteractive.bg_fill,
-                            };
-                            if get_current_theme() == AppTheme::HighContrast {
-                                ui.painter().rect(
-                                    bar_rect,
-                                    0.0,
-                                    bg_color,
-                                    egui::Stroke::new(1.0, egui::Color32::from_rgb(235, 235, 235)),
-                                    egui::StrokeKind::Outside,
-                                );
-                            } else {
-                                ui.painter().rect_filled(bar_rect, 0.0, bg_color);
-                            }
+                    let bg_color = match current_theme {
+                        AppTheme::HighContrast => egui::Color32::from_rgb(45, 45, 45),
+                        _ => ui.visuals().widgets.noninteractive.bg_fill,
+                    };
+                    if current_theme == AppTheme::HighContrast {
+                        ui.painter().rect(
+                            bar_rect,
+                            0.0,
+                            bg_color,
+                            egui::Stroke::new(1.0, egui::Color32::from_rgb(235, 235, 235)),
+                            egui::StrokeKind::Outside,
+                        );
+                    } else {
+                        ui.painter().rect_filled(bar_rect, 0.0, bg_color);
+                    }
 
-                            if pct > 0.0 {
-                                let ext_color = if node.is_directory() {
-                                    egui::Color32::from_rgb(110, 120, 135)
-                                } else {
-                                    let ext = std::path::Path::new(name)
-                                        .extension()
-                                        .map_or_else(String::new, |s| {
-                                            s.to_string_lossy().to_ascii_lowercase()
-                                        });
-                                    theme::get_color_for_extension(&ext)
-                                };
-                                paint_gradient_rect(
-                                    ui.painter(),
-                                    colored_rect,
-                                    ext_color,
-                                    ext_color.linear_multiply(0.75),
-                                );
-                            }
+                    if pct > 0.0 {
+                        let ext_color = if node.is_directory() {
+                            egui::Color32::from_rgb(110, 120, 135)
+                        } else {
+                            let name = snapshot_string_pool.get(node.name_id).unwrap_or("unknown");
+                            let ext = std::path::Path::new(name)
+                                .extension()
+                                .map_or_else(String::new, |s| {
+                                    s.to_string_lossy().to_ascii_lowercase()
+                                });
+                            theme::get_color_for_extension(&ext)
+                        };
+                        paint_gradient_rect(
+                            ui.painter(),
+                            colored_rect,
+                            ext_color,
+                            ext_color.linear_multiply(0.75),
+                        );
+                    }
 
-                            let text = format!("{:.1}%", pct * 100.0);
-                            ui.painter().text(
-                                bar_rect.center(),
-                                egui::Align2::CENTER_CENTER,
-                                text,
-                                egui::FontId::monospace(10.0),
-                                ui.visuals().widgets.active.text_color(),
-                            );
+                    let text = format!("{:.1}%", pct * 100.0);
+                    ui.painter().text(
+                        bar_rect.center(),
+                        egui::Align2::CENTER_CENTER,
+                        text,
+                        egui::FontId::monospace(10.0),
+                        ui.visuals().widgets.active.text_color(),
+                    );
 
-                            ui.allocate_rect(cell_rect, egui::Sense::empty());
-                            let cell_resp = ui.interact(
-                                ui.max_rect(),
-                                ui.id().with(("cell_interact", 1)),
-                                egui::Sense::click(),
-                            );
-                            if cell_resp.hovered() {
-                                row_hovered_by_mouse = true;
-                            }
-                            if cell_resp.clicked() {
-                                row_clicked = true;
-                            }
-                            if cell_resp.secondary_clicked() {
-                                row_secondary_clicked = true;
-                            }
-                            cell_resp.context_menu(|ui| {
-                                self.draw_file_menu_contents(ui, snapshot);
-                            });
-                        });
+                    // Allocate the rect to let egui know we used the area and support hover tooltips
+                    let response = ui.allocate_rect(cell_rect, egui::Sense::hover());
 
-                        // --- Size Column ---
-                        row.col(|ui| {
-                            paint_bg(ui, 2);
-                            ui.label(
-                                prettier_bytes::ByteFormatter::new()
-                                    .format(node.size)
-                                    .to_string(),
-                            );
-                            let cell_resp = ui.interact(
-                                ui.max_rect(),
-                                ui.id().with(("cell_interact", 2)),
-                                egui::Sense::click(),
-                            );
-                            if cell_resp.hovered() {
-                                row_hovered_by_mouse = true;
-                            }
-                            if cell_resp.clicked() {
-                                row_clicked = true;
-                            }
-                            if cell_resp.secondary_clicked() {
-                                row_secondary_clicked = true;
-                            }
-                            cell_resp.context_menu(|ui| {
-                                self.draw_file_menu_contents(ui, snapshot);
-                            });
-                        });
+                    return Some(response);
+                }
 
-                        // --- Items Column ---
-                        row.col(|ui| {
-                            paint_bg(ui, 3);
-                            if node.is_directory() {
-                                ui.label(format!("{items_count}"));
-                            } else {
-                                ui.label("-");
-                            }
-                            let cell_resp = ui.interact(
-                                ui.max_rect(),
-                                ui.id().with(("cell_interact", 3)),
-                                egui::Sense::click(),
-                            );
-                            if cell_resp.hovered() {
-                                row_hovered_by_mouse = true;
-                            }
-                            if cell_resp.clicked() {
-                                row_clicked = true;
-                            }
-                            if cell_resp.secondary_clicked() {
-                                row_secondary_clicked = true;
-                            }
-                            cell_resp.context_menu(|ui| {
-                                self.draw_file_menu_contents(ui, snapshot);
-                            });
-                        });
-
-                        // --- Files Column ---
-                        row.col(|ui| {
-                            paint_bg(ui, 4);
-                            if node.is_directory() {
-                                ui.label(format!("{files_count}"));
-                            } else {
-                                ui.label("-");
-                            }
-                            let cell_resp = ui.interact(
-                                ui.max_rect(),
-                                ui.id().with(("cell_interact", 4)),
-                                egui::Sense::click(),
-                            );
-                            if cell_resp.hovered() {
-                                row_hovered_by_mouse = true;
-                            }
-                            if cell_resp.clicked() {
-                                row_clicked = true;
-                            }
-                            if cell_resp.secondary_clicked() {
-                                row_secondary_clicked = true;
-                            }
-                            cell_resp.context_menu(|ui| {
-                                self.draw_file_menu_contents(ui, snapshot);
-                            });
-                        });
-
-                        // --- Subdirs Column ---
-                        row.col(|ui| {
-                            paint_bg(ui, 5);
-                            if node.is_directory() {
-                                ui.label(format!("{subdirs_count}"));
-                            } else {
-                                ui.label("-");
-                            }
-                            let cell_resp = ui.interact(
-                                ui.max_rect(),
-                                ui.id().with(("cell_interact", 5)),
-                                egui::Sense::click(),
-                            );
-                            if cell_resp.hovered() {
-                                row_hovered_by_mouse = true;
-                            }
-                            if cell_resp.clicked() {
-                                row_clicked = true;
-                            }
-                            if cell_resp.secondary_clicked() {
-                                row_secondary_clicked = true;
-                            }
-                            cell_resp.context_menu(|ui| {
-                                self.draw_file_menu_contents(ui, snapshot);
-                            });
-                        });
-
-                        // --- Created Column ---
-                        row.col(|ui| {
-                            paint_bg(ui, 6);
-                            let text = if node.has_no_permission() {
-                                t!("no-permission").into_owned()
-                            } else {
-                                crate::model::time_utils::format_epoch(
-                                    node.created_timestamp,
-                                    &self.time_format,
+                if cell_info.col_nr >= 2
+                    && let Some((val, _)) = row_data.cell(cell_info.col_nr)
+                {
+                    let response = ui
+                        .horizontal(|ui| {
+                            ui.add(
+                                egui::Label::new(
+                                    egui::RichText::new(val.as_ref()).color(text_color),
                                 )
-                            };
-                            ui.label(text);
-                            let cell_resp = ui.interact(
-                                ui.max_rect(),
-                                ui.id().with(("cell_interact", 6)),
-                                egui::Sense::click(),
+                                .selectable(false)
+                                .wrap_mode(egui::TextWrapMode::Truncate),
                             );
-                            if cell_resp.hovered() {
-                                row_hovered_by_mouse = true;
-                            }
-                            if cell_resp.clicked() {
-                                row_clicked = true;
-                            }
-                            if cell_resp.secondary_clicked() {
-                                row_secondary_clicked = true;
-                            }
-                            cell_resp.context_menu(|ui| {
-                                self.draw_file_menu_contents(ui, snapshot);
-                            });
-                        });
+                        })
+                        .response;
 
-                        // --- Last Modified Column ---
-                        row.col(|ui| {
-                            paint_bg(ui, 7);
-                            let text = if node.has_no_permission() {
-                                t!("no-permission").into_owned()
-                            } else {
-                                crate::model::time_utils::format_epoch(
-                                    node.modified_timestamp,
-                                    &self.time_format,
-                                )
-                            };
-                            ui.label(text);
-                            let cell_resp = ui.interact(
-                                ui.max_rect(),
-                                ui.id().with(("cell_interact", 7)),
-                                egui::Sense::click(),
-                            );
-                            if cell_resp.hovered() {
-                                row_hovered_by_mouse = true;
-                            }
-                            if cell_resp.clicked() {
-                                row_clicked = true;
-                            }
-                            if cell_resp.secondary_clicked() {
-                                row_secondary_clicked = true;
-                            }
-                            cell_resp.context_menu(|ui| {
-                                self.draw_file_menu_contents(ui, snapshot);
-                            });
-                        });
+                    return Some(response);
+                }
 
-                        if row_clicked {
-                            let active_rows_mapped: Vec<(u32, usize)> = self
-                                .table_state
-                                .active_rows
-                                .iter()
-                                .map(|&idx| {
-                                    let indent = provider
-                                        .row_hierarchy(&self.table_state, idx)
-                                        .map_or(0, |h| h.indent_level);
-                                    (idx as u32, indent)
-                                })
-                                .collect();
-                            self.handle_node_click(node_idx, modifiers, &active_rows_mapped);
-                        } else if row_secondary_clicked
-                            && !self.table_state.selected_rows.contains(node_idx)
-                        {
-                            self.table_state.selected_rows.clear();
-                            self.table_state.selected_rows.insert(node_idx);
-                            self.focus_node_idx = Some(node_idx);
-                        }
+                None
+            },
+        );
 
-                        if row_hovered_by_mouse {
-                            next_hovered = Some(node_idx);
-                        }
-                    });
+        let org_colors = &[];
+        let user_colors = &mut [];
+        let mut collected_responses = Vec::new();
+        let mut halt_error = None;
+        let mut item_clicked = None;
+        let mut secondary_clicked = None;
+
+        let mut delegate = egui_table_kit::delegate::TableKitDelegate::new(
+            &provider,
+            &mut self.table_state,
+            org_colors,
+            user_colors,
+            &mut collected_responses,
+            &mut halt_error,
+            Some(custom_cell_ui),
+            &mut item_clicked,
+            &mut secondary_clicked,
+        );
+
+        delegate.header_menu_anchor = egui_table_kit::header::HeaderMenuAnchor::Cursor;
+        delegate.striped = true;
+        delegate.striping_color = Some(match current_theme {
+            AppTheme::HighContrast => egui::Color32::from_rgb(30, 30, 30),
+            AppTheme::Light => egui::Color32::from_rgb(235, 235, 240),
+            AppTheme::Dark => egui::Color32::from_rgb(32, 36, 48),
+        });
+
+        let bright_gray = egui::Color32::from_rgb(180, 180, 180);
+        ui.visuals_mut().widgets.noninteractive.bg_stroke.color = bright_gray;
+
+        delegate.row_height = row_height;
+
+        #[allow(clippy::pedantic)]
+        let total_height = (active_rows_count + 1) as f32 * delegate.row_height;
+        let table_height = total_height.min(ui.available_height());
+
+        ui.allocate_ui_with_layout(
+            egui::vec2(ui.available_width(), table_height),
+            egui::Layout::top_down(egui::Align::Min),
+            |ui| {
+                table.show(ui, &mut delegate);
+            },
+        );
+
+        drop(delegate);
+
+        if let Some(row_idx) = item_clicked {
+            self.focus_node_idx = Some(row_idx as u32);
+        }
+
+        let mut show_menu = false;
+        let mut menu_pos = egui::Pos2::ZERO;
+        if let Some(row_idx) = secondary_clicked {
+            if !self.table_state.selected_rows.contains(row_idx as u32) {
+                self.table_state.selected_rows.clear();
+                self.table_state.selected_rows.insert(row_idx as u32);
+                self.focus_node_idx = Some(row_idx as u32);
+            }
+            if let Some(pos) = ui.ctx().pointer_latest_pos() {
+                menu_pos = pos;
+                show_menu = true;
+            }
+        }
+
+        let popup_id = ui.make_persistent_id("row_context_menu");
+        if show_menu {
+            ui.data_mut(|d| d.insert_temp(popup_id.with("pos"), menu_pos));
+            egui::Popup::toggle_id(ui.ctx(), popup_id);
+        }
+
+        let saved_pos = ui.data(|d| d.get_temp::<egui::Pos2>(popup_id.with("pos")));
+        if let Some(pos) = saved_pos {
+            let anchor_rect = egui::Rect::from_center_size(pos, egui::Vec2::splat(1.0));
+            let dummy_response = ui.interact(
+                anchor_rect,
+                popup_id.with("dummy_anchor"),
+                egui::Sense::hover(),
+            );
+
+            egui::Popup::menu(&dummy_response)
+                .id(popup_id)
+                .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+                .show(|ui| {
+                    self.draw_file_menu_contents(ui, snapshot);
                 });
+        }
 
-                self.hovered_node_idx = next_hovered;
+        let popup_open = egui::Popup::is_id_open(ui.ctx(), popup_id);
+        if !popup_open {
+            ui.data_mut(|d| {
+                d.remove::<egui::Pos2>(popup_id.with("pos"));
             });
+        }
+
+        let _ = self
+            .table_state
+            .process_responses(&provider, collected_responses);
+
+        let name_filter_text = self.table_state.columns[0].response.filtering.search.text();
+        if name_filter_text != self.search_query {
+            self.search_query = name_filter_text.to_string();
+        }
     }
 
     pub fn render_multi_file_detail_list(

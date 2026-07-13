@@ -138,7 +138,6 @@ pub struct GuiApp {
     pub(crate) deletion_confirmation: bool,
     pub(crate) trash_confirmation: bool,
     pub(crate) remember_confirmation: bool,
-    pub(crate) hovered_node_idx: Option<u32>,
     pub(crate) last_rendered_snapshot_ptr: usize,
     pub(crate) last_extension_stats_ptr: usize,
 
@@ -309,7 +308,6 @@ impl GuiApp {
             deletion_confirmation: prefs.deletion_confirmation,
             trash_confirmation: prefs.trash_confirmation,
             remember_confirmation: false,
-            hovered_node_idx: None,
             last_rendered_snapshot_ptr: 0,
             last_extension_stats_ptr: 0,
             pending_expand_restore: None,

@@ -6,7 +6,7 @@ This page lists the licenses of the projects used in eDirStat.
 
 ## Overview of licenses
 
-* [Apache License 2.0](https://spdx.org/licenses/Apache-2.0.html) (236)
+* [Apache License 2.0](https://spdx.org/licenses/Apache-2.0.html) (237)
 * [MIT License](https://spdx.org/licenses/MIT.html) (79)
 * [Unicode License v3](https://spdx.org/licenses/Unicode-3.0.html) (19)
 * [BSD 3-Clause &quot;New&quot; or &quot;Revised&quot; License](https://spdx.org/licenses/BSD-3-Clause.html) (4)
@@ -6645,6 +6645,7 @@ limitations under the License.
 * [emath](https://github.com/emilk/egui/tree/main/crates/emath)
 * [enum-map-derive](https://codeberg.org/xfix/enum-map)
 * [enum-map](https://codeberg.org/xfix/enum-map)
+* [enumn](https://github.com/dtolnay/enumn)
 * [epaint](https://github.com/emilk/egui/tree/main/crates/epaint)
 * [epaint_default_fonts](https://github.com/emilk/egui/tree/main/crates/epaint_default_fonts)
 * [fdeflate](https://github.com/image-rs/fdeflate)

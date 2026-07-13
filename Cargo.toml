@@ -42,7 +42,7 @@ atomic-progress = { version = "0.1.5", default-features = false, features = [
     "prettier-bytes",
 ] }
 blake3 = "1.8.5"
-bytemuck = { version = "1.25.0", features = ["derive"] }
+bytemuck = { version = "1.25.1", features = ["derive"] }
 chrono = "0.4.45"
 clap = { version = "4.6.1", features = ["derive"] }
 cli-or-gui = "0.1.1"
@@ -52,14 +52,14 @@ crossbeam = "0.8.4"
 directories = "6.0.0"
 eframe = "0.35.0"
 egui-notify = { version = "0.22.0", git = "https://github.com/xangelix/egui-notify.git", branch = "egui-0.35" }
-egui-table-kit = "0.4.0"
+egui-table-kit = "0.5.0"
 egui_extras = { version = "0.35.0", features = ["svg_text"] }
 egui_plot = "0.36.0"
 fixedbitset = "0.5.7"
 fluent-zero = "0.1.4"
 include_packed = "0.1.6"
 mimalloc-rspack = { version = "0.2.4", features = ["v3"] }
-open = "5.3.6"
+open = "5.4.0"
 parking_lot = { version = "0.12.5", features = ["hardware-lock-elision"] }
 prettier-bytes = "0.2.1"
 rayon = "1.12.0"
