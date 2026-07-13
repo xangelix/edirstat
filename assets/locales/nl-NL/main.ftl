@@ -4,8 +4,8 @@ view = Weergave
 help = Help
 
 # Menu Bar Actions
-scan-directory = 📁 Map scannen
-save-snapshot = 💾 Momentopname opslaan
+new-scan = 📁 Nieuwe scan
+save-snapshot = 💾 Snapshot opslaan
 load-snapshot = 📖 Momentopname laden
 
 # Menu Bar Status
@@ -179,7 +179,7 @@ explorer-action-delete-permanently = 🗑 Permanent verwijderen
 explorer-action-refresh-directory = 🔄 Map vernieuwen
 
 # Explorer Empty State
-explorer-empty-state = Klik op 'Map scannen' om het schijfgebruik te verkennen.
+explorer-empty-state = Klik op 'Nieuwe scan' om het schijfgebruik te verkennen.
 placeholder-treemap = Gescande bestandssysteem wordt hier als treemap weergegeven.
 placeholder-plots = Gescande bestandssysteem wordt hier grafisch weergegeven.
 
@@ -345,3 +345,13 @@ theme-dark = Donker
 theme-high-contrast = Hoog contrast
 theme-light = Licht
 theme-system = Systeem
+
+# New Scan Options Modal
+modal-scan-options-title = Nieuwe scanopties
+modal-scan-options-header = Start een nieuwe scan
+modal-scan-options-path-label = Te scannen map:
+modal-scan-options-paste-tooltip = Plakken van klembord
+modal-scan-options-browse-tooltip = Map zoeken...
+modal-scan-options-scan-btn = Scannen
+modal-scan-options-cancel-btn = Annuleren
+

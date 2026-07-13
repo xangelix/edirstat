@@ -21,6 +21,7 @@ pub enum ActiveModal {
     HowItWorks,
     AdminWarning,
     Processing(String),
+    ScanOptions,
 }
 
 fn count_nested_stats(
@@ -1616,6 +1617,151 @@ impl GuiApp {
                 });
             if !open {
                 self.show_licenses = false;
+            }
+        }
+
+        if self.active_modal == Some(ActiveModal::ScanOptions) {
+            if self.paste_requested > 0 {
+                self.paste_requested -= 1;
+                let pasted_text = ctx.input(|i| {
+                    i.events.iter().find_map(|e| {
+                        if let egui::Event::Paste(text) = e {
+                            Some(text.clone())
+                        } else {
+                            None
+                        }
+                    })
+                });
+                if let Some(text) = pasted_text {
+                    self.scan_path_input = text;
+                    self.paste_requested = 0;
+                }
+            }
+
+            let mut open = true;
+            egui::Window::new(t!("modal-scan-options-title"))
+                .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+                .collapsible(false)
+                .resizable(false)
+                .open(&mut open)
+                .title_bar(false) // Disable default system title bar
+                .frame(
+                    egui::Frame::window(&ctx.global_style())
+                        .fill(theme::get_bg_window())
+                        .stroke(egui::Stroke::new(
+                            1.2f32,
+                            egui::Color32::from_rgb(74, 85, 104),
+                        )) // Matching bright slate border
+                        .inner_margin(egui::Margin::ZERO)
+                        .corner_radius(8.0),
+                )
+                .show(ctx, |ui| {
+                    // Custom Header Area
+                    egui::Frame::new()
+                        .inner_margin(egui::Margin::symmetric(16, 12))
+                        .show(ui, |ui| {
+                            ui.horizontal(|ui| {
+                                ui.heading(
+                                    egui::RichText::new(t!("modal-scan-options-header"))
+                                        .color(ui.visuals().strong_text_color())
+                                        .strong(),
+                                );
+                                ui.with_layout(
+                                    egui::Layout::right_to_left(egui::Align::Center),
+                                    |ui| {
+                                        let close_btn = ui.button("❌");
+                                        if close_btn.clicked() {
+                                            self.active_modal = None;
+                                        }
+                                    },
+                                );
+                            });
+                        });
+
+                    // Thin, subtle separator line
+                    let (rect, _) = ui.allocate_exact_size(
+                        egui::vec2(ui.available_width(), 1.0),
+                        egui::Sense::hover(),
+                    );
+                    ui.painter().hline(
+                        rect.left()..=rect.right(),
+                        rect.center().y,
+                        egui::Stroke::new(1.0f32, theme::get_stroke_border()),
+                    );
+
+                    // Content Area
+                    egui::Frame::new()
+                        .inner_margin(egui::Margin::same(16))
+                        .show(ui, |ui| {
+                            ui.vertical(|ui| {
+                                ui.label(t!("modal-scan-options-path-label"));
+                                ui.add_space(6.0);
+
+                                ui.horizontal(|ui| {
+                                    // User input for folder path
+                                    let text_edit =
+                                        egui::TextEdit::singleline(&mut self.scan_path_input)
+                                            .hint_text("/path/to/scan");
+                                    ui.add_sized(
+                                        egui::vec2(
+                                            ui.available_width() - 80.0,
+                                            ui.spacing().interact_size.y,
+                                        ),
+                                        text_edit,
+                                    );
+
+                                    // Clipboard paste button
+                                    let clipboard_btn = ui
+                                        .button("📋")
+                                        .on_hover_text(t!("modal-scan-options-paste-tooltip"));
+                                    if clipboard_btn.clicked() {
+                                        self.paste_requested = 3;
+                                        ctx.send_viewport_cmd(egui::ViewportCommand::RequestPaste);
+                                    }
+
+                                    // Browse folder button
+                                    let browse_btn = ui
+                                        .button("📁")
+                                        .on_hover_text(t!("modal-scan-options-browse-tooltip"));
+                                    if browse_btn.clicked() {
+                                        let folder_opt = rfd::FileDialog::new().pick_folder();
+                                        if let Some(path) = folder_opt {
+                                            self.scan_path_input =
+                                                path.to_string_lossy().into_owned();
+                                        }
+                                    }
+                                });
+
+                                ui.add_space(16.0);
+                                ui.separator();
+                                ui.add_space(12.0);
+
+                                // Footer: Scan & Cancel
+                                ui.horizontal(|ui| {
+                                    if ui.button(t!("modal-scan-options-cancel-btn")).clicked() {
+                                        self.active_modal = None;
+                                    }
+
+                                    let scan_btn = egui::Button::new(
+                                        egui::RichText::new(t!("modal-scan-options-scan-btn"))
+                                            .color(theme::COLOR_WHITE)
+                                            .strong(),
+                                    )
+                                    .fill(theme::get_color_scanning());
+
+                                    let is_empty = self.scan_path_input.trim().is_empty();
+                                    if ui.add_enabled(!is_empty, scan_btn).clicked() {
+                                        let path =
+                                            std::path::PathBuf::from(self.scan_path_input.trim());
+                                        self.start_scan(path);
+                                        self.active_modal = None;
+                                    }
+                                });
+                            });
+                        });
+                });
+            if !open {
+                self.active_modal = None;
             }
         }
     }

@@ -4,7 +4,7 @@ view = Widok
 help = Pomoc
 
 # Menu Bar Actions
-scan-directory = 📁 Skanuj katalog
+new-scan = 📁 Nowy skan
 save-snapshot = 💾 Zapisz migawkę
 load-snapshot = 📖 Wczytaj migawkę
 
@@ -182,8 +182,8 @@ explorer-action-delete-permanently = 🗑 Usuń trwale
 explorer-action-refresh-directory = 🔄 Odśwież katalog
 
 # Explorer Empty State
-explorer-empty-state = Kliknij 'Skanuj katalog', aby zbadać zużycie dysku.
-placeholder-treemap = Zeskanowany system plików zostanie tutaj zwizualizowany w postaci mapy drzewa (treemap).
+explorer-empty-state = Kliknij 'Nowy skan', aby zbadać zużycie dysku.
+placeholder-treemap = Zeskanowany system plików zostanie tutaj przedstawiony w postaci mapy drzewa. (treemap).
 placeholder-plots = Zeskanowany system plików zostanie tutaj przedstawiony na wykresie.
 
 # --- Extensions Panel ---
@@ -350,3 +350,13 @@ theme-dark = Ciemny
 theme-high-contrast = Wysoki kontrast
 theme-light = Jasny
 theme-system = Systemowy
+
+# New Scan Options Modal
+modal-scan-options-title = Opcje nowego skanowania
+modal-scan-options-header = Uruchom nowe skanowanie
+modal-scan-options-path-label = Ścieżka katalogu do skanowania:
+modal-scan-options-paste-tooltip = Wklej ze schowka
+modal-scan-options-browse-tooltip = Przeglądaj folder...
+modal-scan-options-scan-btn = Skanuj
+modal-scan-options-cancel-btn = Anuluj
+

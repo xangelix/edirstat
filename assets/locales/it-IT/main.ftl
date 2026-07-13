@@ -4,7 +4,7 @@ view = Visualizza
 help = Aiuto
 
 # Menu Bar Actions
-scan-directory = 📁 Analizza cartella
+new-scan = 📁 Nuova analisi
 save-snapshot = 💾 Salva istantanea
 load-snapshot = 📖 Carica istantanea
 
@@ -179,8 +179,8 @@ explorer-action-delete-permanently = 🗑 Elimina permanentemente
 explorer-action-refresh-directory = 🔄 Aggiorna cartella
 
 # Explorer Empty State
-explorer-empty-state = Clicca su 'Analizza cartella' per esplorare l'uso del disco.
-placeholder-treemap = Il file system analizzato verrà visualizzato come una treemap qui.
+explorer-empty-state = Clicca su 'Nuova analisi' per esplorare l'uso del disco.
+placeholder-treemap = Il file system scansionato verrà visualizzato qui come mappa ad albero.
 placeholder-plots = Il file system analizzato verrà rappresentato graficamente qui.
 
 # --- Extensions Panel ---
@@ -345,3 +345,13 @@ theme-dark = Scuro
 theme-high-contrast = Contrasto elevato
 theme-light = Chiaro
 theme-system = Sistema
+
+# New Scan Options Modal
+modal-scan-options-title = Opzioni nuova analisi
+modal-scan-options-header = Avvia una nuova analisi
+modal-scan-options-path-label = Percorso della cartella da analizzare:
+modal-scan-options-paste-tooltip = Incolla dagli appunti
+modal-scan-options-browse-tooltip = Sfoglia cartella...
+modal-scan-options-scan-btn = Analizza
+modal-scan-options-cancel-btn = Annulla
+

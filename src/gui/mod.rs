@@ -104,6 +104,8 @@ pub struct GuiApp {
     pub(crate) delete_confirm_checked: bool,
     pub(crate) delete_node_idx: Option<u32>,
     pub(crate) active_modal: Option<ActiveModal>,
+    pub(crate) scan_path_input: String,
+    pub(crate) paste_requested: u8,
     pub(crate) show_licenses: bool,
 
     // Saved scan parameters
@@ -285,6 +287,8 @@ impl GuiApp {
             delete_confirm_checked: false,
             delete_node_idx: None,
             active_modal,
+            scan_path_input: String::new(),
+            paste_requested: 0,
             show_licenses: false,
             current_scan_path: None,
             scan_start_time: None,
@@ -1268,7 +1272,7 @@ impl eframe::App for GuiApp {
                 ui.separator();
 
                 let should_pulse = !is_scanning && snapshot.nodes.is_empty();
-                let scan_btn_text = t!("scan-directory");
+                let scan_btn_text = t!("new-scan");
                 let scan_btn = if should_pulse {
                     let time = ui.input(|i| i.time);
                     #[allow(clippy::cast_possible_truncation)]
@@ -1325,9 +1329,11 @@ impl eframe::App for GuiApp {
                 };
 
                 if scan_btn.clicked() {
-                    let folder_opt = FileDialog::new().pick_folder();
-                    if let Some(path) = folder_opt {
-                        self.start_scan(path);
+                    self.active_modal = Some(ActiveModal::ScanOptions);
+                    if let Some(ref path) = self.current_scan_path {
+                        self.scan_path_input = path.to_string_lossy().into_owned();
+                    } else {
+                        self.scan_path_input.clear();
                     }
                 }
 

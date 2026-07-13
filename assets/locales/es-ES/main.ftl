@@ -4,7 +4,7 @@ view = Ver
 help = Ayuda
 
 # Menu Bar Actions
-scan-directory = 📁 Analizar directorio
+new-scan = 📁 Nuevo análisis
 save-snapshot = 💾 Guardar instantánea
 load-snapshot = 📖 Cargar instantánea
 
@@ -179,8 +179,8 @@ explorer-action-delete-permanently = 🗑 Eliminar permanentemente
 explorer-action-refresh-directory = 🔄 Actualizar directorio
 
 # Explorer Empty State
-explorer-empty-state = Haga clic en «Analizar directorio» para explorar el uso del disco.
-placeholder-treemap = El sistema de archivos analizado se visualizará como un mapa de árbol aquí.
+explorer-empty-state = Haga clic en «Nuevo análisis» para explorar el uso del disco.
+placeholder-treemap = El sistema de archivos analizado se mostrará aquí como un mapa de árbol.
 placeholder-plots = El sistema de archivos analizado se graficará aquí.
 
 # --- Extensions Panel ---
@@ -345,3 +345,13 @@ theme-dark = Oscuro
 theme-high-contrast = Alto contraste
 theme-light = Claro
 theme-system = Sistema
+
+# New Scan Options Modal
+modal-scan-options-title = Opciones de nuevo análisis
+modal-scan-options-header = Iniciar nuevo análisis
+modal-scan-options-path-label = Ruta del directorio a analizar:
+modal-scan-options-paste-tooltip = Pegar desde el portapapeles
+modal-scan-options-browse-tooltip = Buscar carpeta...
+modal-scan-options-scan-btn = Analizar
+modal-scan-options-cancel-btn = Cancelar
+

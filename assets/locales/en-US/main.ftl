@@ -4,7 +4,7 @@ view = View
 help = Help
 
 # Menu Bar Actions
-scan-directory = 📁 Scan Directory
+new-scan = 📁 New Scan
 save-snapshot = 💾 Save Snapshot
 load-snapshot = 📖 Load Snapshot
 
@@ -179,7 +179,7 @@ explorer-action-delete-permanently = 🗑 Delete Permanently
 explorer-action-refresh-directory = 🔄 Refresh Directory
 
 # Explorer Empty State
-explorer-empty-state = Click 'Scan Directory' to explore disk usage.
+explorer-empty-state = Click 'New Scan' to explore disk usage.
 placeholder-treemap = Scanned filesystem will be visualized as a treemap here.
 placeholder-plots = Scanned filesystem will be plotted here.
 
@@ -345,3 +345,13 @@ theme-dark = Dark
 theme-high-contrast = High Contrast
 theme-light = Light
 theme-system = System
+
+# New Scan Options Modal
+modal-scan-options-title = New Scan Options
+modal-scan-options-header = Start a New Scan
+modal-scan-options-path-label = Directory path to scan:
+modal-scan-options-paste-tooltip = Paste from clipboard
+modal-scan-options-browse-tooltip = Browse folder...
+modal-scan-options-scan-btn = Scan
+modal-scan-options-cancel-btn = Cancel
+

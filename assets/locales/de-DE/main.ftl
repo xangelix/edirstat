@@ -4,8 +4,8 @@ view = Ansicht
 help = Hilfe
 
 # Menu Bar Actions
-scan-directory = 📁 Verzeichnis scannen
-save-snapshot = 💾 Snapshot speichern
+new-scan = 📁 Neuer Scan
+save-snapshot = 💾 Schnappschuss speichern
 load-snapshot = 📖 Snapshot laden
 
 # Menu Bar Status
@@ -179,8 +179,8 @@ explorer-action-delete-permanently = 🗑 Dauerhaft löschen
 explorer-action-refresh-directory = 🔄 Ordner aktualisieren
 
 # Explorer Empty State
-explorer-empty-state = Klicken Sie auf 'Verzeichnis scannen', um die Speicherplatzbelegung zu analysieren.
-placeholder-treemap = Das gescannte Dateisystem wird hier als Treemap visualisiert.
+explorer-empty-state = Klicken Sie auf 'Neuer Scan', um die Speicherplatzbelegung zu analysieren.
+placeholder-treemap = Das gescannte Dateisystem wird hier als Treemap dargestellt.
 placeholder-plots = Das gescannte Dateisystem wird hier grafisch dargestellt.
 
 # --- Extensions Panel ---
@@ -345,3 +345,13 @@ theme-dark = Dunkel
 theme-high-contrast = Hoher Kontrast
 theme-light = Hell
 theme-system = System
+
+# New Scan Options Modal
+modal-scan-options-title = Neue Scan-Optionen
+modal-scan-options-header = Neuen Scan starten
+modal-scan-options-path-label = Zu scannendes Verzeichnis:
+modal-scan-options-paste-tooltip = Aus Zwischenablage einfügen
+modal-scan-options-browse-tooltip = Ordner suchen...
+modal-scan-options-scan-btn = Scannen
+modal-scan-options-cancel-btn = Abbrechen
+
