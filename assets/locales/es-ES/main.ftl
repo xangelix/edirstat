@@ -354,4 +354,4 @@ modal-scan-options-paste-tooltip = Pegar desde el portapapeles
 modal-scan-options-browse-tooltip = Buscar carpeta...
 modal-scan-options-scan-btn = Analizar
 modal-scan-options-cancel-btn = Cancelar
-
+modal-scan-options-same-filesystem = Limitar el análisis al mismo sistema de archivos/volumen

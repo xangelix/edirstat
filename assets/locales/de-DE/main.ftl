@@ -354,4 +354,4 @@ modal-scan-options-paste-tooltip = Aus Zwischenablage einfügen
 modal-scan-options-browse-tooltip = Ordner suchen...
 modal-scan-options-scan-btn = Scannen
 modal-scan-options-cancel-btn = Abbrechen
-
+modal-scan-options-same-filesystem = Scan auf dasselbe Dateisystem/Volume beschränken

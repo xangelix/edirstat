@@ -152,6 +152,8 @@ pub struct GuiApp {
     /// Caches (Node Index, User String, Group String, Permissions String)
     pub(crate) unix_metadata_cache: Option<(u32, String, String, String)>,
 
+    pub(crate) same_filesystem: bool,
+
     pub(crate) locale: Locale,
 
     #[cfg(feature = "online")]
@@ -192,6 +194,7 @@ impl GuiApp {
         shared_state: Arc<SharedState>,
         traversal_engine: Arc<TraversalEngine>,
         initial_path: Option<PathBuf>,
+        same_filesystem: bool,
     ) -> Self {
         // Initialize the command queue channels
         let (command_tx, command_rx) = std::sync::mpsc::channel();
@@ -318,6 +321,8 @@ impl GuiApp {
 
             unix_metadata_cache: None,
 
+            same_filesystem,
+
             locale: Locale::default(),
 
             #[cfg(feature = "online")]
@@ -422,7 +427,7 @@ impl GuiApp {
         let state = self.shared_state.clone();
 
         // Launch Traversal Engine in background
-        match traversal.start_traversal(path.clone(), tx) {
+        match traversal.start_traversal(path.clone(), self.same_filesystem, tx) {
             Ok(_) => {
                 // Launch Coordinator in background
                 let mut coordinator = crate::coordinator::Coordinator::new(rx, state);

@@ -359,4 +359,4 @@ modal-scan-options-paste-tooltip = Wklej ze schowka
 modal-scan-options-browse-tooltip = Przeglądaj folder...
 modal-scan-options-scan-btn = Skanuj
 modal-scan-options-cancel-btn = Anuluj
-
+modal-scan-options-same-filesystem = Ogranicz skanowanie do tego samego systemu plików/wolumenu

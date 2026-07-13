@@ -54,9 +54,16 @@ struct Args {
     /// Disable Zstd compression for the output snapshot file (saves as uncompressed .edst)
     #[arg(long)]
     no_compression: bool,
+
+    /// Restrict directory traversal to the same filesystem/device boundary
+    #[arg(long, short = 'x', alias = "one-file-system")]
+    same_filesystem: bool,
 }
 
-fn run_benchmark(path_opt: Option<PathBuf>) -> Result<(), Box<dyn std::error::Error>> {
+fn run_benchmark(
+    path_opt: Option<PathBuf>,
+    same_filesystem: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
     let path = path_opt.ok_or("Error: A path must be provided for benchmarking.")?;
     if !path.exists() {
         return Err(format!("Error: Path does not exist: {}", path.display()).into());
@@ -83,7 +90,7 @@ fn run_benchmark(path_opt: Option<PathBuf>) -> Result<(), Box<dyn std::error::Er
     let (tx, rx) = crossbeam::channel::unbounded();
 
     let start = std::time::Instant::now();
-    let handle = traversal_engine.start_traversal(path.clone(), tx)?;
+    let handle = traversal_engine.start_traversal(path.clone(), same_filesystem, tx)?;
 
     let mut coordinator = edirstat::coordinator::Coordinator::new(rx, shared_state);
     coordinator.run_coordinator_loop(&path.to_string_lossy());
@@ -113,6 +120,7 @@ fn run_headless_scan_and_save(
     scan_path: &Path,
     mut to_path: PathBuf,
     no_compression: bool,
+    same_filesystem: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     if !scan_path.exists() {
         return Err(format!("Error: Scan path does not exist: {}", scan_path.display()).into());
@@ -143,7 +151,7 @@ fn run_headless_scan_and_save(
     let traversal_engine = Arc::new(TraversalEngine::new());
     let (tx, rx) = crossbeam::channel::unbounded();
 
-    let handle = traversal_engine.start_traversal(scan_path.clone(), tx)?;
+    let handle = traversal_engine.start_traversal(scan_path.clone(), same_filesystem, tx)?;
 
     let mut coordinator = edirstat::coordinator::Coordinator::new(rx, shared_state.clone());
     coordinator.run_coordinator_loop(&scan_path.to_string_lossy());
@@ -186,7 +194,7 @@ fn main() -> anyhow::Result<()> {
     let args = Args::parse();
 
     if args.benchmark {
-        run_benchmark(args.path).map_err(|e| anyhow::anyhow!("{e}"))?;
+        run_benchmark(args.path, args.same_filesystem).map_err(|e| anyhow::anyhow!("{e}"))?;
 
         return Ok(());
     }
@@ -197,8 +205,13 @@ fn main() -> anyhow::Result<()> {
             std::process::exit(1);
         });
 
-        run_headless_scan_and_save(&scan_path, to_path, args.no_compression)
-            .map_err(|e| anyhow::anyhow!("{e}"))?;
+        run_headless_scan_and_save(
+            &scan_path,
+            to_path,
+            args.no_compression,
+            args.same_filesystem,
+        )
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
 
         return Ok(());
     }
@@ -235,6 +248,7 @@ fn main() -> anyhow::Result<()> {
                 shared_state,
                 traversal_engine,
                 initial_path,
+                args.same_filesystem,
             )))
         }),
     )?;

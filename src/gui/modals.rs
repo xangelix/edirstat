@@ -1732,6 +1732,12 @@ impl GuiApp {
                                     }
                                 });
 
+                                ui.add_space(8.0);
+                                ui.checkbox(
+                                    &mut self.same_filesystem,
+                                    t!("modal-scan-options-same-filesystem"),
+                                );
+
                                 ui.add_space(16.0);
                                 ui.separator();
                                 ui.add_space(12.0);
@@ -2134,7 +2140,7 @@ mod tests {
         let engine = Arc::new(TraversalEngine::new());
         let (tx, rx) = crossbeam::channel::unbounded();
 
-        let handle = engine.start_traversal(temp_dir.clone(), tx)?;
+        let handle = engine.start_traversal(temp_dir.clone(), false, tx)?;
         let mut coordinator = Coordinator::new(rx, shared_state.clone());
         coordinator.run_coordinator_loop(&temp_dir.to_string_lossy());
         let _ = handle.join();
@@ -2142,7 +2148,7 @@ mod tests {
         let snapshot = shared_state.current_snapshot.load();
         assert!(!snapshot.nodes.is_empty());
 
-        let mut app = GuiApp::new(shared_state, engine, None);
+        let mut app = GuiApp::new(shared_state, engine, None, false);
 
         // Scan duplicates using run_deduplication
         let progress = atomic_progress::Progress::new_spinner("Deduplicator");
@@ -2216,7 +2222,7 @@ mod tests {
         let engine = Arc::new(TraversalEngine::new());
 
         // Test scanning a directory
-        let app = GuiApp::new(shared_state.clone(), engine, Some(temp_dir.clone()));
+        let app = GuiApp::new(shared_state.clone(), engine, Some(temp_dir.clone()), false);
 
         // Wait for the background scan to start
         let mut attempts = 0;
@@ -2261,7 +2267,7 @@ mod tests {
         let engine = Arc::new(TraversalEngine::new());
 
         // Test loading snapshot file
-        let app = GuiApp::new(shared_state.clone(), engine, Some(test_file.clone()));
+        let app = GuiApp::new(shared_state.clone(), engine, Some(test_file.clone()), false);
 
         let snapshot = shared_state.current_snapshot.load();
         assert!(!snapshot.nodes.is_empty());

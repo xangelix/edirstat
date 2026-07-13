@@ -354,4 +354,4 @@ modal-scan-options-paste-tooltip = Coller depuis le presse-papiers
 modal-scan-options-browse-tooltip = Parcourir le dossier...
 modal-scan-options-scan-btn = Analyser
 modal-scan-options-cancel-btn = Annuler
-
+modal-scan-options-same-filesystem = Limiter l'analyse au même système de fichiers/volume

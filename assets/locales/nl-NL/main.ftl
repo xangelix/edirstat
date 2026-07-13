@@ -354,4 +354,4 @@ modal-scan-options-paste-tooltip = Plakken van klembord
 modal-scan-options-browse-tooltip = Map zoeken...
 modal-scan-options-scan-btn = Scannen
 modal-scan-options-cancel-btn = Annuleren
-
+modal-scan-options-same-filesystem = Scan beperken tot hetzelfde bestandssysteem/volume

@@ -789,7 +789,7 @@ mod tests {
         let engine = TraversalEngine::new();
         let (tx, rx) = crossbeam::channel::unbounded();
 
-        let handle = engine.start_traversal(temp_dir.clone(), tx)?;
+        let handle = engine.start_traversal(temp_dir.clone(), false, tx)?;
         let mut coordinator = Coordinator::new(rx, shared_state.clone());
         coordinator.run_coordinator_loop(&temp_dir.to_string_lossy());
         let _ = handle.join();
@@ -971,7 +971,7 @@ mod tests {
         let engine = TraversalEngine::new();
         let (tx, rx) = crossbeam::channel::unbounded();
 
-        let handle = engine.start_traversal(temp_dir.clone(), tx)?;
+        let handle = engine.start_traversal(temp_dir.clone(), false, tx)?;
         let mut coordinator = Coordinator::new(rx, shared_state.clone());
         coordinator.run_coordinator_loop(&temp_dir.to_string_lossy());
         let _ = handle.join();

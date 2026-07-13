@@ -354,4 +354,4 @@ modal-scan-options-paste-tooltip = Colar da área de transferência
 modal-scan-options-browse-tooltip = Procurar pasta...
 modal-scan-options-scan-btn = Analisar
 modal-scan-options-cancel-btn = Cancelar
-
+modal-scan-options-same-filesystem = Limitar a análise ao mesmo sistema de ficheiros/volume

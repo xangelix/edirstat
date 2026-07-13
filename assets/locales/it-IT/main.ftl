@@ -354,4 +354,4 @@ modal-scan-options-paste-tooltip = Incolla dagli appunti
 modal-scan-options-browse-tooltip = Sfoglia cartella...
 modal-scan-options-scan-btn = Analizza
 modal-scan-options-cancel-btn = Annulla
-
+modal-scan-options-same-filesystem = Limita l'analisi allo stesso filesystem/volume

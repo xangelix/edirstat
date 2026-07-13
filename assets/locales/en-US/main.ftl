@@ -354,4 +354,4 @@ modal-scan-options-paste-tooltip = Paste from clipboard
 modal-scan-options-browse-tooltip = Browse folder...
 modal-scan-options-scan-btn = Scan
 modal-scan-options-cancel-btn = Cancel
-
+modal-scan-options-same-filesystem = Limit scan to the same filesystem/volume

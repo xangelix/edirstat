@@ -108,6 +108,7 @@ impl TraversalEngine {
     pub fn start_traversal(
         &self,
         root_path: PathBuf,
+        same_filesystem: bool,
         event_tx: Sender<Vec<ScanEvent>>,
     ) -> Result<thread::JoinHandle<()>, crate::EdirstatError> {
         let num_threads = self.num_threads;
@@ -156,10 +157,10 @@ impl TraversalEngine {
             let root_metadata = fs::metadata(&root_path);
             let root_file_id = root_metadata.as_ref().map_or(root_id, get_file_id);
             let is_root_scan = root_path == std::path::Path::new("/");
-            let expected_device_id = if is_root_scan {
-                None // Allow crossing local subvolumes/partitions when scanning from the system root
-            } else {
+            let expected_device_id = if same_filesystem || !is_root_scan {
                 root_metadata.as_ref().map(get_device_id).ok()
+            } else {
+                None
             };
 
             let initial_task = ScanTask {
@@ -505,7 +506,7 @@ mod tests {
         let (tx, rx) = crossbeam::channel::unbounded();
 
         // Launch traversal
-        let handle = engine.start_traversal(temp_dir.clone(), tx)?;
+        let handle = engine.start_traversal(temp_dir.clone(), false, tx)?;
 
         // Run coordinator in this thread (blocks until tx is dropped and all events processed)
         let mut coordinator = Coordinator::new(rx, shared_state.clone());
@@ -570,7 +571,7 @@ mod tests {
         let (tx, rx) = crossbeam::channel::unbounded();
 
         // Launch traversal
-        let handle = engine.start_traversal(temp_dir.clone(), tx)?;
+        let handle = engine.start_traversal(temp_dir.clone(), false, tx)?;
 
         // Run coordinator
         let mut coordinator = Coordinator::new(rx, shared_state.clone());
@@ -602,6 +603,39 @@ mod tests {
             "Subdirectory with restricted permissions should be present in the snapshot with FLAG_NO_PERMISSION flag set"
         );
 
+        Ok(())
+    }
+
+    #[test]
+    fn test_traversal_same_filesystem() -> Result<(), crate::EdirstatError> {
+        let temp_dir = std::env::current_dir()?
+            .join("target")
+            .join("test_traversal_same_fs");
+        let subdir = temp_dir.join("subdir");
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        std::fs::create_dir_all(&subdir)?;
+
+        let file1_path = subdir.join("file1.txt");
+        std::fs::write(&file1_path, vec![0u8; 50])?;
+
+        let shared_state = Arc::new(SharedState::new());
+        let engine = TraversalEngine::new();
+        let (tx, rx) = crossbeam::channel::unbounded();
+
+        // Launch traversal with same_filesystem = true
+        let handle = engine.start_traversal(temp_dir.clone(), true, tx)?;
+
+        let mut coordinator = Coordinator::new(rx, shared_state.clone());
+        coordinator.run_coordinator_loop(&temp_dir.to_string_lossy());
+
+        let _ = handle.join();
+
+        let stats = engine.stats();
+        assert_eq!(stats.files_scanned.load(Ordering::SeqCst), 1);
+        assert_eq!(stats.dirs_scanned.load(Ordering::SeqCst), 2); // temp_dir and subdir
+        assert_eq!(stats.bytes_scanned.load(Ordering::SeqCst), 50);
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
         Ok(())
     }
 }
