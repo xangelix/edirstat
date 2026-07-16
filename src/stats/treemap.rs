@@ -590,9 +590,13 @@ fn recurse_child(
         || child_rect.height() < MIN_PIXEL_DIM;
 
     if is_leaf_or_too_small {
-        let name = config.string_pool.get(child.name_id).unwrap_or("");
-        let ext = crate::arena::get_ext_slice(name);
-        let color = colors::get_color_for_extension(ext);
+        let color = if child.is_directory() {
+            colors::get_treemap_dir_fallback()
+        } else {
+            let name = config.string_pool.get(child.name_id).unwrap_or("");
+            let ext = crate::arena::get_ext_slice(name);
+            colors::get_color_for_extension(ext)
+        };
         blocks.push(TreemapBlock {
             rect: child_rect,
             node_idx: child_idx,
@@ -646,9 +650,13 @@ fn build_treemap(
     }
 
     if !node.is_directory() || depth >= config.max_depth {
-        let name = config.string_pool.get(node.name_id).unwrap_or("");
-        let ext = crate::arena::get_ext_slice(name);
-        let color = colors::get_color_for_extension(ext);
+        let color = if node.is_directory() {
+            colors::get_treemap_dir_fallback()
+        } else {
+            let name = config.string_pool.get(node.name_id).unwrap_or("");
+            let ext = crate::arena::get_ext_slice(name);
+            colors::get_color_for_extension(ext)
+        };
 
         blocks.push(TreemapBlock {
             rect,
@@ -686,9 +694,7 @@ fn build_treemap(
     let avg_area_per_child = area / children.len() as f64;
 
     if avg_area_per_child < MIN_AVG_CHILD_AREA {
-        let name = config.string_pool.get(node.name_id).unwrap_or("");
-        let ext = crate::arena::get_ext_slice(name);
-        let color = colors::get_color_for_extension(ext);
+        let color = colors::get_treemap_dir_fallback();
         blocks.push(TreemapBlock {
             rect,
             node_idx,
