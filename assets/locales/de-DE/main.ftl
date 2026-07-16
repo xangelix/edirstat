@@ -12,10 +12,10 @@ load-snapshot = 📖 Snapshot laden
 idle = Bereit
 
 # View Menu Options
-monospace-paths = Monospace-Pfade
+monospace-paths = 🅰 Monospace-Pfade
 highlight-duplicates = ✨ Duplikate hervorheben
 treemap-borders = 🔳 Treemap-Rahmen
-treemap-style =  Treemap-Stil
+treemap-style =  Treemap-Stil
 treemap-style-vertical = Vertikaler Verlauf
 treemap-style-offset-vertical = Versetzter vertikaler Verlauf
 treemap-style-diagonal = Diagonaler Verlauf

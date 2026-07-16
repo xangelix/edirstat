@@ -12,10 +12,10 @@ load-snapshot = 📖 Wczytaj migawkę
 idle = Bezczynny
 
 # View Menu Options
-monospace-paths = Ścieżki o stałej szerokości
+monospace-paths = 🅰 Ścieżki o stałej szerokości
 highlight-duplicates = ✨ Wyróżnij duplikaty
 treemap-borders = 🔳 Obramowania mapy drzewa
-treemap-style =  Styl mapy drzewa
+treemap-style =  Styl mapy drzewa
 treemap-style-vertical = Gradient pionowy
 treemap-style-offset-vertical = Przesunięty gradient pionowy
 treemap-style-diagonal = Gradient ukośny

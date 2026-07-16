@@ -12,10 +12,10 @@ load-snapshot = 📖 Charger l'instantané
 idle = Inactif
 
 # View Menu Options
-monospace-paths = Polices à espacement fixe
+monospace-paths = 🅰 Polices à espacement fixe
 highlight-duplicates = ✨ Mettre en évidence les doublons
 treemap-borders = 🔳 Bordures de la treemap
-treemap-style =  Style de la treemap
+treemap-style =  Style de la treemap
 treemap-style-vertical = Dégradé vertical
 treemap-style-offset-vertical = Dégradé vertical décalé
 treemap-style-diagonal = Dégradé diagonal

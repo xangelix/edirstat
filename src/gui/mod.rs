@@ -1147,31 +1147,7 @@ impl eframe::App for GuiApp {
                     ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
 
                     // Aligned emoji checkbox layout
-                    ui.horizontal(|ui| {
-                        ui.spacing_mut().item_spacing.x = 4.0;
-                        let mut checked = self.monospace_paths;
-                        if ui.checkbox(&mut checked, "").changed() {
-                            self.monospace_paths = checked;
-                        }
-                        let response = ui
-                            .horizontal(|ui| {
-                                ui.label(egui::RichText::new("🅰").size(12.0));
-                                ui.label(
-                                    egui::RichText::new(t!("monospace-paths"))
-                                        .color(ui.visuals().widgets.inactive.text_color()),
-                                );
-                            })
-                            .response;
-
-                        let label_click = ui.interact(
-                            response.rect,
-                            ui.id().with("monospace_label"),
-                            egui::Sense::click(),
-                        );
-                        if label_click.clicked() {
-                            self.monospace_paths = !self.monospace_paths;
-                        }
-                    });
+                    ui.checkbox(&mut self.monospace_paths, t!("monospace-paths"));
 
                     ui.checkbox(&mut self.highlight_duplicates, t!("highlight-duplicates"));
                     ui.checkbox(&mut self.treemap_borders, t!("treemap-borders"));

@@ -12,10 +12,10 @@ load-snapshot = 📖 Carregar captura instantânea
 idle = Inativo
 
 # View Menu Options
-monospace-paths = Caminhos monoespaçados
+monospace-paths = 🅰 Caminhos monoespaçados
 highlight-duplicates = ✨ Destacar duplicados
 treemap-borders = 🔳 Bordas do mapa de árvore
-treemap-style =  Estilo do mapa de árvore
+treemap-style =  Estilo do mapa de árvore
 treemap-style-vertical = Gradiente vertical
 treemap-style-offset-vertical = Gradiente vertical deslocado
 treemap-style-diagonal = Gradiente diagonal

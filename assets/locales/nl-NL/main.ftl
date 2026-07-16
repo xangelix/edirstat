@@ -12,10 +12,10 @@ load-snapshot = 📖 Momentopname laden
 idle = Inactief
 
 # View Menu Options
-monospace-paths = Monospace paden
+monospace-paths = 🅰 Monospace paden
 highlight-duplicates = ✨ Duplicaten markeren
 treemap-borders = 🔳 Randen van treemap
-treemap-style =  Stijl van treemap
+treemap-style =  Stijl van treemap
 treemap-style-vertical = Verticale gradiënt
 treemap-style-offset-vertical = Verschoven verticale gradiënt
 treemap-style-diagonal = Diagonale gradiënt

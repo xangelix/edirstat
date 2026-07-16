@@ -12,10 +12,10 @@ load-snapshot = 📖 Carica istantanea
 idle = Inattivo
 
 # View Menu Options
-monospace-paths = Percorsi a spaziatura fissa
+monospace-paths = 🅰 Percorsi a spaziatura fissa
 highlight-duplicates = ✨ Evidenzia duplicati
 treemap-borders = 🔳 Bordi della treemap
-treemap-style =  Stile della treemap
+treemap-style =  Stile della treemap
 treemap-style-vertical = Gradiente verticale
 treemap-style-offset-vertical = Gradiente verticale sfalsato
 treemap-style-diagonal = Gradiente diagonale
