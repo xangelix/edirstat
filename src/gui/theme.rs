@@ -318,10 +318,10 @@ pub fn get_color_for_extension(ext: &str) -> egui::Color32 {
 pub fn setup_custom_style(ctx: &egui::Context, theme_pref: ThemePreference) {
     let resolved_theme = match theme_pref {
         ThemePreference::System => {
-            if ctx.global_style().visuals.dark_mode {
-                AppTheme::Dark
-            } else {
-                AppTheme::Light
+            match ctx.system_theme() {
+                Some(egui::Theme::Dark) => AppTheme::Dark,
+                Some(egui::Theme::Light) => AppTheme::Light,
+                None => AppTheme::Dark, // Fallback to Dark if system theme is not queryable
             }
         }
         ThemePreference::Dark => AppTheme::Dark,
