@@ -76,6 +76,7 @@ pub struct GuiApp {
     pub(crate) monospace_paths: bool,
     pub(crate) treemap_borders: bool,
     pub(crate) theme: theme::ThemePreference,
+    pub(crate) treemap_style: stats::treemap::TreemapStyle,
     pub(crate) left_panel_collapsed: bool,
     pub(crate) right_panel_collapsed: bool,
 
@@ -270,6 +271,7 @@ impl GuiApp {
             monospace_paths: prefs.monospace_paths,
             treemap_borders: prefs.treemap_borders,
             theme: prefs.theme,
+            treemap_style: prefs.treemap_style,
             left_panel_collapsed: false,
             right_panel_collapsed: false,
             filter_case_sensitive: false,
@@ -1174,6 +1176,34 @@ impl eframe::App for GuiApp {
                     ui.checkbox(&mut self.deletion_confirmation, t!("deletion-confirmation"));
                     ui.checkbox(&mut self.trash_confirmation, t!("trash-confirmation"));
 
+                    ui.menu_button(t!("treemap-style"), |ui| {
+                        let styles = [
+                            (
+                                stats::treemap::TreemapStyle::VerticalGradient,
+                                t!("treemap-style-vertical"),
+                            ),
+                            (
+                                stats::treemap::TreemapStyle::OffsetVerticalGradient,
+                                t!("treemap-style-offset-vertical"),
+                            ),
+                            (
+                                stats::treemap::TreemapStyle::DiagonalGradient,
+                                t!("treemap-style-diagonal"),
+                            ),
+                            (
+                                stats::treemap::TreemapStyle::Cushion,
+                                t!("treemap-style-cushion"),
+                            ),
+                        ];
+                        for (style, label) in styles {
+                            let is_selected = self.treemap_style == style;
+                            if ui.selectable_label(is_selected, label).clicked() {
+                                self.treemap_style = style;
+                                ui.close_kind(egui::UiKind::Menu);
+                            }
+                        }
+                    });
+
                     ui.menu_button(t!("theme"), |ui| {
                         let themes = [
                             (theme::ThemePreference::System, t!("theme-system")),
@@ -1552,6 +1582,7 @@ impl eframe::App for GuiApp {
             trash_confirmation: self.trash_confirmation,
             treemap_borders: self.treemap_borders,
             theme: self.theme,
+            treemap_style: self.treemap_style,
         };
 
         if current_prefs != self.last_saved_preferences {
@@ -1685,6 +1716,7 @@ impl GuiApp {
                             deduplicator_results: Some(&self.deduplicator_results),
                         };
                         self.treemap_chart.draw_borders = self.treemap_borders;
+                        self.treemap_chart.style = self.treemap_style;
                         self.treemap_chart.render(ui, snapshot, &mut context);
 
                         // Content-Aware Sync (Selections)
@@ -1907,6 +1939,7 @@ impl GuiApp {
                                 deduplicator_results: Some(&self.deduplicator_results),
                             };
                             self.treemap_chart.draw_borders = self.treemap_borders;
+                            self.treemap_chart.style = self.treemap_style;
                             self.treemap_chart.render(ui, snapshot, &mut context);
 
                             // Content-Aware Sync (Selections)

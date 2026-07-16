@@ -3,7 +3,9 @@ use std::path::PathBuf;
 use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
 
-use crate::{gui::theme::ThemePreference, model::time_utils::TimeFormat};
+use crate::{
+    gui::theme::ThemePreference, model::time_utils::TimeFormat, stats::treemap::TreemapStyle,
+};
 
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -22,6 +24,8 @@ pub struct UserPreferences {
     pub treemap_borders: bool,
     #[serde(default)]
     pub theme: ThemePreference,
+    #[serde(default)]
+    pub treemap_style: TreemapStyle,
 }
 
 const fn default_true() -> bool {
@@ -38,6 +42,7 @@ impl Default for UserPreferences {
             trash_confirmation: true,
             treemap_borders: false,
             theme: ThemePreference::default(),
+            treemap_style: TreemapStyle::default(),
         }
     }
 }
@@ -81,6 +86,7 @@ mod tests {
         assert!(!prefs.highlight_duplicates);
         assert!(!prefs.treemap_borders);
         assert_eq!(prefs.theme, ThemePreference::System);
+        assert_eq!(prefs.treemap_style, TreemapStyle::OffsetVerticalGradient);
     }
 
     #[test]
@@ -98,6 +104,7 @@ mod tests {
         assert!(prefs.trash_confirmation);
         assert!(!prefs.treemap_borders);
         assert_eq!(prefs.theme, ThemePreference::System);
+        assert_eq!(prefs.treemap_style, TreemapStyle::OffsetVerticalGradient);
 
         Ok(())
     }
@@ -109,6 +116,7 @@ mod tests {
             trash_confirmation: false,
             monospace_paths: true,
             theme: ThemePreference::Light,
+            treemap_style: TreemapStyle::Cushion,
             ..Default::default()
         };
 

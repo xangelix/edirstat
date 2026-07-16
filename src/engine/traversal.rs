@@ -625,7 +625,7 @@ mod tests {
         // Launch traversal with same_filesystem = true
         let handle = engine.start_traversal(temp_dir.clone(), true, tx)?;
 
-        let mut coordinator = Coordinator::new(rx, shared_state.clone());
+        let mut coordinator = Coordinator::new(rx, shared_state);
         coordinator.run_coordinator_loop(&temp_dir.to_string_lossy());
 
         let _ = handle.join();

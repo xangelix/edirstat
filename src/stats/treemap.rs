@@ -16,11 +16,21 @@ pub struct TreemapBlock {
     pub color: Color32,
 }
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum TreemapStyle {
+    VerticalGradient,
+    #[default]
+    OffsetVerticalGradient,
+    DiagonalGradient,
+    Cushion,
+}
+
 pub struct TreemapChart {
     pub cached_blocks: Vec<TreemapBlock>,
     pub last_snapshot_ptr: usize,
     pub last_rect: Rect,
     pub draw_borders: bool,
+    pub style: TreemapStyle,
 }
 
 impl TreemapChart {
@@ -31,6 +41,7 @@ impl TreemapChart {
             last_snapshot_ptr: 0,
             last_rect: Rect::NOTHING,
             draw_borders: false,
+            style: TreemapStyle::VerticalGradient,
         }
     }
 }
@@ -206,29 +217,165 @@ impl StatComponent for TreemapChart {
 
             let base_vertex_idx = combined_mesh.vertices.len() as u32;
 
-            combined_mesh.vertices.push(eframe::egui::epaint::Vertex {
-                pos: render_rect.left_top(),
-                uv: eframe::egui::epaint::WHITE_UV,
-                color: color_light,
-            });
-            combined_mesh.vertices.push(eframe::egui::epaint::Vertex {
-                pos: render_rect.right_top(),
-                uv: eframe::egui::epaint::WHITE_UV,
-                color: color_light,
-            });
-            combined_mesh.vertices.push(eframe::egui::epaint::Vertex {
-                pos: render_rect.right_bottom(),
-                uv: eframe::egui::epaint::WHITE_UV,
-                color: color_dark,
-            });
-            combined_mesh.vertices.push(eframe::egui::epaint::Vertex {
-                pos: render_rect.left_bottom(),
-                uv: eframe::egui::epaint::WHITE_UV,
-                color: color_dark,
-            });
+            match self.style {
+                TreemapStyle::VerticalGradient => {
+                    combined_mesh.vertices.push(eframe::egui::epaint::Vertex {
+                        pos: render_rect.left_top(),
+                        uv: eframe::egui::epaint::WHITE_UV,
+                        color: color_light,
+                    });
+                    combined_mesh.vertices.push(eframe::egui::epaint::Vertex {
+                        pos: render_rect.right_top(),
+                        uv: eframe::egui::epaint::WHITE_UV,
+                        color: color_light,
+                    });
+                    combined_mesh.vertices.push(eframe::egui::epaint::Vertex {
+                        pos: render_rect.right_bottom(),
+                        uv: eframe::egui::epaint::WHITE_UV,
+                        color: color_dark,
+                    });
+                    combined_mesh.vertices.push(eframe::egui::epaint::Vertex {
+                        pos: render_rect.left_bottom(),
+                        uv: eframe::egui::epaint::WHITE_UV,
+                        color: color_dark,
+                    });
 
-            combined_mesh.add_triangle(base_vertex_idx, base_vertex_idx + 1, base_vertex_idx + 2);
-            combined_mesh.add_triangle(base_vertex_idx, base_vertex_idx + 2, base_vertex_idx + 3);
+                    combined_mesh.add_triangle(
+                        base_vertex_idx,
+                        base_vertex_idx + 1,
+                        base_vertex_idx + 2,
+                    );
+                    combined_mesh.add_triangle(
+                        base_vertex_idx,
+                        base_vertex_idx + 2,
+                        base_vertex_idx + 3,
+                    );
+                }
+                TreemapStyle::OffsetVerticalGradient => {
+                    let left_light = color_light;
+                    let right_light = color_light.linear_multiply(0.92);
+                    let left_dark = color_dark.linear_multiply(1.08);
+                    let right_dark = color_dark;
+
+                    combined_mesh.vertices.push(eframe::egui::epaint::Vertex {
+                        pos: render_rect.left_top(),
+                        uv: eframe::egui::epaint::WHITE_UV,
+                        color: left_light,
+                    });
+                    combined_mesh.vertices.push(eframe::egui::epaint::Vertex {
+                        pos: render_rect.right_top(),
+                        uv: eframe::egui::epaint::WHITE_UV,
+                        color: right_light,
+                    });
+                    combined_mesh.vertices.push(eframe::egui::epaint::Vertex {
+                        pos: render_rect.right_bottom(),
+                        uv: eframe::egui::epaint::WHITE_UV,
+                        color: right_dark,
+                    });
+                    combined_mesh.vertices.push(eframe::egui::epaint::Vertex {
+                        pos: render_rect.left_bottom(),
+                        uv: eframe::egui::epaint::WHITE_UV,
+                        color: left_dark,
+                    });
+
+                    combined_mesh.add_triangle(
+                        base_vertex_idx,
+                        base_vertex_idx + 1,
+                        base_vertex_idx + 2,
+                    );
+                    combined_mesh.add_triangle(
+                        base_vertex_idx,
+                        base_vertex_idx + 2,
+                        base_vertex_idx + 3,
+                    );
+                }
+                TreemapStyle::DiagonalGradient => {
+                    combined_mesh.vertices.push(eframe::egui::epaint::Vertex {
+                        pos: render_rect.left_top(),
+                        uv: eframe::egui::epaint::WHITE_UV,
+                        color: color_light,
+                    });
+                    combined_mesh.vertices.push(eframe::egui::epaint::Vertex {
+                        pos: render_rect.right_top(),
+                        uv: eframe::egui::epaint::WHITE_UV,
+                        color: fill_color,
+                    });
+                    combined_mesh.vertices.push(eframe::egui::epaint::Vertex {
+                        pos: render_rect.right_bottom(),
+                        uv: eframe::egui::epaint::WHITE_UV,
+                        color: color_dark,
+                    });
+                    combined_mesh.vertices.push(eframe::egui::epaint::Vertex {
+                        pos: render_rect.left_bottom(),
+                        uv: eframe::egui::epaint::WHITE_UV,
+                        color: fill_color,
+                    });
+
+                    combined_mesh.add_triangle(
+                        base_vertex_idx,
+                        base_vertex_idx + 1,
+                        base_vertex_idx + 2,
+                    );
+                    combined_mesh.add_triangle(
+                        base_vertex_idx,
+                        base_vertex_idx + 2,
+                        base_vertex_idx + 3,
+                    );
+                }
+                TreemapStyle::Cushion => {
+                    let center = pos2(
+                        render_rect.width().mul_add(0.4, render_rect.left()),
+                        render_rect.height().mul_add(0.4, render_rect.top()),
+                    );
+
+                    combined_mesh.vertices.push(eframe::egui::epaint::Vertex {
+                        pos: render_rect.left_top(),
+                        uv: eframe::egui::epaint::WHITE_UV,
+                        color: color_dark,
+                    });
+                    combined_mesh.vertices.push(eframe::egui::epaint::Vertex {
+                        pos: render_rect.right_top(),
+                        uv: eframe::egui::epaint::WHITE_UV,
+                        color: color_dark,
+                    });
+                    combined_mesh.vertices.push(eframe::egui::epaint::Vertex {
+                        pos: render_rect.right_bottom(),
+                        uv: eframe::egui::epaint::WHITE_UV,
+                        color: color_dark,
+                    });
+                    combined_mesh.vertices.push(eframe::egui::epaint::Vertex {
+                        pos: render_rect.left_bottom(),
+                        uv: eframe::egui::epaint::WHITE_UV,
+                        color: color_dark,
+                    });
+                    combined_mesh.vertices.push(eframe::egui::epaint::Vertex {
+                        pos: center,
+                        uv: eframe::egui::epaint::WHITE_UV,
+                        color: color_light,
+                    });
+
+                    combined_mesh.add_triangle(
+                        base_vertex_idx,
+                        base_vertex_idx + 1,
+                        base_vertex_idx + 4,
+                    );
+                    combined_mesh.add_triangle(
+                        base_vertex_idx + 1,
+                        base_vertex_idx + 2,
+                        base_vertex_idx + 4,
+                    );
+                    combined_mesh.add_triangle(
+                        base_vertex_idx + 2,
+                        base_vertex_idx + 3,
+                        base_vertex_idx + 4,
+                    );
+                    combined_mesh.add_triangle(
+                        base_vertex_idx + 3,
+                        base_vertex_idx,
+                        base_vertex_idx + 4,
+                    );
+                }
+            }
         }
 
         painter.add(combined_mesh);
