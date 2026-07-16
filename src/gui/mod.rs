@@ -292,7 +292,9 @@ impl GuiApp {
             delete_confirm_checked: false,
             delete_node_idx: None,
             active_modal,
-            scan_path_input: String::new(),
+            scan_path_input: std::env::current_dir()
+                .map(|p| p.to_string_lossy().into_owned())
+                .unwrap_or_default(),
             paste_requested: 0,
             show_licenses: false,
             current_scan_path: None,
@@ -1368,7 +1370,9 @@ impl eframe::App for GuiApp {
                     if let Some(ref path) = self.current_scan_path {
                         self.scan_path_input = path.to_string_lossy().into_owned();
                     } else {
-                        self.scan_path_input.clear();
+                        self.scan_path_input = std::env::current_dir()
+                            .map(|p| p.to_string_lossy().into_owned())
+                            .unwrap_or_default();
                     }
                 }
 
