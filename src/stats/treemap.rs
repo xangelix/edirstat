@@ -106,6 +106,15 @@ pub fn get_selection_roots<S: ::std::hash::BuildHasher + Default>(
     roots
 }
 
+fn scale_rgb(color: Color32, factor: f32) -> Color32 {
+    Color32::from_rgba_premultiplied(
+        (color.r() as f32 * factor).clamp(0.0, 255.0) as u8,
+        (color.g() as f32 * factor).clamp(0.0, 255.0) as u8,
+        (color.b() as f32 * factor).clamp(0.0, 255.0) as u8,
+        color.a(),
+    )
+}
+
 impl StatComponent for TreemapChart {
     fn render(
         &mut self,
@@ -150,6 +159,7 @@ impl StatComponent for TreemapChart {
         }
 
         let painter = ui.painter_at(rect);
+        painter.rect_filled(rect, 0.0, eframe::egui::Color32::BLACK);
         let mut hovered_block = None;
         let hover_pos = response.hover_pos();
 
@@ -212,8 +222,8 @@ impl StatComponent for TreemapChart {
             }
 
             let fill_color = block.color;
-            let color_light = fill_color.gamma_multiply(1.15);
-            let color_dark = fill_color.gamma_multiply(0.75);
+            let color_light = scale_rgb(fill_color, 1.15);
+            let color_dark = scale_rgb(fill_color, 0.75);
 
             let base_vertex_idx = combined_mesh.vertices.len() as u32;
 
@@ -253,8 +263,8 @@ impl StatComponent for TreemapChart {
                 }
                 TreemapStyle::OffsetVerticalGradient => {
                     let left_light = color_light;
-                    let right_light = color_light.linear_multiply(0.92);
-                    let left_dark = color_dark.linear_multiply(1.08);
+                    let right_light = scale_rgb(color_light, 0.92);
+                    let left_dark = scale_rgb(color_dark, 1.08);
                     let right_dark = color_dark;
 
                     combined_mesh.vertices.push(eframe::egui::epaint::Vertex {
@@ -590,10 +600,10 @@ fn recurse_child(
         || child_rect.height() < MIN_PIXEL_DIM;
 
     if is_leaf_or_too_small {
+        let name = config.string_pool.get(child.name_id).unwrap_or("");
         let color = if child.is_directory() {
-            colors::get_treemap_dir_fallback()
+            colors::get_treemap_dir_color(name)
         } else {
-            let name = config.string_pool.get(child.name_id).unwrap_or("");
             let ext = crate::arena::get_ext_slice(name);
             colors::get_color_for_extension(ext)
         };
@@ -650,10 +660,10 @@ fn build_treemap(
     }
 
     if !node.is_directory() || depth >= config.max_depth {
+        let name = config.string_pool.get(node.name_id).unwrap_or("");
         let color = if node.is_directory() {
-            colors::get_treemap_dir_fallback()
+            colors::get_treemap_dir_color(name)
         } else {
-            let name = config.string_pool.get(node.name_id).unwrap_or("");
             let ext = crate::arena::get_ext_slice(name);
             colors::get_color_for_extension(ext)
         };
@@ -679,7 +689,8 @@ fn build_treemap(
     }
 
     if children.is_empty() {
-        let color = colors::get_treemap_dir_fallback();
+        let name = config.string_pool.get(node.name_id).unwrap_or("");
+        let color = colors::get_treemap_dir_color(name);
         blocks.push(TreemapBlock {
             rect,
             node_idx,
@@ -694,7 +705,8 @@ fn build_treemap(
     let avg_area_per_child = area / children.len() as f64;
 
     if avg_area_per_child < MIN_AVG_CHILD_AREA {
-        let color = colors::get_treemap_dir_fallback();
+        let name = config.string_pool.get(node.name_id).unwrap_or("");
+        let color = colors::get_treemap_dir_color(name);
         blocks.push(TreemapBlock {
             rect,
             node_idx,

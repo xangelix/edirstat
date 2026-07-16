@@ -11,7 +11,7 @@ pub const COLOR_SCAN_COMPLETE: Color32 = Color32::from_rgb(34, 197, 94); // Gree
 // Treemap Highlight Overlays
 pub const GLOW_OUTER_BASE: Color32 = Color32::from_rgb(246, 92, 92); // Gentle red
 pub const GLOW_INNER_CORE: Color32 = Color32::from_rgb(253, 181, 181); // Even lighter red
-pub const TREEMAP_DIR_FALLBACK: Color32 = Color32::from_gray(100);
+pub const TREEMAP_DIR_FALLBACK: Color32 = Color32::from_rgb(97, 78, 56); // Warm wood brown fallback
 pub const TREEMAP_BORDER_COLOR: Color32 = Color32::from_rgb(22, 24, 28);
 
 // Deletion Modal
@@ -43,7 +43,7 @@ pub const EXT_COMPRESSED: Color32 = Color32::from_rgb(236, 72, 153); // Compress
 pub const EXT_AUDIO: Color32 = Color32::from_rgb(14, 165, 233); // Audio sky-blue
 pub const EXT_VIDEO: Color32 = Color32::from_rgb(20, 184, 166); // Video teal
 pub const EXT_IMAGE: Color32 = Color32::from_rgb(244, 63, 94); // Image rose
-pub const EXT_NONE: Color32 = Color32::from_rgb(75, 85, 99); // Muted dark gray
+pub const EXT_NONE: Color32 = Color32::from_rgb(103, 114, 157); // Slate-lavender (no extension)
 
 // Bright blue button styling (for select items button)
 pub const BUTTON_BLUE: Color32 = Color32::from_rgb(59, 130, 246); // Toml blue / bright blue
@@ -252,11 +252,48 @@ pub fn get_button_orange_hover() -> Color32 {
 }
 
 #[must_use]
-pub fn get_treemap_dir_fallback() -> Color32 {
+pub fn get_treemap_dir_color(name: &str) -> Color32 {
     match get_current_theme() {
-        AppTheme::Dark => TREEMAP_DIR_FALLBACK,
-        AppTheme::HighContrast => Color32::from_gray(150),
-        AppTheme::Light => Color32::from_gray(180),
+        AppTheme::HighContrast => Color32::from_gray(120),
+        AppTheme::Dark => {
+            // Hash the directory name to get a stable color in a warm folder-like palette (amber/yellow/orange/brown)
+            let mut hash: u32 = 5381;
+            for b in name.bytes() {
+                hash = ((hash << 5).wrapping_add(hash)).wrapping_add(b as u32);
+            }
+            // Hue mapped to warm folder/earthy colors (approx 25 to 50 degrees)
+            // 25 / 360 = 0.069, 50 / 360 = 0.139
+            let hue_min = 0.07_f32;
+            let hue_max = 0.14_f32;
+            let hue = hue_min + (hash % 1000) as f32 / 1000.0 * (hue_max - hue_min);
+
+            // Saturation ~ 35% (warm, earthy, subtle)
+            // Lightness/Value ~ 26% (subtle dark mahogany tone that acts as background)
+            let color = egui::epaint::Hsva::new(hue, 0.35, 0.26, 1.0);
+            Color32::from(color)
+        }
+        AppTheme::Light => {
+            let mut hash: u32 = 5381;
+            for b in name.bytes() {
+                hash = ((hash << 5).wrapping_add(hash)).wrapping_add(b as u32);
+            }
+            let hue_min = 0.07_f32;
+            let hue_max = 0.14_f32;
+            let hue = hue_min + (hash % 1000) as f32 / 1000.0 * (hue_max - hue_min);
+
+            // Rich camel brown with strong contrast against light background
+            let color = egui::epaint::Hsva::new(hue, 0.48, 0.48, 1.0);
+            Color32::from(color)
+        }
+    }
+}
+
+#[must_use]
+pub fn get_ext_none_color() -> Color32 {
+    match get_current_theme() {
+        AppTheme::Dark => Color32::from_rgb(80, 90, 125), // Muted slate-lavender
+        AppTheme::HighContrast => Color32::from_gray(180),
+        AppTheme::Light => Color32::from_rgb(70, 80, 115), // Darker slate-lavender for strong contrast
     }
 }
 
@@ -286,7 +323,7 @@ pub fn get_color_for_extension(ext: &str) -> egui::Color32 {
         "zip" | "tar" | "gz" => EXT_COMPRESSED,
         "mp3" | "wav" | "flac" => EXT_AUDIO,
         "mp4" | "mkv" | "avi" => EXT_VIDEO,
-        crate::arena::NO_EXTENSION => EXT_NONE,
+        crate::arena::NO_EXTENSION => get_ext_none_color(),
         _ => {
             // Retrieve color from cache, or compute and insert if absent
             COLOR_CACHE.with(|cache| {
