@@ -265,7 +265,8 @@ pub fn get_treemap_dir_color(name: &str) -> Color32 {
             // 25 / 360 = 0.069, 50 / 360 = 0.139
             let hue_min = 0.07_f32;
             let hue_max = 0.14_f32;
-            let hue = hue_min + (hash % 1000) as f32 / 1000.0 * (hue_max - hue_min);
+            #[allow(clippy::cast_precision_loss)]
+            let hue = ((hash % 1000) as f32 / 1000.0).mul_add(hue_max - hue_min, hue_min);
 
             // Saturation ~ 35% (warm, earthy, subtle)
             // Lightness/Value ~ 26% (subtle dark mahogany tone that acts as background)
@@ -279,7 +280,8 @@ pub fn get_treemap_dir_color(name: &str) -> Color32 {
             }
             let hue_min = 0.07_f32;
             let hue_max = 0.14_f32;
-            let hue = hue_min + (hash % 1000) as f32 / 1000.0 * (hue_max - hue_min);
+            #[allow(clippy::cast_precision_loss)]
+            let hue = ((hash % 1000) as f32 / 1000.0).mul_add(hue_max - hue_min, hue_min);
 
             // Rich camel brown with strong contrast against light background
             let color = egui::epaint::Hsva::new(hue, 0.48, 0.48, 1.0);
@@ -356,9 +358,8 @@ pub fn setup_custom_style(ctx: &egui::Context, theme_pref: ThemePreference) {
     let resolved_theme = match theme_pref {
         ThemePreference::System => {
             match ctx.system_theme() {
-                Some(egui::Theme::Dark) => AppTheme::Dark,
                 Some(egui::Theme::Light) => AppTheme::Light,
-                None => AppTheme::Dark, // Fallback to Dark if system theme is not queryable
+                Some(egui::Theme::Dark) | None => AppTheme::Dark, // Fallback to Dark if system theme is not queryable
             }
         }
         ThemePreference::Dark => AppTheme::Dark,
