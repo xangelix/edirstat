@@ -6,7 +6,7 @@ This page lists the licenses of the projects used in eDirStat.
 
 ## Overview of licenses
 
-* [Apache License 2.0](https://spdx.org/licenses/Apache-2.0.html) (251)
+* [Apache License 2.0](https://spdx.org/licenses/Apache-2.0.html) (252)
 * [MIT License](https://spdx.org/licenses/MIT.html) (70)
 * [Unicode License v3](https://spdx.org/licenses/Unicode-3.0.html) (19)
 * [ISC License](https://spdx.org/licenses/ISC.html) (5)
@@ -7192,6 +7192,7 @@ limitations under the License.
 * [serde_derive](https://github.com/serde-rs/serde)
 * [siphasher](https://github.com/jedisct1/rust-siphash)
 * [spirv](https://github.com/gfx-rs/rspirv)
+* [syn](https://github.com/dtolnay/syn)
 * [syn](https://github.com/dtolnay/syn)
 * [sync_wrapper](https://github.com/Actyx/sync_wrapper)
 * [thiserror-impl](https://github.com/dtolnay/thiserror)

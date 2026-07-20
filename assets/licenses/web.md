@@ -6,8 +6,8 @@ This page lists the licenses of the projects used in eDirStat.
 
 ## Overview of licenses
 
-* [Apache License 2.0](https://spdx.org/licenses/Apache-2.0.html) (156)
-* [MIT License](https://spdx.org/licenses/MIT.html) (38)
+* [Apache License 2.0](https://spdx.org/licenses/Apache-2.0.html) (159)
+* [MIT License](https://spdx.org/licenses/MIT.html) (40)
 * [BSD 3-Clause &quot;New&quot; or &quot;Revised&quot; License](https://spdx.org/licenses/BSD-3-Clause.html) (2)
 * [Unicode License v3](https://spdx.org/licenses/Unicode-3.0.html) (2)
 * [zlib License](https://spdx.org/licenses/Zlib.html) (2)
@@ -1939,6 +1939,7 @@ This page lists the licenses of the projects used in eDirStat.
 * [serde_spanned](https://github.com/toml-rs/toml)
 * [toml](https://github.com/toml-rs/toml)
 * [toml_datetime](https://github.com/toml-rs/toml)
+* [toml_edit](https://github.com/toml-rs/toml)
 * [toml_parser](https://github.com/toml-rs/toml)
 * [toml_writer](https://github.com/toml-rs/toml)
 
@@ -3271,6 +3272,7 @@ limitations under the License.
 ### Apache License 2.0
 **Used by:**
 * [adler2](https://github.com/oyvindln/adler2)
+* [proc-macro-crate](https://github.com/bkchr/proc-macro-crate)
 
 ```text
                               Apache License
@@ -4092,6 +4094,7 @@ limitations under the License.
 * [serde_core](https://github.com/serde-rs/serde)
 * [serde_derive](https://github.com/serde-rs/serde)
 * [siphasher](https://github.com/jedisct1/rust-siphash)
+* [syn](https://github.com/dtolnay/syn)
 * [syn](https://github.com/dtolnay/syn)
 * [thiserror-impl](https://github.com/dtolnay/thiserror)
 * [thiserror](https://github.com/dtolnay/thiserror)
@@ -5056,6 +5059,8 @@ SOFTWARE.
 * [egui-table-kit](https://github.com/xangelix/egui-table-kit)
 * [fluent-zero](https://github.com/xangelix/fluent-zero)
 * [harfrust](https://github.com/harfbuzz/harfrust)
+* [include_packed](https://github.com/xangelix/include_packed)
+* [include_packed_macros](https://github.com/xangelix/include_packed)
 * [libm](https://github.com/rust-lang/compiler-builtins)
 * [prettier-bytes](https://github.com/Xangelix/prettier-bytes)
 

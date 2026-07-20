@@ -35,8 +35,8 @@ edirstat-core = { path = "../edirstat-core" }
 edirstat-gui = { path = "../edirstat-gui", default-features = false }
 
 ahash = "0.8.12"
-anyhow = "1.0.103"
-bytemuck = { version = "1.25.1", features = ["derive"] }
+anyhow = "1.0.104"
+bytemuck = { version = "1.25.2", features = ["derive"] }
 clap = { version = "4.6.2", features = ["derive"] }
 cli-or-gui = "0.1.1"
 compact_str = "0.10.0"

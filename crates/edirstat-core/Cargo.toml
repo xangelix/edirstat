@@ -13,11 +13,11 @@ ignored = ["getrandom"]
 [dependencies]
 ahash = "0.8.12"
 arc-swap = "1.9.2"
-bytemuck = { version = "1.25.1", features = ["derive"] }
+bytemuck = { version = "1.25.2", features = ["derive"] }
 chrono = "0.4.45"
 compact_str = "0.10.0"
-serde = { version = "1.0.228", features = ["derive"] }
-thiserror = "2.0.18"
+serde = { version = "1.0.229", features = ["derive"] }
+thiserror = "2.0.19"
 xgx_intern = "0.6.4"
 zstd = "0.13.3"
 
