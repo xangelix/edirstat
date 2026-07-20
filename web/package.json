@@ -1,6 +1,6 @@
 {
   "name": "edirstat-web",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "eDirStat Static Landing Page",
   "main": "index.js",
   "scripts": {

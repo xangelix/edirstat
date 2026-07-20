@@ -7,5 +7,5 @@ output_dir = "public"
 [extra]
 itch_io_url = "https://xangelix.itch.io/edirstat"
 github_url = "https://github.com/xangelix/edirstat"
-version = "2.0.0"
+version = "2.0.1"
 license = "MIT"

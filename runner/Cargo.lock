@@ -34,7 +34,7 @@ checksum = "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801"
 
 [[package]]
 name = "edirstat-runner"
-version = "1.1.0"
+version = "2.0.1"
 dependencies = [
  "multivers-runner",
  "winresource",
