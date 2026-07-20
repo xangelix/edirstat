@@ -273,10 +273,8 @@ impl GuiApp {
         {
             *GLOBAL_COMMAND_TX.lock() = Some(command_tx.clone());
             if let Some((name, bytes)) = PENDING_SNAPSHOT.lock().take() {
-                let _ = command_tx.send(crate::gui::operations::AppCommand::LoadSnapshotBytes {
-                    name,
-                    bytes,
-                });
+                let _ = command_tx
+                    .send(crate::gui::operations::AppCommand::LoadSnapshotBytes { name, bytes });
             }
         }
 
@@ -2397,7 +2395,8 @@ static GLOBAL_COMMAND_TX: parking_lot::Mutex<
 > = parking_lot::Mutex::new(None);
 
 #[cfg(target_family = "wasm")]
-static PENDING_SNAPSHOT: parking_lot::Mutex<Option<(String, Vec<u8>)>> = parking_lot::Mutex::new(None);
+static PENDING_SNAPSHOT: parking_lot::Mutex<Option<(String, Vec<u8>)>> =
+    parking_lot::Mutex::new(None);
 
 #[cfg(target_family = "wasm")]
 #[wasm_bindgen::prelude::wasm_bindgen]
