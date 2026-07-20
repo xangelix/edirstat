@@ -31,6 +31,8 @@ pub struct SharedState {
     pub current_snapshot: ArcSwap<FileArenaSnapshot>,
     /// Indicates whether the scanner is actively running
     pub is_scanning: Arc<AtomicBool>,
+    /// Indicates whether a cancellation request has been triggered
+    pub scan_cancel: Arc<AtomicBool>,
     /// Background-computed live extension statistics (ext, `total_size`, `file_count`)
     pub extension_stats: ArcSwap<Vec<(CompactString, u64, u32)>>,
     /// Live scan progress counters (files/dirs/bytes scanned)
@@ -54,6 +56,7 @@ impl SharedState {
         Self {
             current_snapshot: ArcSwap::new(Arc::new(initial_snapshot)),
             is_scanning: Arc::new(AtomicBool::new(false)),
+            scan_cancel: Arc::new(AtomicBool::new(false)),
             extension_stats: ArcSwap::new(Arc::new(Vec::new())),
             scan_stats: TraversalStats::default(),
         }

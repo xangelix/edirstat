@@ -31,10 +31,12 @@ impl ScanController for EngineScanController {
         let (tx, rx) = crossbeam::channel::unbounded();
 
         // Launch Traversal Engine in background
-        match self
-            .traversal_engine
-            .start_traversal(path.clone(), same_filesystem, tx)
-        {
+        match self.traversal_engine.start_traversal(
+            path.clone(),
+            same_filesystem,
+            self.shared_state.scan_cancel.clone(),
+            tx,
+        ) {
             Ok(_) => {
                 // Launch Coordinator in background
                 let mut coordinator = Coordinator::new(rx, self.shared_state.clone());

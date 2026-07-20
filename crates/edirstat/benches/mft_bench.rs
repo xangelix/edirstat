@@ -39,8 +39,10 @@ fn bench_mft_parsing(c: &mut Criterion) {
                 bytes_scanned: Arc::new(AtomicUsize::new(0)),
             };
 
+            let cancel_token = Arc::new(std::sync::atomic::AtomicBool::new(false));
+
             // Run the MFT parser
-            let result = try_scan_mft(mft_path, &tx, &stats);
+            let result = try_scan_mft(mft_path, &cancel_token, &tx, &stats);
             assert!(result.is_ok(), "MFT parsing failed: {:?}", result.err());
 
             // Signal the background drain thread to stop by dropping the sender

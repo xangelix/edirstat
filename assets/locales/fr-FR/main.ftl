@@ -56,6 +56,7 @@ about = ℹ À propos
 # Status Indicators
 scanning-disk = Analyse du disque...
 scan-complete = Analyse terminée
+scan-cancelled = Analyse annulée
 path-label = Chemin: { $path }
 worker-threads = ⚡ { $count } Threads de travail
 worker-threads-hover = Le nombre de cœurs de processeur parallèles de vol de travail (work-stealing) alloués à l'exploration des répertoires.
@@ -120,6 +121,7 @@ dedup-warning-desc = { $count ->
 dedup-warning-no-original = Aucune copie originale ne subsistera:
 dedup-warning-details = Vous avez coché l'original ainsi que toutes les copies de doublons pour les fichiers énumérés ci-dessous. Les supprimer entraînera probablement une perte définitive de données:
 dedup-cancel-hover = Cliquer pour annuler l'analyse
+scan-cancel-hover = Cliquer pour annuler l'analyse
 dedup-current-label = Actuel
 dedup-phase1-size = Phase 1/7: Regroupement de tous les fichiers par taille...
 dedup-phase1-filter = Phase 1/7: Filtrage des exclusions sur les candidats doublons...

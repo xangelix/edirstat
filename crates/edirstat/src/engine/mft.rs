@@ -2,7 +2,10 @@ use std::{
     fs::{File, OpenOptions},
     io::{Read, Seek, SeekFrom},
     path::{Path, PathBuf},
-    sync::{Arc, atomic::Ordering},
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
 };
 
 use compact_str::CompactString;
@@ -631,6 +634,7 @@ fn process_mft_chunks(
     empty_tx: &crossbeam::channel::Sender<Vec<AlignedPage>>,
     max_records: u64,
     search_root_path: &Path,
+    scan_cancel: &Arc<AtomicBool>,
     event_tx: &Sender<Vec<ScanEvent>>,
     stats: &TraversalStats,
 ) {
@@ -648,6 +652,9 @@ fn process_mft_chunks(
         let mut current_pos = 0;
 
         while let Ok(chunk) = filled_rx.recv() {
+            if scan_cancel.load(Ordering::Relaxed) {
+                break;
+            }
             let records_count = chunk.bytes_read / MFT_RECORD_SIZE;
             let start_idx = chunk.start_record_id as usize;
 
@@ -844,6 +851,9 @@ fn process_mft_chunks(
     let mut local_bytes = 0u64;
 
     while let Some(frame) = stack.pop() {
+        if scan_cancel.load(Ordering::Relaxed) {
+            break;
+        }
         let mut child_record = first_child[frame.record_id as usize];
         while child_record != crate::arena::NO_INDEX {
             let child_record_idx = child_record as usize;
@@ -987,6 +997,7 @@ fn process_mft_chunks(
 /// Helper function to parse an exported, raw $MFT metadata file sequentially on any platform.
 fn scan_mft_file_sequential(
     file_path: &Path,
+    scan_cancel: &Arc<AtomicBool>,
     event_tx: &Sender<Vec<ScanEvent>>,
     stats: &TraversalStats,
 ) -> Result<(), crate::EdirstatError> {
@@ -1012,10 +1023,14 @@ fn scan_mft_file_sequential(
         let _ = empty_tx.send(vec![AlignedPage { data: [0; 4096] }; pages_per_chunk]);
     }
 
+    let scan_cancel_clone = scan_cancel.clone();
     std::thread::spawn(move || {
         let mut record_id_counter = 0u64;
 
         while let Ok(mut chunk_buffer) = empty_rx.recv() {
+            if scan_cancel_clone.load(Ordering::Relaxed) {
+                break;
+            }
             let active_bytes: &mut [u8] = bytemuck::cast_slice_mut(&mut chunk_buffer);
             match file_clone.read(active_bytes) {
                 Ok(n) if n > 0 => {
@@ -1039,6 +1054,7 @@ fn scan_mft_file_sequential(
         &empty_tx,
         max_records,
         file_path,
+        scan_cancel,
         event_tx,
         stats,
     );
@@ -1050,6 +1066,7 @@ fn scan_mft_file_sequential(
 /// Parses either the raw drive partition on Windows or a standalone MFT copy on any platform.
 pub fn try_scan_mft(
     root_path: &Path,
+    scan_cancel: &Arc<AtomicBool>,
     event_tx: &Sender<Vec<ScanEvent>>,
     stats: &TraversalStats,
 ) -> Result<(), crate::EdirstatError> {
@@ -1058,7 +1075,7 @@ pub fn try_scan_mft(
         .and_then(|s| s.to_str())
         .is_some_and(|s| s.eq_ignore_ascii_case("$mft"))
     {
-        return scan_mft_file_sequential(root_path, event_tx, stats);
+        return scan_mft_file_sequential(root_path, scan_cancel, event_tx, stats);
     }
 
     let volume_path = get_volume_path(root_path).ok_or_else(|| {
@@ -1206,6 +1223,7 @@ pub fn try_scan_mft(
 
     let raw_disk_clone = raw_disk.try_clone()?;
     let mft_runs_clone = mft_runs;
+    let scan_cancel_clone = scan_cancel.clone();
 
     // Spawns background thread to ingest disk sectors sequentially. On Windows,
     // this utilizes sector-aligned direct unbuffered hardware reads.
@@ -1222,6 +1240,9 @@ pub fn try_scan_mft(
                 let start_byte = lcn as u64 * cluster_size;
                 if raw_disk_clone.seek(SeekFrom::Start(start_byte)).is_ok() {
                     while bytes_left > 0 && current_record_id < max_records {
+                        if scan_cancel_clone.load(Ordering::Relaxed) {
+                            break;
+                        }
                         let actual_needed = (bytes_left as usize).min(CHUNK_SIZE);
 
                         // Windows Direct I/O Safeguard: Round up the read size
@@ -1270,6 +1291,7 @@ pub fn try_scan_mft(
         &empty_tx,
         max_records,
         root_path,
+        scan_cancel,
         event_tx,
         stats,
     );

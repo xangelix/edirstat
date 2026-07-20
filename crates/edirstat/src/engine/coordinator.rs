@@ -219,23 +219,38 @@ impl Coordinator {
             }
         }
 
-        // Final size propagation and metrics compilation upon loop exit
-        propagate_all_sizes_bottom_up(&mut arena);
+        let cancelled = self.shared_state.scan_cancel.load(Ordering::SeqCst);
+        if cancelled {
+            // Throw away all data. Store an empty snapshot!
+            let empty_snapshot = FileArenaSnapshot {
+                nodes: Arc::new(NodeStorage::Owned(Vec::new())),
+                string_pool: Arc::new(StringPool::new()),
+                dir_counts: Arc::new(Vec::new()),
+            };
+            self.shared_state.store_snapshot(empty_snapshot);
+            self.shared_state
+                .extension_stats
+                .store(Arc::new(Vec::new()));
+            self.shared_state.scan_stats.reset();
+        } else {
+            // Final size propagation and metrics compilation upon loop exit
+            propagate_all_sizes_bottom_up(&mut arena);
 
-        let dir_counts = Arc::new(precompute_dir_counts(&arena));
-        let snapshot = FileArenaSnapshot {
-            nodes: Arc::new(NodeStorage::Owned(arena)),
-            string_pool: Arc::new(string_pool),
-            dir_counts,
-        };
-        self.shared_state.store_snapshot(snapshot);
+            let dir_counts = Arc::new(precompute_dir_counts(&arena));
+            let snapshot = FileArenaSnapshot {
+                nodes: Arc::new(NodeStorage::Owned(arena)),
+                string_pool: Arc::new(string_pool),
+                dir_counts,
+            };
+            self.shared_state.store_snapshot(snapshot);
 
-        let mut stats_vec: Vec<(CompactString, u64, u32)> = ext_map
-            .into_iter()
-            .map(|(ext, (total_size, file_count))| (ext, total_size, file_count))
-            .collect();
-        stats_vec.sort_by_key(|b| std::cmp::Reverse(b.1));
-        self.shared_state.extension_stats.store(Arc::new(stats_vec));
+            let mut stats_vec: Vec<(CompactString, u64, u32)> = ext_map
+                .into_iter()
+                .map(|(ext, (total_size, file_count))| (ext, total_size, file_count))
+                .collect();
+            stats_vec.sort_by_key(|b| std::cmp::Reverse(b.1));
+            self.shared_state.extension_stats.store(Arc::new(stats_vec));
+        }
 
         self.shared_state.is_scanning.store(false, Ordering::SeqCst);
     }

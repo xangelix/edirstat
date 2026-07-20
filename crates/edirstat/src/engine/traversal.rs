@@ -89,6 +89,7 @@ impl TraversalEngine {
         &self,
         root_path: PathBuf,
         same_filesystem: bool,
+        scan_cancel: Arc<AtomicBool>,
         event_tx: Sender<Vec<ScanEvent>>,
     ) -> Result<thread::JoinHandle<()>, crate::EdirstatError> {
         let num_threads = self.num_threads;
@@ -102,7 +103,8 @@ impl TraversalEngine {
                 .is_some_and(|s| s.eq_ignore_ascii_case("$mft"));
 
             if is_mft_file {
-                match super::mft::try_scan_mft(&root_path, &event_tx, &stats) {
+                match super::mft::try_scan_mft(&root_path, &scan_cancel.clone(), &event_tx, &stats)
+                {
                     Ok(()) => return,
                     Err(_) => {
                         stats.reset();
@@ -116,7 +118,12 @@ impl TraversalEngine {
                 if let Some(fs_type) = super::mft::get_fs_type(&root_path)
                     && fs_type.eq_ignore_ascii_case("NTFS")
                 {
-                    match super::mft::try_scan_mft(&root_path, &event_tx, &stats) {
+                    match super::mft::try_scan_mft(
+                        &root_path,
+                        scan_cancel.clone(),
+                        &event_tx,
+                        &stats,
+                    ) {
                         Ok(()) => {
                             // Raw scan was executed successfully, end thread execution
                             return;
@@ -175,6 +182,7 @@ impl TraversalEngine {
                 let busy_workers = busy_workers.clone();
                 let done = done.clone();
                 let event_tx = event_tx.clone();
+                let scan_cancel = scan_cancel.clone();
 
                 let stats = stats.clone();
 
@@ -197,6 +205,13 @@ impl TraversalEngine {
                         };
 
                     loop {
+                        if scan_cancel.load(Ordering::Relaxed) {
+                            done.store(true, Ordering::SeqCst);
+                        }
+                        if done.load(Ordering::SeqCst) {
+                            break;
+                        }
+
                         // Find a task
                         let task_opt = local_worker.pop().or_else(|| {
                             // Try stealing from the global injector
@@ -237,6 +252,7 @@ impl TraversalEngine {
                                 &event_tx,
                                 &local_worker,
                                 &stats,
+                                &scan_cancel,
                             );
 
                             // Decrement active busy counter
@@ -282,9 +298,13 @@ fn scan_directory<F>(
     event_tx: &Sender<Vec<ScanEvent>>,
     local_worker: &Worker<ScanTask>,
     stats: &TraversalStats,
+    scan_cancel: &Arc<AtomicBool>,
 ) where
     F: FnMut(ScanEvent, bool, &Sender<Vec<ScanEvent>>),
 {
+    if scan_cancel.load(Ordering::Relaxed) {
+        return;
+    }
     let dir_path = &task.path;
     let parent_local_id = task.parent_id;
 
@@ -307,7 +327,10 @@ fn scan_directory<F>(
 
     stats.dirs_scanned.fetch_add(1, Ordering::Relaxed);
 
-    for entry_res in entries {
+    for (entry_idx, entry_res) in entries.enumerate() {
+        if entry_idx % 256 == 0 && scan_cancel.load(Ordering::Relaxed) {
+            break;
+        }
         let Ok(entry) = entry_res else { continue };
 
         let Some(meta) = crate::arena::EntryMetadata::from_dir_entry(&entry) else {
@@ -461,7 +484,12 @@ mod tests {
         let (tx, rx) = crossbeam::channel::unbounded();
 
         // Launch traversal
-        let handle = engine.start_traversal(temp_dir.clone(), false, tx)?;
+        let handle = engine.start_traversal(
+            temp_dir.clone(),
+            false,
+            shared_state.scan_cancel.clone(),
+            tx,
+        )?;
 
         // Run coordinator in this thread (blocks until tx is dropped and all events processed)
         let mut coordinator = Coordinator::new(rx, shared_state.clone());
@@ -526,7 +554,12 @@ mod tests {
         let (tx, rx) = crossbeam::channel::unbounded();
 
         // Launch traversal
-        let handle = engine.start_traversal(temp_dir.clone(), false, tx)?;
+        let handle = engine.start_traversal(
+            temp_dir.clone(),
+            false,
+            shared_state.scan_cancel.clone(),
+            tx,
+        )?;
 
         // Run coordinator
         let mut coordinator = Coordinator::new(rx, shared_state.clone());
@@ -578,7 +611,8 @@ mod tests {
         let (tx, rx) = crossbeam::channel::unbounded();
 
         // Launch traversal with same_filesystem = true
-        let handle = engine.start_traversal(temp_dir.clone(), true, tx)?;
+        let handle =
+            engine.start_traversal(temp_dir.clone(), true, shared_state.scan_cancel.clone(), tx)?;
 
         let mut coordinator = Coordinator::new(rx, shared_state);
         coordinator.run_coordinator_loop(&temp_dir.to_string_lossy());

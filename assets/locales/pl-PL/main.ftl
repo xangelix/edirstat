@@ -56,6 +56,7 @@ about = ℹ O programie eDirStat
 # Status Indicators
 scanning-disk = Skanowanie dysku...
 scan-complete = Skanowanie ukończone
+scan-cancelled = Skanowanie anulowane
 path-label = Ścieżka: { $path }
 worker-threads = ⚡ { $count } Wątki robocze
 worker-threads-hover = Liczba równoległych rdzeni procesora (work-stealing) przypisanych do przeszukiwania katalogów.
@@ -121,6 +122,7 @@ dedup-warning-desc = { $count ->
 dedup-warning-no-original = Żadna oryginalna kopia nie pozostanie:
 dedup-warning-details = Zaznaczono oryginał oraz wszystkie kopie duplikatów dla poniższych plików. Ich usunięcie doprowadzi do trwałej utraty danych:
 dedup-cancel-hover = Kliknij, aby anulować skanowanie
+scan-cancel-hover = Kliknij, aby anulować skanowanie
 dedup-current-label = Bieżący
 dedup-phase1-size = Faza 1/7: Grupowanie wszystkich plików według rozmiaru...
 dedup-phase1-filter = Faza 1/7: Filtrowanie wykluczeń z kandydatów na duplikaty...

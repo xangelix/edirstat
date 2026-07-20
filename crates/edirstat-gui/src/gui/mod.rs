@@ -445,6 +445,7 @@ impl GuiApp {
             path = abs_path;
         }
 
+        self.shared_state.scan_cancel.store(false, Ordering::SeqCst);
         self.reset_state();
 
         // Select the root row by default
@@ -1200,8 +1201,13 @@ impl eframe::App for GuiApp {
         // captured near the top of the frame
         let is_scanning_now = self.shared_state.is_scanning.load(Ordering::SeqCst);
         if !is_scanning_now && let Some(start) = self.scan_start_time {
-            self.total_scan_duration = Some(start.elapsed());
-            self.scan_start_time = None;
+            let cancelled = self.shared_state.scan_cancel.load(Ordering::SeqCst);
+            if cancelled {
+                self.reset_state();
+            } else {
+                self.total_scan_duration = Some(start.elapsed());
+                self.scan_start_time = None;
+            }
         }
 
         // Repaint during scan to show live progress, or continuously while selected to drive the glow animation
@@ -1491,10 +1497,47 @@ impl eframe::App for GuiApp {
 
                 // Live status display
                 if is_scanning {
-                    ui.spinner();
+                    let spinner_size = 18.0;
+                    let (rect, mut response) = ui.allocate_exact_size(
+                        egui::vec2(spinner_size, spinner_size),
+                        egui::Sense::click(),
+                    );
+
+                    if response.hovered() {
+                        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                        response = response.on_hover_text(t!("scan-cancel-hover"));
+
+                        let stroke = egui::Stroke::new(2.0f32, crate::colors::WARNING_RED);
+                        let inset = 4.0;
+                        ui.painter().line_segment(
+                            [
+                                rect.left_top() + egui::vec2(inset, inset),
+                                rect.right_bottom() - egui::vec2(inset, inset),
+                            ],
+                            stroke,
+                        );
+                        ui.painter().line_segment(
+                            [
+                                rect.right_top() + egui::vec2(-inset, inset),
+                                rect.left_bottom() - egui::vec2(-inset, inset),
+                            ],
+                            stroke,
+                        );
+
+                        if response.clicked() {
+                            self.shared_state.scan_cancel.store(true, Ordering::SeqCst);
+                        }
+                    } else {
+                        ui.put(rect, egui::Spinner::new().size(spinner_size));
+                    }
                     ui.colored_label(theme::get_color_scanning(), t!("scanning-disk"));
                 } else if self.current_scan_path.is_some() {
-                    ui.colored_label(theme::get_color_scan_complete(), t!("scan-complete"));
+                    let cancelled = self.shared_state.scan_cancel.load(Ordering::SeqCst);
+                    if cancelled {
+                        ui.colored_label(crate::colors::WARNING_RED, t!("scan-cancelled"));
+                    } else {
+                        ui.colored_label(theme::get_color_scan_complete(), t!("scan-complete"));
+                    }
                 } else {
                     ui.label(t!("idle"));
                 }

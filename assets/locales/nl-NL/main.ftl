@@ -56,6 +56,7 @@ about = ℹ Over eDirStat
 # Status Indicators
 scanning-disk = Schijf scannen...
 scan-complete = Scan voltooid
+scan-cancelled = Scan geannuleerd
 path-label = Pad: { $path }
 worker-threads = ⚡ { $count } Worker-threads
 worker-threads-hover = Het aantal parallelle, work-stealing CPU-kernen toegewezen voor het doorzoeken van de map.
@@ -120,6 +121,7 @@ dedup-warning-desc = { $count ->
 dedup-warning-no-original = Geen origineel exemplaar blijft over:
 dedup-warning-details = U heeft zowel het origineel als alle duplicaat-kopieën voor de hieronder vermelde bestanden geselecteerd. Het verwijderen ervan zal waarschijnlijk leiden tot permanent gegevensverlies:
 dedup-cancel-hover = Klik om de scan te annuleren
+scan-cancel-hover = Klik om de scan te annuleren
 dedup-current-label = Actueel
 dedup-phase1-size = Fase 1/7: Bestanden groeperen op grootte...
 dedup-phase1-filter = Fase 1/7: Uitsluitingen filteren voor duplicaat-kandidaten...

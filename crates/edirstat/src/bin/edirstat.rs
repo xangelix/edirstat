@@ -93,7 +93,12 @@ fn run_benchmark(
     let (tx, rx) = crossbeam::channel::unbounded();
 
     let start = std::time::Instant::now();
-    let handle = traversal_engine.start_traversal(path.clone(), same_filesystem, tx)?;
+    let handle = traversal_engine.start_traversal(
+        path.clone(),
+        same_filesystem,
+        shared_state.scan_cancel.clone(),
+        tx,
+    )?;
 
     let mut coordinator = edirstat::coordinator::Coordinator::new(rx, shared_state);
     coordinator.run_coordinator_loop(&path.to_string_lossy());
@@ -154,7 +159,12 @@ fn run_headless_scan_and_save(
     let traversal_engine = Arc::new(TraversalEngine::new(shared_state.scan_stats.clone()));
     let (tx, rx) = crossbeam::channel::unbounded();
 
-    let handle = traversal_engine.start_traversal(scan_path.clone(), same_filesystem, tx)?;
+    let handle = traversal_engine.start_traversal(
+        scan_path.clone(),
+        same_filesystem,
+        shared_state.scan_cancel.clone(),
+        tx,
+    )?;
 
     let mut coordinator = edirstat::coordinator::Coordinator::new(rx, shared_state.clone());
     coordinator.run_coordinator_loop(&scan_path.to_string_lossy());

@@ -56,6 +56,7 @@ about = ℹ About
 # Status Indicators
 scanning-disk = Scanning Disk...
 scan-complete = Scan Complete
+scan-cancelled = Scan Cancelled
 path-label = Path: { $path }
 worker-threads = ⚡ { $count } Worker Threads
 worker-threads-hover = The number of parallel, work-stealing CPU cores allocated for directory traversal.
@@ -120,6 +121,7 @@ dedup-warning-desc = { $count ->
 dedup-warning-no-original = No Original Copy Will Remain:
 dedup-warning-details = You have checked both the original and all duplicate copies for the files listed below. Deleting them will likely result in permanent data loss:
 dedup-cancel-hover = Click to Cancel Scan
+scan-cancel-hover = Click to Cancel Scan
 dedup-current-label = Current
 dedup-phase1-size = Phase 1/7: Grouping all scanned files by size...
 dedup-phase1-filter = Phase 1/7: Filtering exclusions on duplicate candidates...

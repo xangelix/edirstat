@@ -56,6 +56,7 @@ about = ℹ Über eDirStat
 # Status Indicators
 scanning-disk = Dateisystem wird gescannt...
 scan-complete = Scan abgeschlossen
+scan-cancelled = Scan abgebrochen
 path-label = Pfad: { $path }
 worker-threads = ⚡ { $count } Worker-Threads
 worker-threads-hover = Die Anzahl der parallelen CPU-Kerne für das Durchsuchen des Verzeichnisses (Work-Stealing).
@@ -120,6 +121,7 @@ dedup-warning-desc = { $count ->
 dedup-warning-no-original = Keine Originalkopie bleibt übrig:
 dedup-warning-details = Sie haben sowohl das Original als auch alle Duplikate der unten aufgeführten Dateien ausgewählt. Das Löschen führt wahrscheinlich zu dauerhaftem Datenverlust:
 dedup-cancel-hover = Klicken zum Abbrechen des Scans
+scan-cancel-hover = Klicken zum Abbrechen des Scans
 dedup-current-label = Aktuell
 dedup-phase1-size = Phase 1/7: Dateien nach Größe gruppieren...
 dedup-phase1-filter = Phase 1/7: Ausschlusskriterien filtern...
