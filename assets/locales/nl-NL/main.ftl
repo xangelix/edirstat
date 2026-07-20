@@ -69,7 +69,7 @@ scan-speed = ⚡ Snelheid: { $speed }/s
 
 # Selection Info
 selection-path = Selectie: { $path }
-selection-items = Selection: { $count ->
+selection-items = Selectie: { $count ->
     [one] 1 item
    *[other] { $count } items
 }
