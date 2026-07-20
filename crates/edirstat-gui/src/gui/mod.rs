@@ -269,6 +269,17 @@ impl GuiApp {
 
         let prefs = crate::preferences::load_preferences();
 
+        #[cfg(target_family = "wasm")]
+        {
+            *GLOBAL_COMMAND_TX.lock() = Some(command_tx.clone());
+            if let Some((name, bytes)) = PENDING_SNAPSHOT.lock().take() {
+                let _ = command_tx.send(crate::gui::operations::AppCommand::LoadSnapshotBytes {
+                    name,
+                    bytes,
+                });
+            }
+        }
+
         Self {
             shared_state,
             scanner,
@@ -2378,4 +2389,25 @@ pub fn toast_error(message: impl Into<egui::WidgetText>) {
 
 pub fn show_toasts(ctx: &egui::Context) {
     TOASTS.lock().show(ctx);
+}
+
+#[cfg(target_family = "wasm")]
+static GLOBAL_COMMAND_TX: parking_lot::Mutex<
+    Option<std::sync::mpsc::Sender<crate::gui::operations::AppCommand>>,
+> = parking_lot::Mutex::new(None);
+
+#[cfg(target_family = "wasm")]
+static PENDING_SNAPSHOT: parking_lot::Mutex<Option<(String, Vec<u8>)>> = parking_lot::Mutex::new(None);
+
+#[cfg(target_family = "wasm")]
+#[wasm_bindgen::prelude::wasm_bindgen]
+pub fn load_snapshot_from_js(bytes: &[u8], display_name: &str) {
+    if let Some(tx) = &*GLOBAL_COMMAND_TX.lock() {
+        let _ = tx.send(crate::gui::operations::AppCommand::LoadSnapshotBytes {
+            name: display_name.to_string(),
+            bytes: bytes.to_vec(),
+        });
+    } else {
+        *PENDING_SNAPSHOT.lock() = Some((display_name.to_string(), bytes.to_vec()));
+    }
 }

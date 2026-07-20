@@ -96,23 +96,39 @@ jobs:
   build-wasm:
     name: Build Web (wasm32)
     runs-on: ubuntu-latest
+    container:
+      image: registry.gitlab.com/xangelix-pub/containers/arch-rust-nightly-pin-common:latest
+      options: --user root
     needs: [test-linux, test-macos]
 
     steps:
       - name: Checkout Source Code
         uses: actions/checkout@v6
 
-      - name: Install Rust Toolchain
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: nightly-2026-06-15
-          targets: wasm32-unknown-unknown
-
       - name: Cache dependencies
         uses: swatinem/rust-cache@v2
 
-      - name: Compile web frontend
-        run: cargo build -p edirstat-gui --bin edirstat-web --target wasm32-unknown-unknown --release
+      - name: Install System Dependencies
+        run: |
+          pacman -Syu --noconfirm binaryen
+
+      - name: Add WebAssembly target
+        run: rustup target add wasm32-unknown-unknown
+
+      - name: Install wasm-bindgen-cli matching lockfile
+        run: |
+          cargo install wasm-bindgen-cli --version $(grep -A 1 'name = "wasm-bindgen"' Cargo.lock | grep version | cut -d '"' -f 2)
+
+      - name: Compile and package web frontend
+        run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
+          ./scripts/build_web.sh
+
+      - name: Upload Web Viewer Dist
+        uses: actions/upload-artifact@v7
+        with:
+          name: wasm-dist
+          path: crates/edirstat-gui/dist
 
   build-windows:
     name: Build & Package Windows (Inno Setup)
@@ -251,3 +267,52 @@ jobs:
         with:
           name: edirstat-macos-${{ matrix.target }}.zip
           path: edirstat-macos-${{ matrix.target }}.zip
+
+  deploy-web:
+    name: Deploy Web (Arch Container)
+    runs-on: ubuntu-latest
+    container:
+      image: registry.gitlab.com/xangelix-pub/containers/arch
+      options: --user root # How I wish this were GitLab
+    needs: [build-wasm]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    # Core permissions required for native GitHub Actions Pages deployments
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+
+    # Allow only one concurrent deployment
+    concurrency:
+      group: "pages"
+      cancel-in-progress: true
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v6
+
+      - name: Install System Dependencies
+        run: |
+          paru -Syu --noconfirm zola nodejs npm
+
+      - name: Download WASM Dist
+        uses: actions/download-artifact@v4
+        with:
+          name: wasm-dist
+          path: crates/edirstat-gui/dist
+
+      - name: Install Node Dependencies & Build Assets
+        run: |
+          cd web
+          npm ci
+          npm run build
+
+      - name: Upload Pages Artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: ./web/public
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

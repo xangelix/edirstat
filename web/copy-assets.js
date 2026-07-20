@@ -12,6 +12,10 @@ const targets = [
   {
     src: path.join(repoRoot, 'assets/img/logo-nosubtext-transparent.svg'),
     dest: path.join(projectRoot, 'static/assets/logo-nosubtext-transparent.svg')
+  },
+  {
+    src: path.join(repoRoot, 'assets/MGS3.edst.zst'),
+    dest: path.join(projectRoot, 'static/MGS3.edst.zst')
   }
 ];
 
@@ -20,6 +24,29 @@ for (const target of targets) {
   if (!fs.existsSync(destDir)) {
     fs.mkdirSync(destDir, { recursive: true });
   }
-  fs.copyFileSync(target.src, target.dest);
-  console.log(`Copied ${path.relative(repoRoot, target.src)} -> ${path.relative(projectRoot, target.dest)}`);
+  if (fs.existsSync(target.src)) {
+    fs.copyFileSync(target.src, target.dest);
+    console.log(`Copied ${path.relative(repoRoot, target.src)} -> ${path.relative(projectRoot, target.dest)}`);
+  }
+}
+
+function copyFolderSync(from, to) {
+  if (!fs.existsSync(from)) return;
+  fs.mkdirSync(to, { recursive: true });
+  fs.readdirSync(from).forEach(element => {
+    const stat = fs.lstatSync(path.join(from, element));
+    if (stat.isFile()) {
+      fs.copyFileSync(path.join(from, element), path.join(to, element));
+    } else if (stat.isDirectory()) {
+      copyFolderSync(path.join(from, element), path.join(to, element));
+    }
+  });
+}
+
+// Copy the Web Viewer build output
+const distPath = path.join(repoRoot, 'crates/edirstat-gui/dist');
+const destViewerPath = path.join(projectRoot, 'static/viewer');
+if (fs.existsSync(distPath)) {
+  copyFolderSync(distPath, destViewerPath);
+  console.log("Copied crates/edirstat-gui/dist -> static/viewer");
 }

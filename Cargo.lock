@@ -1359,6 +1359,7 @@ dependencies = [
  "tracy-client",
  "trash",
  "uzers",
+ "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
 ]

@@ -37,8 +37,59 @@
     <div id="loading_text">Loading eDirStat…</div>
     <!-- JS glue emitted by `wasm-bindgen --target web` (see scripts/build_web.sh) -->
     <script type="module">
-      import init from "./edirstat-web.js";
-      init();
+      import init, { load_snapshot_from_js } from "./edirstat-web.js";
+      init().then(async () => {
+        // 1. Get window search parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        let snapshotUrl = null;
+        if (urlParams.get("snapshot")) {
+          snapshotUrl = urlParams.get("snapshot");
+        } else if (urlParams.get("demo") === "true") {
+          snapshotUrl = "/MGS3.edst.zst";
+        }
+
+        // 2. Check session / local storage for url
+        if (!snapshotUrl) {
+          snapshotUrl = sessionStorage.getItem("edirstat_snapshot_url") || localStorage.getItem("edirstat_snapshot_url");
+        }
+
+        // 3. Try raw bytes from session / local storage (base64 encoded)
+        let snapshotBytes = null;
+        let snapshotName = "snapshot.edst.zst";
+        if (!snapshotUrl) {
+          const base64Bytes = sessionStorage.getItem("edirstat_snapshot_bytes") || localStorage.getItem("edirstat_snapshot_bytes");
+          if (base64Bytes) {
+            try {
+              const binaryString = atob(base64Bytes);
+              const len = binaryString.length;
+              const bytes = new Uint8Array(len);
+              for (let i = 0; i < len; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+              }
+              snapshotBytes = bytes;
+              snapshotName = "storage_snapshot.edst.zst";
+            } catch (e) {
+              console.error("Failed to decode base64 snapshot bytes:", e);
+            }
+          }
+        }
+
+        // 4. Load the snapshot if we found one
+        if (snapshotUrl) {
+          try {
+            const response = await fetch(snapshotUrl);
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            const arrayBuffer = await response.arrayBuffer();
+            const bytes = new Uint8Array(arrayBuffer);
+            const name = snapshotUrl.split('/').pop() || "snapshot.edst.zst";
+            load_snapshot_from_js(bytes, name);
+          } catch (e) {
+            console.error(`Failed to fetch default snapshot from URL ${snapshotUrl}:`, e);
+          }
+        } else if (snapshotBytes) {
+          load_snapshot_from_js(snapshotBytes, snapshotName);
+        }
+      });
     </script>
   </body>
 </html>
