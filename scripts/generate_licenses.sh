@@ -26,26 +26,29 @@ check_dependencies() {
 }
 
 main() {
+    # Ensure we run from the project root directory
+    cd "$(dirname "$0")/.."
+
     check_dependencies
 
-    # Target-specific markdown files
+    # Target-specific markdown files: target:manifest_path:output_file
     local targets=(
-        "x86_64-unknown-linux-gnu:assets/licenses/linux.md"
-        "x86_64-pc-windows-msvc:assets/licenses/windows.md"
-        "x86_64-apple-darwin:assets/licenses/macos.md"
+        "x86_64-unknown-linux-gnu:crates/edirstat/Cargo.toml:assets/licenses/linux.md"
+        "x86_64-pc-windows-msvc:crates/edirstat/Cargo.toml:assets/licenses/windows.md"
+        "x86_64-apple-darwin:crates/edirstat/Cargo.toml:assets/licenses/macos.md"
+        "wasm32-unknown-unknown:crates/edirstat-gui/Cargo.toml:assets/licenses/web.md"
     )
 
     # Ensure assets/licenses directory exists
     mkdir -p assets/licenses
 
     for entry in "${targets[@]}"; do
-        local target="${entry%%:*}"
-        local output_file="${entry##*:}"
+        IFS=":" read -r target manifest output_file <<< "$entry"
 
-        log_info "Generating licenses for target '$target' -> '$output_file'..."
+        log_info "Generating licenses for target '$target' using manifest '$manifest' -> '$output_file'..."
         
-        # We run cargo about generate with --target
         cargo about generate \
+            --manifest-path "$manifest" \
             --target "$target" \
             -o "$output_file" \
             licenses-md.hbs

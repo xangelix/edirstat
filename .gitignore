@@ -4,3 +4,4 @@
 /web/static
 /web/public
 /runner/target
+/crates/edirstat-gui/dist

@@ -1,0 +1,980 @@
+use std::{borrow::Cow, sync::Arc};
+
+use bytemuck::{Pod, Zeroable};
+use compact_str::CompactString;
+use xgx_intern::{ArenaString, Interner};
+
+pub const NO_INDEX: u32 = u32::MAX;
+pub const NO_EXTENSION: &str = "(no extension)";
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Pod, Zeroable)]
+#[repr(transparent)]
+pub struct StringId(pub u32);
+
+#[derive(Debug, Copy, Clone, Pod, Zeroable)]
+#[repr(C, align(8))]
+pub struct FileNode {
+    /// Index into the global `StringPool` for the entry's base name (e.g., "Cargo.toml")
+    pub name_id: StringId,
+
+    /// Arena index of the parent node. `u32::MAX` if none.
+    pub parent: u32,
+
+    /// Arena index of the first child node. `u32::MAX` if empty or file.
+    pub first_child: u32,
+
+    /// Arena index of the next sibling. `u32::MAX` if last sibling.
+    pub next_sibling: u32,
+
+    /// Cumulative size in bytes on disk.
+    pub size: u64,
+
+    /// Last modified timestamp (seconds since Unix Epoch; 0 = unknown)
+    pub modified_timestamp: u32,
+
+    /// Creation timestamp (seconds since Unix Epoch; 0 = unknown)
+    pub created_timestamp: u32,
+
+    /// Total number of files nested under this node (if directory).
+    pub file_count: u32,
+
+    /// Flags indicating node properties (bit 0: `is_directory`, bit 1: `is_symlink`).
+    pub flags: u8,
+
+    /// Explicit padding bytes to ensure no uninitialized memory and strict 8-byte alignment.
+    _padding: [u8; 3],
+}
+
+impl FileNode {
+    pub const FLAG_DIRECTORY: u8 = 1 << 0;
+    pub const FLAG_SYMLINK: u8 = 1 << 1;
+    pub const FLAG_NO_PERMISSION: u8 = 1 << 2;
+
+    #[must_use]
+    #[inline]
+    pub fn new(
+        name_id: StringId,
+        parent: Option<u32>,
+        is_dir: bool,
+        is_symlink: bool,
+        modified_timestamp: u32,
+        created_timestamp: u32,
+    ) -> Self {
+        let mut flags = 0u8;
+        if is_dir {
+            flags |= Self::FLAG_DIRECTORY;
+        }
+        if is_symlink {
+            flags |= Self::FLAG_SYMLINK;
+        }
+        Self {
+            name_id,
+            parent: parent.unwrap_or(NO_INDEX),
+            first_child: NO_INDEX,
+            next_sibling: NO_INDEX,
+            size: 0,
+            modified_timestamp,
+            created_timestamp,
+            file_count: 0,
+            flags,
+            _padding: [0; 3],
+        }
+    }
+
+    #[must_use]
+    #[inline]
+    pub const fn is_directory(&self) -> bool {
+        (self.flags & Self::FLAG_DIRECTORY) != 0
+    }
+
+    #[must_use]
+    #[inline]
+    pub const fn is_symlink(&self) -> bool {
+        (self.flags & Self::FLAG_SYMLINK) != 0
+    }
+
+    #[must_use]
+    #[inline]
+    pub const fn has_no_permission(&self) -> bool {
+        (self.flags & Self::FLAG_NO_PERMISSION) != 0
+    }
+
+    #[must_use]
+    #[inline]
+    pub const fn parent_opt(&self) -> Option<u32> {
+        if self.parent == NO_INDEX {
+            None
+        } else {
+            Some(self.parent)
+        }
+    }
+
+    #[must_use]
+    #[inline]
+    pub const fn first_child_opt(&self) -> Option<u32> {
+        if self.first_child == NO_INDEX {
+            None
+        } else {
+            Some(self.first_child)
+        }
+    }
+
+    #[must_use]
+    #[inline]
+    pub const fn next_sibling_opt(&self) -> Option<u32> {
+        if self.next_sibling == NO_INDEX {
+            None
+        } else {
+            Some(self.next_sibling)
+        }
+    }
+
+    #[must_use]
+    #[inline]
+    pub fn from_metadata(name_id: StringId, parent: Option<u32>, meta: &EntryMetadata) -> Self {
+        let mut node = Self::new(
+            name_id,
+            parent,
+            meta.is_dir,
+            meta.is_symlink,
+            meta.modified_timestamp,
+            meta.created_timestamp,
+        );
+        if meta.no_permission {
+            node.flags |= Self::FLAG_NO_PERMISSION;
+        }
+        if !meta.is_dir {
+            node.size = meta.len;
+        }
+        node
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct StringPool {
+    state: StringPoolState,
+}
+
+/// Backing representation for [`StringPool`].
+///
+/// * `Building` — a mutable, dedup-capable `xgx_intern::Interner`. Used while a
+///   scan is producing nodes, so repeated base names collapse to a single handle.
+/// * `Frozen` — a resolve-only view of a *finished* snapshot: one shared string
+///   arena plus an offsets table. Handle `i` maps to `arena[offsets[i]..offsets[i+1]]`.
+#[derive(Clone)]
+enum StringPoolState {
+    Building(Interner<ArenaString, ahash::RandomState, u32>),
+    Frozen { arena: Arc<str>, offsets: Vec<u32> },
+}
+
+impl Default for StringPoolState {
+    fn default() -> Self {
+        Self::Building(Interner::new(ahash::RandomState::new()))
+    }
+}
+
+impl std::fmt::Debug for StringPoolState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Building(interner) => f
+                .debug_struct("StringPoolState::Building")
+                .field("unique", &interner.len())
+                .finish(),
+            Self::Frozen { arena, offsets } => f
+                .debug_struct("StringPoolState::Frozen")
+                .field("arena_len", &arena.len())
+                .field("unique", &offsets.len().saturating_sub(1))
+                .finish(),
+        }
+    }
+}
+
+impl StringPool {
+    /// Creates an empty, mutable (dedup-capable) string pool for use while scanning.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            state: StringPoolState::default(),
+        }
+    }
+
+    /// Creates a resolve-only string pool from a pre-decoded arena and offsets table.
+    ///
+    /// `offsets` must follow the `[0, end_0, end_1, …, total]` layout produced by
+    /// `xgx_intern::Interner::export_arena` (and by the snapshot decoders), so that
+    /// the string for handle `i` is `arena[offsets[i]..offsets[i+1]]`.
+    #[must_use]
+    pub(crate) const fn frozen(arena: Arc<str>, offsets: Vec<u32>) -> Self {
+        Self {
+            state: StringPoolState::Frozen { arena, offsets },
+        }
+    }
+
+    /// Inserts (or deduplicates) a base name, returning its stable [`StringId`].
+    ///
+    /// If the pool is currently `Frozen`, it is transparently thawed into a
+    /// `Building` interner first so new strings can be deduplicated against the
+    /// existing ones. This makes a loaded snapshot safe to rescan.
+    pub fn get_or_insert(&mut self, s: &[u8]) -> StringId {
+        self.ensure_building();
+        if let StringPoolState::Building(interner) = &mut self.state {
+            let s_str = std::str::from_utf8(s).unwrap_or("");
+            // Allocation-free probe; clones/creates an ArenaString only on a cache miss.
+            StringId(interner.intern_ref(s_str).unwrap_or(0))
+        } else {
+            StringId(0)
+        }
+    }
+
+    /// Resolves a [`StringId`] back to its base name slice.
+    ///
+    /// Returns `None` for out-of-range handles (callers fall back to `""`).
+    #[must_use]
+    pub fn get(&self, id: StringId) -> Option<&str> {
+        match &self.state {
+            StringPoolState::Building(interner) => interner.resolve(id.0).map(ArenaString::as_str),
+            StringPoolState::Frozen { arena, offsets } => {
+                let idx = id.0 as usize;
+                // offsets layout: [0, end_0, …, total]; string i = offsets[i]..offsets[i+1].
+                // `checked_add` guards against a maliciously large handle id.
+                let end_idx = (idx.checked_add(1)).filter(|&e| e < offsets.len())?;
+                let start = offsets[idx] as usize;
+                let end = offsets[end_idx] as usize;
+                arena.get(start..end)
+            }
+        }
+    }
+
+    /// Read-only reverse lookup: returns the handle for `s` if it is already
+    /// interned, without inserting. Used by the sharded MFT interner's lock-free
+    /// fast path. Returns `None` for `Frozen` pools (which never serve interning
+    /// probes — the MFT shards are always `Building`).
+    pub fn lookup(&self, s: &str) -> Option<StringId> {
+        match &self.state {
+            StringPoolState::Building(interner) => {
+                interner.lookup_handle(s).ok().flatten().map(StringId)
+            }
+            StringPoolState::Frozen { .. } => None,
+        }
+    }
+
+    /// Exports the pool into the `(arena, offsets)` pair consumed by the snapshot
+    /// serializers. For a `Building` pool this mirrors `Interner::export_arena`;
+    /// for a `Frozen` pool the data is already in the target shape and is returned
+    /// directly without rebuilding an interner.
+    pub(crate) fn export_for_save(&self) -> Result<(String, Vec<u32>), crate::EdirstatError> {
+        Ok(match &self.state {
+            StringPoolState::Building(interner) => {
+                interner.clone().export_arena().map_err(|_| {
+                    crate::EdirstatError::from(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "Interner handle overflow during export",
+                    ))
+                })?
+            }
+            StringPoolState::Frozen { arena, offsets } => (arena.to_string(), offsets.clone()),
+        })
+    }
+
+    /// Lazily converts a `Frozen` pool back into a mutable `Building` pool so
+    /// new strings can be deduplicated. No-op when already `Building`.
+    ///
+    /// The frozen `Arc<str>` arena is shared across the rebuilt `ArenaString`
+    /// entries (no per-string byte copy), so the only allocation is the
+    /// interner's `Vec`/hash table — once, on the first `get_or_insert`.
+    fn ensure_building(&mut self) {
+        let (arena, offsets) = match &self.state {
+            StringPoolState::Building(_) => return,
+            StringPoolState::Frozen { arena, offsets } => (arena.clone(), offsets.clone()),
+        };
+        let mut interner = Interner::new(ahash::RandomState::new());
+        for pair in offsets.windows(2) {
+            let offset = pair[0];
+            let len = pair[1] - offset;
+            let _ = interner.intern_owned(ArenaString::Shared {
+                arena: arena.clone(),
+                offset,
+                len,
+            });
+        }
+        self.state = StringPoolState::Building(interner);
+    }
+}
+
+#[derive(Debug)]
+pub enum NodeStorage {
+    Owned(Vec<FileNode>),
+    Mmapped(crate::snapshot::PersistentArena),
+}
+
+impl std::ops::Deref for NodeStorage {
+    type Target = [FileNode];
+
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Self::Owned(v) => v,
+            Self::Mmapped(m) => m.nodes(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct FileArenaSnapshot {
+    /// Read-only snapshot of the nodes
+    pub nodes: Arc<NodeStorage>,
+    /// Read-only snapshot of the string pool
+    pub string_pool: Arc<StringPool>,
+    /// Precomputed subdirectory counts indexed by node ID
+    pub dir_counts: Arc<Vec<u32>>,
+}
+
+impl FileArenaSnapshot {
+    /// Reconstruct the full path of a node by walking up parent indices
+    #[must_use]
+    pub fn get_full_path(&self, node_idx: u32) -> String {
+        let mut parts = Vec::new();
+        let mut curr = Some(node_idx);
+        while let Some(idx) = curr {
+            if let Some(node) = self.nodes.get(idx as usize) {
+                if let Some(name) = self.string_pool.get(node.name_id) {
+                    // Avoid duplicating empty or root names inappropriately
+                    if !name.is_empty() {
+                        parts.push(name);
+                    }
+                }
+                curr = node.parent_opt();
+            } else {
+                break;
+            }
+        }
+        parts.reverse();
+
+        // Handle Unix vs Windows root correctly
+        if parts.is_empty() {
+            return "/".to_string();
+        }
+
+        // If the first part starts with a Windows drive letter or "/", join carefully
+        let first = parts[0];
+        if first.starts_with('/') || first.contains(':') {
+            let mut path = first.to_string();
+            let separator = if first.contains('\\') { '\\' } else { '/' };
+            for part in &parts[1..] {
+                if !path.ends_with('/') && !path.ends_with('\\') {
+                    path.push(separator);
+                }
+                path.push_str(part);
+            }
+            path
+        } else {
+            parts.join("/")
+        }
+    }
+
+    /// Inverse of [`get_full_path`]: resolve an absolute path back to its node
+    /// index by walking the tree from the root. A rescan re-indexes every node
+    /// *under* the refreshed directory (new nodes are appended), so index-keyed
+    /// UI state such as `expanded_rows` cannot survive across a refresh on its
+    /// own — callers capture paths first, then re-resolve them with this.
+    ///
+    /// Returns `None` if the path does not exist in this snapshot.
+    #[must_use]
+    pub fn resolve_path_index(&self, path: &str) -> Option<u32> {
+        if self.nodes.is_empty() {
+            return None;
+        }
+        // Strip the scan-root prefix (`get_full_path(0)`) and walk the remaining
+        // path components down from the root, matching each child by base name.
+        let root_path = self.get_full_path(0);
+        let relative = path.strip_prefix(&root_path)?;
+        let mut curr = 0u32;
+        for component in relative.split(['/', '\\']) {
+            if component.is_empty() {
+                continue;
+            }
+            curr = self.find_child_by_name(curr, component)?;
+        }
+        Some(curr)
+    }
+
+    /// Find the immediate child of `parent` whose base name equals `name`.
+    fn find_child_by_name(&self, parent: u32, name: &str) -> Option<u32> {
+        let node = self.nodes.get(parent as usize)?;
+        let mut curr = node.first_child;
+        while curr != NO_INDEX {
+            let child = self.nodes.get(curr as usize)?;
+            if self
+                .string_pool
+                .get(child.name_id)
+                .is_some_and(|n| n == name)
+            {
+                return Some(curr);
+            }
+            curr = child.next_sibling;
+        }
+        None
+    }
+}
+
+/// Walk the tree top-down from the true root (node 0).
+///
+/// An in-place rescan leaves orphaned nodes resident in the arena
+/// (their `parent` pointer still set but unlinked from the child chain)
+#[must_use]
+pub fn precompute_dir_counts(nodes: &[FileNode]) -> Vec<u32> {
+    let mut counts = vec![0u32; nodes.len()];
+    if nodes.is_empty() {
+        return counts;
+    }
+
+    // Post-order via an explicit stack: on the "leave" visit (after all
+    // descendants), add this directory's subtree count to its parent.
+    let mut stack: Vec<(u32, bool)> = Vec::with_capacity(64);
+    stack.push((0, false));
+    while let Some((idx, is_leave)) = stack.pop() {
+        if idx as usize >= nodes.len() {
+            continue;
+        }
+        let node = &nodes[idx as usize];
+        if is_leave {
+            if node.is_directory() && node.parent != NO_INDEX {
+                let parent_idx = node.parent as usize;
+                if parent_idx < counts.len() {
+                    counts[parent_idx] += 1 + counts[idx as usize];
+                }
+            }
+        } else {
+            // Schedule the leave-visit, then descend into the child chain.
+            stack.push((idx, true));
+            let mut curr = node.first_child;
+            while curr != NO_INDEX {
+                if curr as usize >= nodes.len() {
+                    break;
+                }
+                stack.push((curr, false));
+                curr = nodes[curr as usize].next_sibling;
+            }
+        }
+    }
+    counts
+}
+
+#[must_use]
+pub fn clean_unc_path(path: &str) -> Cow<'_, str> {
+    path.strip_prefix(r"\\?\").map_or_else(
+        || {
+            path.strip_prefix(r"//?/")
+                .map_or(Cow::Borrowed(path), |stripped| {
+                    if stripped.len() >= 4
+                        && stripped[..3].eq_ignore_ascii_case("unc")
+                        && (stripped.as_bytes()[3] == b'/' || stripped.as_bytes()[3] == b'\\')
+                    {
+                        Cow::Owned(format!("//{}", &stripped[4..]))
+                    } else {
+                        Cow::Borrowed(stripped)
+                    }
+                })
+        },
+        |stripped| {
+            if stripped.len() >= 4
+                && stripped[..3].eq_ignore_ascii_case("unc")
+                && (stripped.as_bytes()[3] == b'\\' || stripped.as_bytes()[3] == b'/')
+            {
+                Cow::Owned(format!(r"\\{}", &stripped[4..]))
+            } else {
+                Cow::Borrowed(stripped)
+            }
+        },
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_string_pool() {
+        let mut pool = StringPool::new();
+        let id1 = pool.get_or_insert(b"Cargo.toml");
+        let id2 = pool.get_or_insert(b"src");
+        let id3 = pool.get_or_insert(b"Cargo.toml"); // duplicate
+
+        assert_eq!(id1, id3); // must deduplicate duplicate string
+        assert_ne!(id1, id2); // distinct strings must have distinct IDs
+
+        assert_eq!(pool.get(id1), Some("Cargo.toml"));
+        assert_eq!(pool.get(id2), Some("src"));
+    }
+
+    #[test]
+    fn test_frozen_pool_resolves_and_thaws() -> Result<(), crate::EdirstatError> {
+        // 1. Build a dedup-capable pool the normal way.
+        let mut pool = StringPool::new();
+        let a = pool.get_or_insert(b"alpha");
+        let b = pool.get_or_insert(b"beta");
+        let a_dup = pool.get_or_insert(b"alpha"); // dedups to `a`
+        assert_eq!(a, a_dup);
+
+        // 2. Freeze it via the same (arena, offsets) shape the snapshot decoders produce.
+        let (arena, offsets) = pool.export_for_save()?;
+        let frozen = StringPool::frozen(std::sync::Arc::from(arena.as_str()), offsets);
+
+        // 3. A Frozen pool must resolve the same names as the Building original.
+        assert_eq!(frozen.get(a), Some("alpha"));
+        assert_eq!(frozen.get(b), Some("beta"));
+        // Out-of-range handle returns None (bounds-checked, never panics).
+        assert_eq!(frozen.get(StringId(u32::MAX)), None);
+
+        // 4. Thaw: get_or_insert on a Frozen pool must dedup against existing entries.
+        let mut thawed = frozen;
+        let a_again = thawed.get_or_insert(b"alpha"); // existing -> reuses handle `a`
+        assert_eq!(a_again, a);
+        // A genuinely new string gets a fresh handle and resolves correctly.
+        let c = thawed.get_or_insert(b"gamma");
+        assert_ne!(c, a);
+        assert_ne!(c, b);
+        assert_eq!(thawed.get(c), Some("gamma"));
+        Ok(())
+    }
+
+    #[test]
+    fn test_path_reconstruction() {
+        let mut pool = StringPool::new();
+        let root_id = pool.get_or_insert(b"/home/tux");
+        let dir_id = pool.get_or_insert(b"Documents");
+        let file_id = pool.get_or_insert(b"test.rs");
+
+        // Construct tree
+        // Node 0: Root (/home/tux)
+        // Node 1: Dir (Documents), parent=0
+        // Node 2: File (test.rs), parent=1
+        let nodes = vec![
+            FileNode::new(root_id, None, true, false, 0, 0),
+            FileNode::new(dir_id, Some(0), true, false, 0, 0),
+            FileNode::new(file_id, Some(1), false, false, 0, 0),
+        ];
+
+        let dir_counts = precompute_dir_counts(&nodes);
+        let snapshot = FileArenaSnapshot {
+            nodes: Arc::new(NodeStorage::Owned(nodes)),
+            string_pool: Arc::new(pool),
+            dir_counts: Arc::new(dir_counts),
+        };
+
+        assert_eq!(snapshot.get_full_path(0), "/home/tux");
+        assert_eq!(snapshot.get_full_path(1), "/home/tux/Documents");
+        assert_eq!(snapshot.get_full_path(2), "/home/tux/Documents/test.rs");
+    }
+
+    #[test]
+    fn test_path_reconstruction_windows_drive() {
+        let mut pool = StringPool::new();
+        let root_id = pool.get_or_insert(b"C:\\");
+        let dir_id = pool.get_or_insert(b"Program Files");
+        let file_id = pool.get_or_insert(b"test.exe");
+
+        let nodes = vec![
+            FileNode::new(root_id, None, true, false, 0, 0),
+            FileNode::new(dir_id, Some(0), true, false, 0, 0),
+            FileNode::new(file_id, Some(1), false, false, 0, 0),
+        ];
+
+        let dir_counts = precompute_dir_counts(&nodes);
+        let snapshot = FileArenaSnapshot {
+            nodes: Arc::new(NodeStorage::Owned(nodes)),
+            string_pool: Arc::new(pool),
+            dir_counts: Arc::new(dir_counts),
+        };
+
+        assert_eq!(snapshot.get_full_path(0), "C:\\");
+        assert_eq!(snapshot.get_full_path(1), "C:\\Program Files");
+        assert_eq!(snapshot.get_full_path(2), "C:\\Program Files\\test.exe");
+    }
+
+    #[test]
+    fn test_filenode_new() {
+        let node = FileNode::new(StringId(12), Some(5), true, true, 100, 200);
+        assert_eq!(node.name_id, StringId(12));
+        assert_eq!(node.parent, 5);
+        assert!(node.is_directory());
+        assert!(node.is_symlink());
+        assert_eq!(node.modified_timestamp, 100);
+        assert_eq!(node.created_timestamp, 200);
+        assert_eq!(node.size, 0);
+    }
+
+    #[test]
+    fn test_filenode_flags() {
+        let node_file = FileNode::new(StringId(0), None, false, false, 0, 0);
+        assert!(!node_file.is_directory());
+        assert!(!node_file.is_symlink());
+
+        let node_dir = FileNode::new(StringId(0), None, true, false, 0, 0);
+        assert!(node_dir.is_directory());
+        assert!(!node_dir.is_symlink());
+
+        let node_sym = FileNode::new(StringId(0), None, false, true, 0, 0);
+        assert!(!node_sym.is_directory());
+        assert!(node_sym.is_symlink());
+    }
+
+    #[test]
+    fn test_filenode_parent_opt() {
+        let node1 = FileNode::new(StringId(0), None, false, false, 0, 0);
+        assert_eq!(node1.parent_opt(), None);
+
+        let node2 = FileNode::new(StringId(0), Some(42), false, false, 0, 0);
+        assert_eq!(node2.parent_opt(), Some(42));
+    }
+
+    #[test]
+    fn test_filenode_first_child_opt() {
+        let mut node = FileNode::new(StringId(0), None, false, false, 0, 0);
+        assert_eq!(node.first_child_opt(), None);
+        node.first_child = 7;
+        assert_eq!(node.first_child_opt(), Some(7));
+    }
+
+    #[test]
+    fn test_filenode_next_sibling_opt() {
+        let mut node = FileNode::new(StringId(0), None, false, false, 0, 0);
+        assert_eq!(node.next_sibling_opt(), None);
+        node.next_sibling = 100;
+        assert_eq!(node.next_sibling_opt(), Some(100));
+    }
+
+    #[test]
+    fn test_filenode_from_metadata() {
+        let meta = EntryMetadata {
+            name: "test.txt".into(),
+            is_dir: false,
+            is_symlink: true,
+            len: 12345,
+            modified_timestamp: 10,
+            created_timestamp: 20,
+            file_id: (1, 2),
+            no_permission: false,
+        };
+        let node = FileNode::from_metadata(StringId(5), Some(3), &meta);
+        assert_eq!(node.name_id, StringId(5));
+        assert_eq!(node.parent, 3);
+        assert!(!node.is_directory());
+        assert!(node.is_symlink());
+        assert_eq!(node.size, 12345);
+        assert_eq!(node.modified_timestamp, 10);
+    }
+
+    #[test]
+    fn test_with_lowercase_ext_short() {
+        let mut result = String::new();
+        with_lowercase_ext("PNG", |ext| {
+            result = ext.to_string();
+        });
+        assert_eq!(result, "png");
+    }
+
+    #[test]
+    fn test_with_lowercase_ext_long() {
+        let long_ext = "A".repeat(40);
+        let mut result = String::new();
+        with_lowercase_ext(&long_ext, |ext| {
+            result = ext.to_string();
+        });
+        assert_eq!(result, "a".repeat(40));
+    }
+
+    #[test]
+    fn test_get_ext_slice() {
+        assert_eq!(get_ext_slice("test.png"), "png");
+        assert_eq!(get_ext_slice("no_ext"), "(no extension)");
+        assert_eq!(get_ext_slice(".gitignore"), "(no extension)");
+        assert_eq!(get_ext_slice("foo.tar.gz"), "gz");
+        assert_eq!(get_ext_slice("ends_dot."), "(no extension)");
+    }
+
+    #[test]
+    fn test_contains_case_insensitive_ascii() {
+        assert!(contains_case_insensitive("Hello World", "hello"));
+        assert!(contains_case_insensitive("Hello World", "WORLD"));
+        assert!(!contains_case_insensitive("Hello World", "foo"));
+        assert!(contains_case_insensitive("Hello World", ""));
+    }
+
+    #[test]
+    fn test_contains_case_insensitive_non_ascii() {
+        assert!(contains_case_insensitive("Héllö Wörld", "héllö"));
+        assert!(!contains_case_insensitive("Héllö Wörld", "hello"));
+    }
+
+    #[test]
+    fn test_clean_unc_path() {
+        assert_eq!(clean_unc_path(r"\\?\C:\Program Files"), r"C:\Program Files");
+        assert_eq!(
+            clean_unc_path(r"\\?\UNC\server\share\file.txt"),
+            r"\\server\share\file.txt"
+        );
+        assert_eq!(clean_unc_path(r"\\?\unc\server\share"), r"\\server\share");
+        assert_eq!(clean_unc_path("/home/tux/test"), "/home/tux/test");
+        assert_eq!(clean_unc_path(r"\\server\share"), r"\\server\share");
+    }
+
+    #[test]
+    fn test_precompute_dir_counts_normal() {
+        let mut pool = StringPool::new();
+        let r = pool.get_or_insert(b"root");
+        let keep = pool.get_or_insert(b"keep");
+        let a = pool.get_or_insert(b"a.bin");
+        let goner = pool.get_or_insert(b"goner");
+        let big = pool.get_or_insert(b"big.bin");
+        let mut nodes = vec![
+            FileNode::new(r, None, true, false, 0, 0),        // 0 root
+            FileNode::new(keep, Some(0), true, false, 0, 0),  // 1
+            FileNode::new(a, Some(1), false, false, 0, 0),    // 2
+            FileNode::new(goner, Some(0), true, false, 0, 0), // 3
+            FileNode::new(big, Some(3), false, false, 0, 0),  // 4
+        ];
+        nodes[0].first_child = 1;
+        nodes[1].next_sibling = 3;
+        nodes[3].next_sibling = NO_INDEX;
+        nodes[1].first_child = 2;
+        nodes[3].first_child = 4;
+        let counts = precompute_dir_counts(&nodes);
+        assert_eq!(counts[0], 2, "root has 2 subdirs (keep + goner)");
+        assert_eq!(counts[1], 0);
+        assert_eq!(counts[3], 0);
+    }
+
+    #[test]
+    fn test_precompute_dir_counts_ignores_orphans() {
+        // Simulates the arena state after an in-place rescan prunes `goner`:
+        // it is unlinked from root's child chain but its `parent` pointer is
+        // intentionally left intact (resetting it would make the table treat it
+        // as a ghost root via `row_parent`). It must NOT be counted.
+        let mut pool = StringPool::new();
+        let r = pool.get_or_insert(b"root");
+        let keep = pool.get_or_insert(b"keep");
+        let a = pool.get_or_insert(b"a.bin");
+        let goner = pool.get_or_insert(b"goner");
+        let mut nodes = vec![
+            FileNode::new(r, None, true, false, 0, 0),
+            FileNode::new(keep, Some(0), true, false, 0, 0),
+            FileNode::new(a, Some(1), false, false, 0, 0),
+            FileNode::new(goner, Some(0), true, false, 0, 0),
+        ];
+        nodes[0].first_child = 1; // root -> keep only (goner severed)
+        nodes[1].next_sibling = NO_INDEX;
+        nodes[1].first_child = 2;
+        nodes[3].first_child = NO_INDEX;
+        nodes[3].next_sibling = NO_INDEX; // parent stays Some(0)
+        let counts = precompute_dir_counts(&nodes);
+        assert_eq!(
+            counts[0], 1,
+            "orphaned goner must not inflate root's subdir count"
+        );
+        assert_eq!(counts[3], 0, "orphaned goner itself is never visited");
+    }
+
+    #[test]
+    fn test_resolve_path_index_roundtrip() {
+        let mut pool = StringPool::new();
+        let root = pool.get_or_insert(b"/root");
+        let a = pool.get_or_insert(b"a");
+        let b = pool.get_or_insert(b"b");
+        let c = pool.get_or_insert(b"c");
+        let d = pool.get_or_insert(b"d");
+        let mut nodes = vec![
+            FileNode::new(root, None, true, false, 0, 0),  // 0 /root
+            FileNode::new(a, Some(0), true, false, 0, 0),  // 1 /root/a
+            FileNode::new(b, Some(0), false, false, 0, 0), // 2 /root/b
+            FileNode::new(c, Some(1), true, false, 0, 0),  // 3 /root/a/c
+            FileNode::new(d, Some(1), false, false, 0, 0), // 4 /root/a/d
+        ];
+        nodes[0].first_child = 1;
+        nodes[1].next_sibling = 2;
+        nodes[1].first_child = 3;
+        nodes[3].next_sibling = 4;
+        let snapshot = FileArenaSnapshot {
+            nodes: Arc::new(NodeStorage::Owned(nodes)),
+            string_pool: Arc::new(pool),
+            dir_counts: Arc::new(vec![]),
+        };
+
+        assert_eq!(snapshot.resolve_path_index("/root"), Some(0));
+        assert_eq!(snapshot.resolve_path_index("/root/a"), Some(1));
+        assert_eq!(snapshot.resolve_path_index("/root/b"), Some(2));
+        assert_eq!(snapshot.resolve_path_index("/root/a/c"), Some(3));
+        assert_eq!(snapshot.resolve_path_index("/root/a/d"), Some(4));
+
+        // get_full_path and resolve_path_index must be exact inverses.
+        for idx in 0..5u32 {
+            let path = snapshot.get_full_path(idx);
+            assert_eq!(snapshot.resolve_path_index(&path), Some(idx));
+        }
+    }
+
+    #[test]
+    fn test_resolve_path_index_missing() {
+        let mut pool = StringPool::new();
+        let root = pool.get_or_insert(b"/root");
+        let a = pool.get_or_insert(b"a");
+        let mut nodes = vec![
+            FileNode::new(root, None, true, false, 0, 0),
+            FileNode::new(a, Some(0), true, false, 0, 0),
+        ];
+        nodes[0].first_child = 1;
+        let snapshot = FileArenaSnapshot {
+            nodes: Arc::new(NodeStorage::Owned(nodes)),
+            string_pool: Arc::new(pool),
+            dir_counts: Arc::new(vec![]),
+        };
+
+        assert_eq!(snapshot.resolve_path_index("/root/nope"), None);
+        assert_eq!(snapshot.resolve_path_index("/wrong/root"), None);
+        assert_eq!(snapshot.resolve_path_index(""), None);
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct EntryMetadata {
+    pub name: CompactString,
+    pub is_dir: bool,
+    pub is_symlink: bool,
+    pub len: u64,
+    pub modified_timestamp: u32,
+    pub created_timestamp: u32,
+    pub file_id: (u64, u64),
+    pub no_permission: bool,
+}
+
+impl EntryMetadata {
+    pub fn from_dir_entry(entry: &std::fs::DirEntry) -> Option<Self> {
+        let metadata_res = entry.metadata();
+        let name = entry.file_name().to_string_lossy().into();
+
+        match metadata_res {
+            Ok(metadata) => {
+                let is_dir = metadata.is_dir();
+                let is_symlink = metadata.is_symlink();
+                let len = metadata.len();
+
+                let modified_timestamp = metadata
+                    .modified()
+                    .map_or(0, crate::time_utils::system_time_to_unix_timestamp);
+                let created_timestamp = metadata
+                    .created()
+                    .map_or(0, crate::time_utils::system_time_to_unix_timestamp);
+
+                let file_id = crate::file_id::get_file_id(&metadata);
+
+                Some(Self {
+                    name,
+                    is_dir,
+                    is_symlink,
+                    len,
+                    modified_timestamp,
+                    created_timestamp,
+                    file_id,
+                    no_permission: false,
+                })
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
+                let file_type = entry.file_type().ok();
+                let is_dir = file_type.as_ref().is_some_and(std::fs::FileType::is_dir);
+                let is_symlink = file_type
+                    .as_ref()
+                    .is_some_and(std::fs::FileType::is_symlink);
+                Some(Self {
+                    name,
+                    is_dir,
+                    is_symlink,
+                    len: 0,
+                    modified_timestamp: 0,
+                    created_timestamp: 0,
+                    file_id: (0, 0),
+                    no_permission: true,
+                })
+            }
+            Err(_) => None,
+        }
+    }
+}
+
+/// Performs a zero-allocation operation on a lowercase slice representation of the extension.
+/// Uses a stack array for extensions up to 32 bytes, falling back to dynamic allocation only
+///
+/// for rare, exceptionally long extensions.
+#[inline]
+pub fn with_lowercase_ext<R, F: FnOnce(&str) -> R>(ext: &str, f: F) -> R {
+    let mut buf = [0u8; 32];
+    if ext.len() <= 32 {
+        let mut len = 0;
+        for (b, dest) in ext.bytes().zip(buf.iter_mut()) {
+            *dest = b.to_ascii_lowercase();
+            len += 1;
+        }
+        if let Ok(s) = std::str::from_utf8(&buf[..len]) {
+            return f(s);
+        }
+    }
+    f(&ext.to_ascii_lowercase())
+}
+
+/// Zero-allocation raw extension slicer
+#[inline]
+#[must_use]
+pub fn get_ext_slice(name: &str) -> &str {
+    name.rfind('.').map_or(NO_EXTENSION, |dot_idx| {
+        if dot_idx > 0 && dot_idx < name.len() - 1 {
+            &name[dot_idx + 1..]
+        } else {
+            NO_EXTENSION
+        }
+    })
+}
+
+/// A branchless case-insensitive ASCII byte comparison.
+/// Structuring this cleanly allows the LLVM compiler to generate SIMD vector registers.
+#[inline]
+#[must_use]
+pub const fn ascii_case_insensitive_eq(h: u8, n: u8) -> bool {
+    if h == n {
+        return true;
+    }
+    // Check if they differ only by the 5th bit (uppercase vs lowercase shift)
+    // and that the character resides within the alphabetic ASCII range.
+    let diff = h ^ n;
+    if diff == 0x20 {
+        let h_lower = h | 0x20;
+        h_lower >= b'a' && h_lower <= b'z'
+    } else {
+        false
+    }
+}
+
+#[must_use]
+pub fn contains_case_insensitive(haystack: &str, needle_lower: &str) -> bool {
+    if needle_lower.is_empty() {
+        return true;
+    }
+
+    if haystack.is_ascii() && needle_lower.is_ascii() {
+        let h_bytes = haystack.as_bytes();
+        let n_bytes = needle_lower.as_bytes();
+
+        if h_bytes.len() < n_bytes.len() {
+            return false;
+        }
+
+        // Search for needle using a contiguous window match
+        h_bytes.windows(n_bytes.len()).any(|window| {
+            window
+                .iter()
+                .zip(n_bytes)
+                .all(|(&h, &n)| ascii_case_insensitive_eq(h, n))
+        })
+    } else {
+        // Fallback for non-ASCII paths
+        haystack.to_lowercase().contains(needle_lower)
+    }
+}

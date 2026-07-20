@@ -1,0 +1,11 @@
+[general]
+cors-allow-origins = "*"
+cors-allow-headers = "Content-Type, Authorization"
+
+[[advanced.headers]]
+source = "**/*"
+
+[advanced.headers.headers]
+Access-Control-Allow-Methods = "GET, POST, OPTIONS"
+Cross-Origin-Opener-Policy = "same-origin"
+Cross-Origin-Embedder-Policy = "require-corp"

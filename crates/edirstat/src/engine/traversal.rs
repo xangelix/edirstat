@@ -1,0 +1,596 @@
+use std::{
+    fs,
+    path::PathBuf,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, AtomicUsize, Ordering},
+    },
+    thread,
+    time::Duration,
+};
+
+use compact_str::CompactString;
+use crossbeam::{
+    channel::Sender,
+    deque::{Injector, Worker},
+};
+
+pub use edirstat_core::{file_id::get_file_id, state::TraversalStats};
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub struct LocalId(pub u32);
+
+#[derive(Clone)]
+pub struct ScanTask {
+    pub path: PathBuf,
+    pub parent_id: LocalId,
+    pub worker_id: u8,
+    pub ancestors: smallvec::SmallVec<[(u64, u64); 16]>,
+    /// The device/volume identifier to restrict traversal within.
+    pub expected_device_id: Option<u64>,
+}
+
+pub enum ScanEvent {
+    DirDiscovered {
+        parent_worker_id: u8,
+        child_worker_id: u8,
+        local_parent_id: LocalId,
+        local_child_id: LocalId,
+        name: CompactString,
+        modified_timestamp: u32,
+        created_timestamp: u32,
+        no_permission: bool,
+    },
+    FileDiscovered {
+        parent_worker_id: u8,
+        local_parent_id: LocalId,
+        name: CompactString,
+        size: u64,
+        is_symlink: bool,
+        modified_timestamp: u32,
+        created_timestamp: u32,
+        no_permission: bool,
+    },
+    PermissionDenied {
+        worker_id: u8,
+        local_id: LocalId,
+    },
+}
+
+pub struct TraversalEngine {
+    num_threads: usize,
+    stats: TraversalStats,
+}
+
+impl Default for TraversalEngine {
+    fn default() -> Self {
+        Self::new(TraversalStats::default())
+    }
+}
+
+impl TraversalEngine {
+    #[must_use]
+    pub fn new(stats: TraversalStats) -> Self {
+        let num_threads = thread::available_parallelism().map_or(4, std::num::NonZero::get);
+        Self { num_threads, stats }
+    }
+
+    #[must_use]
+    pub const fn stats(&self) -> &TraversalStats {
+        &self.stats
+    }
+
+    #[must_use]
+    pub const fn num_threads(&self) -> usize {
+        self.num_threads
+    }
+
+    pub fn start_traversal(
+        &self,
+        root_path: PathBuf,
+        same_filesystem: bool,
+        event_tx: Sender<Vec<ScanEvent>>,
+    ) -> Result<thread::JoinHandle<()>, crate::EdirstatError> {
+        let num_threads = self.num_threads;
+        let stats = self.stats.clone();
+
+        let handle = thread::spawn(move || {
+            // Run MFT parser directly if target is a file named "$MFT" (case-insensitive)
+            let is_mft_file = root_path
+                .file_name()
+                .and_then(|s| s.to_str())
+                .is_some_and(|s| s.eq_ignore_ascii_case("$mft"));
+
+            if is_mft_file {
+                match super::mft::try_scan_mft(&root_path, &event_tx, &stats) {
+                    Ok(()) => return,
+                    Err(_) => {
+                        stats.reset();
+                    }
+                }
+            }
+
+            // Attempt raw MFT parsing on Windows only if partition is explicitly detected as NTFS
+            #[cfg(target_os = "windows")]
+            {
+                if let Some(fs_type) = super::mft::get_fs_type(&root_path)
+                    && fs_type.eq_ignore_ascii_case("NTFS")
+                {
+                    match super::mft::try_scan_mft(&root_path, &event_tx, &stats) {
+                        Ok(()) => {
+                            // Raw scan was executed successfully, end thread execution
+                            return;
+                        }
+                        Err(_) => {
+                            // Bypassed or failed raw access; fallback continues to parallel walker
+                            stats.reset();
+                        }
+                    }
+                }
+            }
+
+            // Setup global injector for starting and overflow tasks
+            let injector = Arc::new(Injector::new());
+
+            // Build initial scan task
+            let root_id = (0, 0); // Placeholder for root
+            let root_metadata = fs::metadata(&root_path);
+            let root_file_id = root_metadata.as_ref().map_or(root_id, get_file_id);
+            let is_root_scan = root_path == std::path::Path::new("/");
+            let expected_device_id = if same_filesystem || !is_root_scan {
+                root_metadata.as_ref().map(get_device_id).ok()
+            } else {
+                None
+            };
+
+            let initial_task = ScanTask {
+                path: root_path.clone(),
+                parent_id: LocalId(0),
+                worker_id: 0,
+                ancestors: smallvec::smallvec![root_file_id],
+                expected_device_id,
+            };
+            injector.push(initial_task);
+
+            // Create local worker queues and stealers
+            let mut workers = Vec::with_capacity(num_threads);
+            let mut stealers = Vec::with_capacity(num_threads);
+            for _ in 0..num_threads {
+                let w = Worker::new_fifo();
+                let s = w.stealer();
+                workers.push(w);
+                stealers.push(s);
+            }
+
+            let stealers = Arc::new(stealers);
+            let busy_workers = Arc::new(AtomicUsize::new(0));
+            let done = Arc::new(AtomicBool::new(false));
+
+            let mut thread_handles = Vec::with_capacity(num_threads);
+
+            for worker_idx in 0..num_threads {
+                let local_worker = workers.remove(0);
+                let stealers = stealers.clone();
+                let injector = injector.clone();
+                let busy_workers = busy_workers.clone();
+                let done = done.clone();
+                let event_tx = event_tx.clone();
+
+                let stats = stats.clone();
+
+                thread_handles.push(thread::spawn(move || {
+                    let mut local_id_counter = 1u32; // Root is 0, workers start generating local child IDs
+                    let mut event_buffer = Vec::with_capacity(1024);
+                    let worker_id_u8 = worker_idx as u8;
+
+                    // Helper to push and flush events
+                    let mut emit_event =
+                        |event: ScanEvent, force_flush: bool, tx: &Sender<Vec<ScanEvent>>| {
+                            event_buffer.push(event);
+                            if event_buffer.len() >= 1024
+                                || (force_flush && !event_buffer.is_empty())
+                            {
+                                let batch =
+                                    std::mem::replace(&mut event_buffer, Vec::with_capacity(1024));
+                                let _ = tx.send(batch);
+                            }
+                        };
+
+                    loop {
+                        // Find a task
+                        let task_opt = local_worker.pop().or_else(|| {
+                            // Try stealing from the global injector
+                            let mut steal_res = injector.steal();
+                            while steal_res.is_retry() {
+                                steal_res = injector.steal();
+                            }
+                            if let crossbeam::deque::Steal::Success(t) = steal_res {
+                                return Some(t);
+                            }
+
+                            // Work stealing: try stealing from other workers
+                            for i in 0..stealers.len() {
+                                if i == worker_idx {
+                                    continue;
+                                }
+                                let mut steal_res = stealers[i].steal();
+                                while steal_res.is_retry() {
+                                    steal_res = stealers[i].steal();
+                                }
+                                if let crossbeam::deque::Steal::Success(t) = steal_res {
+                                    return Some(t);
+                                }
+                            }
+                            None
+                        });
+
+                        if let Some(task) = task_opt {
+                            // Increment active busy counter
+                            busy_workers.fetch_add(1, Ordering::SeqCst);
+
+                            // Process the directory scan task
+                            scan_directory(
+                                &task,
+                                worker_id_u8,
+                                &mut local_id_counter,
+                                &mut emit_event,
+                                &event_tx,
+                                &local_worker,
+                                &stats,
+                            );
+
+                            // Decrement active busy counter
+                            busy_workers.fetch_sub(1, Ordering::SeqCst);
+                        } else {
+                            // No tasks available. Check termination condition.
+                            // If all queues are empty and busy_workers is 0, we're done!
+                            if busy_workers.load(Ordering::SeqCst) == 0 && injector.is_empty() {
+                                done.store(true, Ordering::SeqCst);
+                            }
+
+                            if done.load(Ordering::SeqCst) {
+                                break;
+                            }
+
+                            // Wait briefly to prevent spinning
+                            thread::sleep(Duration::from_micros(200));
+                        }
+                    }
+
+                    // Flush final events remaining in buffer
+                    if !event_buffer.is_empty() {
+                        let _ = event_tx.send(event_buffer);
+                    }
+                }));
+            }
+
+            // Wait for all worker threads to finish
+            for handle in thread_handles {
+                let _ = handle.join();
+            }
+        });
+
+        Ok(handle)
+    }
+}
+
+fn scan_directory<F>(
+    task: &ScanTask,
+    worker_id: u8,
+    local_id_counter: &mut u32,
+    emit_event: &mut F,
+    event_tx: &Sender<Vec<ScanEvent>>,
+    local_worker: &Worker<ScanTask>,
+    stats: &TraversalStats,
+) where
+    F: FnMut(ScanEvent, bool, &Sender<Vec<ScanEvent>>),
+{
+    let dir_path = &task.path;
+    let parent_local_id = task.parent_id;
+
+    // Try reading directory entries
+    let Ok(entries) = fs::read_dir(dir_path) else {
+        if let Err(e) = fs::read_dir(dir_path)
+            && e.kind() == std::io::ErrorKind::PermissionDenied
+        {
+            emit_event(
+                ScanEvent::PermissionDenied {
+                    worker_id: task.worker_id,
+                    local_id: parent_local_id,
+                },
+                true,
+                event_tx,
+            );
+        }
+        return;
+    };
+
+    stats.dirs_scanned.fetch_add(1, Ordering::Relaxed);
+
+    for entry_res in entries {
+        let Ok(entry) = entry_res else { continue };
+
+        let Some(meta) = crate::arena::EntryMetadata::from_dir_entry(&entry) else {
+            continue;
+        };
+
+        // Check if directory
+        if meta.is_dir {
+            // If we are scanning the system root, skip locations that contain
+            // virtual files, network mounts, or sandboxed/containerized filesystems.
+            if task.path == std::path::Path::new("/") {
+                let name_str = meta.name.as_str();
+                match name_str {
+                    "proc" | "sys" | "dev" | "run" | "tmp" | "mnt" | "media" => continue,
+                    _ => {}
+                }
+            }
+
+            // Mount Point / Device boundary safety protection check
+            if let Some(expected_dev) = task.expected_device_id
+                && meta.file_id != (0, 0)
+                && meta.file_id.0 != expected_dev
+            {
+                // Do not descend into subdirectories across filesystem boundaries (e.g. /sys or /proc)
+                continue;
+            }
+
+            // Cycle Detection
+            if meta.file_id != (0, 0) && task.ancestors.contains(&meta.file_id) {
+                continue;
+            }
+
+            // Assign new local ID
+            let child_local_id = LocalId(*local_id_counter);
+            *local_id_counter += 1;
+
+            // Emit directory discovery event immediately (force flush) to prevent work-stealing races
+            emit_event(
+                ScanEvent::DirDiscovered {
+                    parent_worker_id: task.worker_id,
+                    child_worker_id: worker_id,
+                    local_parent_id: parent_local_id,
+                    local_child_id: child_local_id,
+                    name: meta.name,
+                    modified_timestamp: meta.modified_timestamp,
+                    created_timestamp: meta.created_timestamp,
+                    no_permission: meta.no_permission,
+                },
+                true,
+                event_tx,
+            );
+
+            // Create a new task and push to local queue
+            let mut new_ancestors = task.ancestors.clone();
+            if meta.file_id != (0, 0) {
+                new_ancestors.push(meta.file_id);
+            }
+
+            let new_task = ScanTask {
+                path: entry.path(),
+                parent_id: child_local_id,
+                worker_id,
+                ancestors: new_ancestors,
+                expected_device_id: task.expected_device_id,
+            };
+            local_worker.push(new_task);
+        } else {
+            // It's a file
+            stats.files_scanned.fetch_add(1, Ordering::Relaxed);
+            stats
+                .bytes_scanned
+                .fetch_add(meta.len as usize, Ordering::Relaxed);
+
+            emit_event(
+                ScanEvent::FileDiscovered {
+                    parent_worker_id: task.worker_id,
+                    local_parent_id: parent_local_id,
+                    name: meta.name,
+                    size: meta.len,
+                    is_symlink: meta.is_symlink,
+                    modified_timestamp: meta.modified_timestamp,
+                    created_timestamp: meta.created_timestamp,
+                    no_permission: meta.no_permission,
+                },
+                false,
+                event_tx,
+            );
+        }
+    }
+
+    // Force flush events after completing a directory scan to keep coordinator updated
+    emit_event(
+        ScanEvent::FileDiscovered {
+            parent_worker_id: task.worker_id,
+            local_parent_id: parent_local_id,
+            name: CompactString::default(),
+            size: 0,
+            is_symlink: false,
+            modified_timestamp: 0,
+            created_timestamp: 0,
+            no_permission: false,
+        },
+        true,
+        event_tx,
+    );
+}
+
+#[cfg(unix)]
+fn get_device_id(meta: &fs::Metadata) -> u64 {
+    use std::os::unix::fs::MetadataExt as _;
+
+    meta.dev()
+}
+
+#[cfg(windows)]
+fn get_device_id(meta: &fs::Metadata) -> u64 {
+    use std::os::windows::fs::MetadataExt as _;
+
+    meta.volume_serial_number().unwrap_or(0) as u64
+}
+
+#[cfg(not(any(unix, windows)))]
+fn get_device_id(_meta: &fs::Metadata) -> u64 {
+    0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::coordinator::{Coordinator, SharedState};
+
+    #[test]
+    fn test_traversal_and_coordinator() -> Result<(), crate::EdirstatError> {
+        // Create a temporary directory structure in target/
+        let temp_dir = std::env::current_dir()?
+            .join("target")
+            .join("test_traversal");
+        let subdir = temp_dir.join("subdir");
+        let _ = std::fs::remove_dir_all(&temp_dir); // Clean old
+        std::fs::create_dir_all(&subdir)?;
+
+        // Write files
+        let file1_path = subdir.join("file1.txt");
+        let file2_path = temp_dir.join("file2.txt");
+        std::fs::write(&file1_path, vec![0u8; 100])?;
+        std::fs::write(&file2_path, vec![0u8; 200])?;
+
+        // Initialize state
+        let shared_state = Arc::new(SharedState::new());
+        let engine = TraversalEngine::new(shared_state.scan_stats.clone());
+        let (tx, rx) = crossbeam::channel::unbounded();
+
+        // Launch traversal
+        let handle = engine.start_traversal(temp_dir.clone(), false, tx)?;
+
+        // Run coordinator in this thread (blocks until tx is dropped and all events processed)
+        let mut coordinator = Coordinator::new(rx, shared_state.clone());
+        coordinator.run_coordinator_loop(&temp_dir.to_string_lossy());
+
+        // Wait for traversal thread to finish
+        let _ = handle.join();
+
+        // Verify stats
+        let stats = engine.stats();
+        assert_eq!(stats.files_scanned.load(Ordering::SeqCst), 2);
+        assert_eq!(stats.dirs_scanned.load(Ordering::SeqCst), 2); // temp_dir and subdir
+        assert_eq!(stats.bytes_scanned.load(Ordering::SeqCst), 300);
+
+        // Verify snapshot tree structure
+        let snapshot = shared_state.current_snapshot.load();
+        assert!(!snapshot.nodes.is_empty());
+
+        // Root node
+        let root = &snapshot.nodes[0];
+        assert!(root.is_directory());
+        assert_eq!(root.size, 300);
+
+        // Clean up
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        Ok(())
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_traversal_permission_denied() -> Result<(), crate::EdirstatError> {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        // If running as root skip this test.
+        let is_root = std::process::Command::new("id")
+            .arg("-u")
+            .output()
+            .ok()
+            .and_then(|out| String::from_utf8(out.stdout).ok())
+            .and_then(|s| s.trim().parse::<u32>().ok())
+            .is_some_and(|uid| uid == 0);
+
+        if is_root {
+            return Ok(());
+        }
+
+        let temp_dir = std::env::current_dir()?
+            .join("target")
+            .join("test_traversal_perm");
+        let subdir = temp_dir.join("noperm_subdir");
+        let _ = std::fs::remove_dir_all(&temp_dir); // Clean old
+        std::fs::create_dir_all(&subdir)?;
+
+        // Set the subdirectory to no permissions
+        let mut perms = std::fs::metadata(&subdir)?.permissions();
+        perms.set_mode(0o000);
+        std::fs::set_permissions(&subdir, perms)?;
+
+        // Initialize state
+        let shared_state = Arc::new(SharedState::new());
+        let engine = TraversalEngine::new(shared_state.scan_stats.clone());
+        let (tx, rx) = crossbeam::channel::unbounded();
+
+        // Launch traversal
+        let handle = engine.start_traversal(temp_dir.clone(), false, tx)?;
+
+        // Run coordinator
+        let mut coordinator = Coordinator::new(rx, shared_state.clone());
+        coordinator.run_coordinator_loop(&temp_dir.to_string_lossy());
+
+        // Wait for traversal thread to finish
+        let _ = handle.join();
+
+        // Restore permissions so we can clean up
+        let mut restore_perms = std::fs::metadata(&subdir)?.permissions();
+        restore_perms.set_mode(0o755);
+        let _ = std::fs::set_permissions(&subdir, restore_perms);
+        let _ = std::fs::remove_dir_all(&temp_dir);
+
+        // Verify that the restricted subdirectory node exists and has FLAG_NO_PERMISSION
+        let snapshot = shared_state.current_snapshot.load();
+        assert!(!snapshot.nodes.is_empty());
+
+        let mut found_noperm = false;
+        for node in snapshot.nodes.iter() {
+            let name = snapshot.string_pool.get(node.name_id).unwrap_or("");
+            if name == "noperm_subdir" {
+                assert!(node.has_no_permission());
+                found_noperm = true;
+            }
+        }
+        assert!(
+            found_noperm,
+            "Subdirectory with restricted permissions should be present in the snapshot with FLAG_NO_PERMISSION flag set"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_traversal_same_filesystem() -> Result<(), crate::EdirstatError> {
+        let temp_dir = std::env::current_dir()?
+            .join("target")
+            .join("test_traversal_same_fs");
+        let subdir = temp_dir.join("subdir");
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        std::fs::create_dir_all(&subdir)?;
+
+        let file1_path = subdir.join("file1.txt");
+        std::fs::write(&file1_path, vec![0u8; 50])?;
+
+        let shared_state = Arc::new(SharedState::new());
+        let engine = TraversalEngine::new(shared_state.scan_stats.clone());
+        let (tx, rx) = crossbeam::channel::unbounded();
+
+        // Launch traversal with same_filesystem = true
+        let handle = engine.start_traversal(temp_dir.clone(), true, tx)?;
+
+        let mut coordinator = Coordinator::new(rx, shared_state);
+        coordinator.run_coordinator_loop(&temp_dir.to_string_lossy());
+
+        let _ = handle.join();
+
+        let stats = engine.stats();
+        assert_eq!(stats.files_scanned.load(Ordering::SeqCst), 1);
+        assert_eq!(stats.dirs_scanned.load(Ordering::SeqCst), 2); // temp_dir and subdir
+        assert_eq!(stats.bytes_scanned.load(Ordering::SeqCst), 50);
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        Ok(())
+    }
+}

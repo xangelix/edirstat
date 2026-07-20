@@ -952,6 +952,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "console_error_panic_hook"
+version = "0.1.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a06aeb73f470f66dcdbf7223caeebb85984942f22f1adb2a088cf9668146bbbc"
+dependencies = [
+ "cfg-if",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "constant_time_eq"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1275,18 +1285,54 @@ version = "2.0.1"
 dependencies = [
  "ahash",
  "anyhow",
- "arc-swap",
- "atomic-progress",
- "blake3",
  "bytemuck",
- "chrono",
  "clap",
  "cli-or-gui",
  "compact_str",
  "crc-fast",
  "criterion",
  "crossbeam",
+ "edirstat-core",
+ "edirstat-gui",
+ "eframe",
+ "mimalloc-rspack",
+ "parking_lot",
+ "rayon",
+ "smallvec",
+ "sysinfo",
+ "tracy-client",
+ "winresource",
+]
+
+[[package]]
+name = "edirstat-core"
+version = "2.0.1"
+dependencies = [
+ "ahash",
+ "arc-swap",
+ "bytemuck",
+ "chrono",
+ "compact_str",
+ "getrandom 0.3.4",
+ "serde",
+ "thiserror 2.0.18",
+ "xgx_intern",
+ "zstd",
+]
+
+[[package]]
+name = "edirstat-gui"
+version = "2.0.1"
+dependencies = [
+ "ahash",
+ "anyhow",
+ "atomic-progress",
+ "blake3",
+ "cli-or-gui",
+ "compact_str",
+ "console_error_panic_hook",
  "directories",
+ "edirstat-core",
  "eframe",
  "egui-async",
  "egui-notify",
@@ -1297,7 +1343,7 @@ dependencies = [
  "fluent-zero",
  "fluent-zero-build",
  "include_packed",
- "mimalloc-rspack",
+ "log",
  "open",
  "parking_lot",
  "prettier-bytes",
@@ -1309,15 +1355,12 @@ dependencies = [
  "serde",
  "smallvec",
  "strum",
- "sysinfo",
- "thiserror 2.0.18",
  "toml",
  "tracy-client",
  "trash",
  "uzers",
- "winresource",
- "xgx_intern",
- "zstd",
+ "wasm-bindgen-futures",
+ "web-sys",
 ]
 
 [[package]]
@@ -1978,9 +2021,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "899def5c37c4fd7b2664648c28120ecec138e4d395b459e5ca34f9cce2dd77fd"
 dependencies = [
  "cfg-if",
+ "js-sys",
  "libc",
  "r-efi 5.3.0",
  "wasip2",
+ "wasm-bindgen",
 ]
 
 [[package]]

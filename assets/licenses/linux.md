@@ -6,8 +6,8 @@ This page lists the licenses of the projects used in eDirStat.
 
 ## Overview of licenses
 
-* [Apache License 2.0](https://spdx.org/licenses/Apache-2.0.html) (276)
-* [MIT License](https://spdx.org/licenses/MIT.html) (106)
+* [Apache License 2.0](https://spdx.org/licenses/Apache-2.0.html) (275)
+* [MIT License](https://spdx.org/licenses/MIT.html) (109)
 * [Unicode License v3](https://spdx.org/licenses/Unicode-3.0.html) (19)
 * [ISC License](https://spdx.org/licenses/ISC.html) (5)
 * [BSD 3-Clause &quot;New&quot; or &quot;Revised&quot; License](https://spdx.org/licenses/BSD-3-Clause.html) (4)
@@ -8189,7 +8189,6 @@ limitations under the License.
 * [resvg](https://github.com/linebender/resvg)
 * [rustc-hash](https://github.com/rust-lang/rustc-hash)
 * [rustversion](https://github.com/dtolnay/rustversion)
-* [ryu](https://github.com/dtolnay/ryu)
 * [semver](https://github.com/dtolnay/semver)
 * [serde](https://github.com/serde-rs/serde)
 * [serde_core](https://github.com/serde-rs/serde)
@@ -9487,45 +9486,11 @@ DEALINGS IN THE SOFTWARE.
 
 ### MIT License
 **Used by:**
+* [http-body-util](https://github.com/hyperium/http-body)
 * [http-body](https://github.com/hyperium/http-body)
 
 ```text
-Copyright (c) 2019-2024 Sean McArthur & Hyper Contributors
-
-Permission is hereby granted, free of charge, to any
-person obtaining a copy of this software and associated
-documentation files (the "Software"), to deal in the
-Software without restriction, including without
-limitation the rights to use, copy, modify, merge,
-publish, distribute, sublicense, and/or sell copies of
-the Software, and to permit persons to whom the Software
-is furnished to do so, subject to the following
-conditions:
-
-The above copyright notice and this permission notice
-shall be included in all copies or substantial portions
-of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
-ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
-TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
-PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
-SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
-CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
-OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
-IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
-DEALINGS IN THE SOFTWARE.
-
-```
-
------
-
-### MIT License
-**Used by:**
-* [http-body-util](https://github.com/hyperium/http-body)
-
-```text
-Copyright (c) 2019-2025 Sean McArthur & Hyper Contributors
+Copyright (c) 2019-2026 Sean McArthur & Hyper Contributors
 
 Permission is hereby granted, free of charge, to any
 person obtaining a copy of this software and associated
@@ -10167,6 +10132,8 @@ SOFTWARE.
 
 ### MIT License
 **Used by:**
+* [edirstat-core](https://github.com/xangelix/edirstat)
+* [edirstat-gui](https://github.com/xangelix/edirstat)
 * [atomic-progress](https://github.com/xangelix/atomic-progress)
 * [dpi](https://github.com/rust-windowing/winit)
 * [egui-table-kit](https://github.com/xangelix/egui-table-kit)
@@ -10331,6 +10298,7 @@ SOFTWARE.
 * [x11-dl](https://github.com/AltF02/x11-rs.git)
 * [zbus-lockstep-macros](https://github.com/luukvanderduim/zbus-lockstep)
 * [zbus-lockstep](https://github.com/luukvanderduim/zbus-lockstep)
+* [zmij](https://github.com/dtolnay/zmij)
 * [zvariant_utils](https://github.com/z-galaxy/zbus/)
 
 ```text

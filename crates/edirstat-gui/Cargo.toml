@@ -1,0 +1,75 @@
+[package]
+name = "edirstat-gui"
+description = "egui frontend for eDirStat — runs natively and in the browser (wasm) as a snapshot viewer."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[features]
+default = ["online"]
+online = ["reqwest", "egui-async", "semver"]
+profile-tracy = ["dep:tracy-client"]
+
+[dependencies]
+edirstat-core = { path = "../edirstat-core" }
+
+ahash = "0.8.12"
+atomic-progress = { version = "0.1.6", default-features = false, features = [
+    "prettier-bytes",
+] }
+compact_str = "0.10.0"
+eframe = "0.35.0"
+egui-notify = { version = "0.22.0", git = "https://github.com/xangelix/egui-notify.git", branch = "egui-0.35" }
+egui-table-kit = "0.5.3"
+egui_extras = { version = "0.35.0", features = ["svg_text"] }
+egui_plot = "0.36.0"
+fixedbitset = "0.5.7"
+fluent-zero = "0.1.4"
+include_packed = "0.1.6"
+parking_lot = { version = "0.12.5", features = ["hardware-lock-elision"] }
+prettier-bytes = "0.2.1"
+regex = { version = "1.13.1", features = ["use_std"] }
+rfd = "0.17.2"
+serde = { version = "1.0.228", features = ["derive"] }
+smallvec = "1.15.2"
+strum = { version = "0.28.0", features = ["derive"] }
+toml = "1.1.3"
+
+[target.'cfg(target_family = "wasm")'.dependencies]
+console_error_panic_hook = "0.1"
+log = "0.4"
+wasm-bindgen-futures = "0.4"
+web-sys = { version = "0.3", features = [
+    "console",
+    "Document",
+    "HtmlCanvasElement",
+    "Window",
+] }
+
+# Native-only functionality: filesystem mutation, dedup hashing, desktop dialogs,
+# preferences persistence, and the online update checker.
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+blake3 = "1.8.5"
+cli-or-gui = "0.1.1"
+directories = "6.0.0"
+egui-async = { version = "0.5", optional = true }
+open = "5.4.0"
+rayon = "1.12.0"
+reqwest = { version = "0.13", features = [
+    "rustls",
+], default-features = false, optional = true }
+semver = { version = "1", optional = true }
+tracy-client = { version = "0.18.4", optional = true }
+trash = "5.2.6"
+
+[target.'cfg(target_family = "unix")'.dependencies]
+uzers = "0.12.2"
+
+[build-dependencies]
+fluent-zero-build = "0.1.4"
+include_packed = { version = "0.1.6", features = ["build"] }
+
+[dev-dependencies]
+anyhow = "1.0.103"

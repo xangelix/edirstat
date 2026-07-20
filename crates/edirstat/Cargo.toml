@@ -1,0 +1,72 @@
+[package]
+name = "edirstat"
+description = "A fast, cross-platform disk usage analyzer and deduplicator—with work-stealing multithreading, zero-copy snapshots, and an interactive treemap GUI."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+documentation = "https://docs.rs/edirstat"
+repository.workspace = true
+authors.workspace = true
+categories = [
+    "gui",
+    "filesystem",
+    "visualization",
+    "concurrency",
+    "memory-management",
+]
+keywords = ["disk-usage", "treemap", "egui", "dirstat", "zero-copy"]
+
+include = [
+    "/Cargo.toml",
+    "/src/**/*",
+    "/assets/**/*",
+    "/build.rs",
+    "/LICENSE",
+    "/README.md",
+]
+
+[features]
+default = ["online"]
+online = ["edirstat-gui/online"]
+profile-tracy = ["tracy-client", "edirstat-gui/profile-tracy"]
+
+[dependencies]
+edirstat-core = { path = "../edirstat-core" }
+edirstat-gui = { path = "../edirstat-gui", default-features = false }
+
+ahash = "0.8.12"
+anyhow = "1.0.103"
+bytemuck = { version = "1.25.1", features = ["derive"] }
+clap = { version = "4.6.2", features = ["derive"] }
+cli-or-gui = "0.1.1"
+compact_str = "0.10.0"
+crc-fast = "1.10.0"
+crossbeam = "0.8.4"
+eframe = "0.35.0"
+mimalloc-rspack = { version = "0.2.4", features = ["v3"] }
+parking_lot = { version = "0.12.5", features = ["hardware-lock-elision"] }
+rayon = "1.12.0"
+smallvec = "1.15.2"
+sysinfo = { version = "0.39.6", default-features = false, features = ["disk"] }
+
+# feature: profile-tracy
+tracy-client = { version = "0.18.4", optional = true }
+
+[build-dependencies]
+winresource = "0.1.31"
+
+[[bin]]
+name = "edirstat"
+path = "src/bin/edirstat.rs"
+
+[[bench]]
+name = "compare"
+harness = false
+path = "benches/compare.rs"
+
+[[bench]]
+name = "mft_bench"
+harness = false
+
+[dev-dependencies]
+criterion = "0.8.2"
