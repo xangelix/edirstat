@@ -190,6 +190,9 @@ explorer-action-refresh-directory = 🔄 Odśwież katalog
 
 # Explorer Empty State
 explorer-empty-state = Kliknij 'Nowy skan', aby zbadać zużycie dysku.
+choose-an-option = Wybierz opcję
+web-viewer = Przeglądarka Web
+load-demo = 👁 Załaduj przykładową migawkę demo
 placeholder-treemap = Zeskanowany system plików zostanie tutaj przedstawiony w postaci mapy drzewa. (treemap).
 placeholder-plots = Zeskanowany system plików zostanie tutaj przedstawiony na wykresie.
 

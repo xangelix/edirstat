@@ -3,7 +3,8 @@ import { Chart, registerables } from 'chart.js';
 import { 
   createIcons, Folder, File, Zap, Cpu, Shield, Layers, 
   Image, HardDrive, Download, ChevronRight, ChevronDown, 
-  Trash2, BarChart2, Eye, Copy, ExternalLink, Database 
+  Trash2, BarChart2, Eye, Copy, ExternalLink, Database,
+  Layout, Play
 } from 'lucide';
 
 // Register all Chart.js components
@@ -1479,7 +1480,7 @@ document.addEventListener('DOMContentLoaded', () => {
     icons: {
       Folder, File, Zap, Cpu, Shield, Layers, Image, HardDrive, Download, 
       ChevronRight, ChevronDown, Trash2, BarChart2, Eye, Copy, ExternalLink,
-      Database
+      Database, Layout, Play
     }
   });
   

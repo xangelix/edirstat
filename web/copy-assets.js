@@ -45,8 +45,15 @@ function copyFolderSync(from, to) {
 
 // Copy the Web Viewer build output
 const distPath = path.join(repoRoot, 'crates/edirstat-gui/dist');
-const destViewerPath = path.join(projectRoot, 'static/viewer');
+const destAppPath = path.join(projectRoot, 'static/app');
 if (fs.existsSync(distPath)) {
-  copyFolderSync(distPath, destViewerPath);
-  console.log("Copied crates/edirstat-gui/dist -> static/viewer");
+  copyFolderSync(distPath, destAppPath);
+  console.log("Copied crates/edirstat-gui/dist -> static/app");
+}
+
+// Clean up old viewer directory if it exists
+const oldViewerPath = path.join(projectRoot, 'static/viewer');
+if (fs.existsSync(oldViewerPath)) {
+  fs.rmSync(oldViewerPath, { recursive: true, force: true });
+  console.log("Cleaned up old static/viewer directory");
 }

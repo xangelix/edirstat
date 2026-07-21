@@ -187,6 +187,9 @@ explorer-action-refresh-directory = 🔄 Map vernieuwen
 
 # Explorer Empty State
 explorer-empty-state = Klik op 'Nieuwe scan' om het schijfgebruik te verkennen.
+choose-an-option = Kies een optie
+web-viewer = Webviewer
+load-demo = 👁 Laad voorbeeld-demo snapshot
 placeholder-treemap = Gescande bestandssysteem wordt hier als treemap weergegeven.
 placeholder-plots = Gescande bestandssysteem wordt hier grafisch weergegeven.
 

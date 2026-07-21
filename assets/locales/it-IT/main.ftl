@@ -187,6 +187,9 @@ explorer-action-refresh-directory = 🔄 Aggiorna cartella
 
 # Explorer Empty State
 explorer-empty-state = Clicca su 'Nuova analisi' per esplorare l'uso del disco.
+choose-an-option = Scegli un'opzione
+web-viewer = Visualizzatore Web
+load-demo = 👁 Carica snapshot di demo
 placeholder-treemap = Il file system scansionato verrà visualizzato qui come mappa ad albero.
 placeholder-plots = Il file system analizzato verrà rappresentato graficamente qui.
 

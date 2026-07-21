@@ -187,6 +187,9 @@ explorer-action-refresh-directory = 🔄 Ordner aktualisieren
 
 # Explorer Empty State
 explorer-empty-state = Klicken Sie auf 'Neuer Scan', um die Speicherplatzbelegung zu analysieren.
+choose-an-option = Option wählen
+web-viewer = Web-Viewer
+load-demo = 👁 Demo-Snapshot laden
 placeholder-treemap = Das gescannte Dateisystem wird hier als Treemap dargestellt.
 placeholder-plots = Das gescannte Dateisystem wird hier grafisch dargestellt.
 

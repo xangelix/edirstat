@@ -1298,7 +1298,7 @@ impl GuiApp {
                                     egui::Image::new(egui::include_image!(
                                         "../../../../assets/img/logo-nosubtext-transparent.png"
                                     ))
-                                    .max_height(100.0),
+                                    .max_height(48.0),
                                 );
                                 ui.add_space(8.0);
 

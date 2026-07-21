@@ -187,6 +187,9 @@ explorer-action-refresh-directory = 🔄 Refresh Directory
 
 # Explorer Empty State
 explorer-empty-state = Click 'New Scan' to explore disk usage.
+choose-an-option = Choose an Option
+web-viewer = Web Viewer
+load-demo = 👁 Load Sample Demo Snapshot
 placeholder-treemap = Scanned filesystem will be visualized as a treemap here.
 placeholder-plots = Scanned filesystem will be plotted here.
 

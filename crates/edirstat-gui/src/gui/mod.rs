@@ -1663,7 +1663,11 @@ impl eframe::App for GuiApp {
             });
         });
 
-        if self.layout_mode == LayoutMode::Classic {
+        if snapshot.nodes.is_empty() && cfg!(target_family = "wasm") {
+            egui::CentralPanel::default().show(ui, |ui| {
+                self.render_welcome_screen(ui);
+            });
+        } else if self.layout_mode == LayoutMode::Classic {
             // Left Panel - Directory Tree Explorer
             if !self.left_panel_collapsed {
                 egui::Panel::left("left_panel")
@@ -1814,6 +1818,79 @@ impl GuiApp {
                     }
                 });
             }
+        });
+    }
+
+    fn render_welcome_screen(&mut self, ui: &mut egui::Ui) {
+        ui.vertical_centered(|ui| {
+            ui.add_space(80.0);
+            ui.add(
+                egui::Image::new(egui::include_image!(
+                    "../../../../assets/img/logo-nosubtext-transparent.png"
+                ))
+                .max_height(140.0),
+            );
+            ui.add_space(20.0);
+
+            ui.heading(egui::RichText::new(t!("web-viewer")).strong().size(24.0));
+            ui.add_space(5.0);
+
+            ui.group(|ui| {
+                ui.set_width(320.0);
+                ui.vertical_centered_justified(|ui| {
+                    ui.add_space(5.0);
+                    ui.heading(
+                        egui::RichText::new(t!("choose-an-option"))
+                            .size(15.0)
+                            .strong(),
+                    );
+                    ui.add_space(10.0);
+
+                    #[cfg(not(target_family = "wasm"))]
+                    {
+                        if ui.button(t!("new-scan")).clicked() {
+                            self.active_modal = Some(ActiveModal::ScanOptions);
+                        }
+                        ui.add_space(10.0);
+                        if ui.button(t!("load-snapshot")).clicked() {
+                            let file_opt = rfd::FileDialog::new()
+                                .add_filter("eDirStat Snapshot", &["edst.zst", "edst"])
+                                .pick_file();
+                            if let Some(path) = file_opt
+                                && let Err(e) = self.load_snapshot_file(path)
+                            {
+                                println!("Failed to load snapshot: {e}");
+                            }
+                        }
+                    }
+
+                    #[cfg(target_family = "wasm")]
+                    {
+                        if ui.button(t!("load-snapshot")).clicked() {
+                            let command_tx = self.command_tx.clone();
+                            wasm_bindgen_futures::spawn_local(async move {
+                                if let Some(handle) = rfd::AsyncFileDialog::new()
+                                    .add_filter("eDirStat Snapshot", &["edst.zst", "edst"])
+                                    .pick_file()
+                                    .await
+                                {
+                                    let bytes = handle.read().await;
+                                    let _ = command_tx.send(
+                                        crate::gui::operations::AppCommand::LoadSnapshotBytes {
+                                            name: handle.file_name(),
+                                            bytes,
+                                        },
+                                    );
+                                }
+                            });
+                        }
+                        ui.add_space(10.0);
+                        if ui.button(t!("load-demo")).clicked() {
+                            load_demo_via_js();
+                        }
+                    }
+                });
+            });
         });
     }
 
@@ -2430,6 +2507,16 @@ pub fn toast_error(message: impl Into<egui::WidgetText>) {
 
 pub fn show_toasts(ctx: &egui::Context) {
     TOASTS.lock().show(ctx);
+}
+
+#[cfg(target_family = "wasm")]
+#[wasm_bindgen::prelude::wasm_bindgen(inline_js = "
+    export function load_demo_via_js() {
+        window.location.search = '?demo=true';
+    }
+")]
+extern "C" {
+    pub fn load_demo_via_js();
 }
 
 #[cfg(target_family = "wasm")]
