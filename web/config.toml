@@ -1,11 +1,14 @@
 base_url = "https://edirstat.com"
 title = "eDirStat"
-description = "Modern, high-performance, cross-platform disk usage analyzer written in Rust."
+description = "Blazing-fast, open-source disk usage analyzer and duplicate file finder for Windows, macOS & Linux. A modern WinDirStat alternative written in Rust."
 default_language = "en"
 output_dir = "public"
+generate_sitemap = true
 
 [extra]
 itch_io_url = "https://xangelix.itch.io/edirstat"
 github_url = "https://github.com/xangelix/edirstat"
 version = "2.0.1"
 license = "MIT"
+tagline = "Fast Disk Usage Analyzer for Windows, macOS & Linux"
+og_image = "assets/og-image.png"

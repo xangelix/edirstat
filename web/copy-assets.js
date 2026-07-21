@@ -14,6 +14,14 @@ const targets = [
     dest: path.join(projectRoot, 'static/assets/logo-nosubtext-transparent.svg')
   },
   {
+    src: path.join(repoRoot, 'assets/img/og-image.png'),
+    dest: path.join(projectRoot, 'static/assets/og-image.png')
+  },
+  {
+    src: path.join(projectRoot, 'robots.txt'),
+    dest: path.join(projectRoot, 'static/robots.txt')
+  },
+  {
     src: path.join(repoRoot, 'assets/MGS3.edst.zst'),
     dest: path.join(projectRoot, 'static/MGS3.edst.zst')
   }
