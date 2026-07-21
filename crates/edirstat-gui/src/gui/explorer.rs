@@ -856,8 +856,18 @@ impl GuiApp {
 
         self.table_state.flatten_tree(&provider);
 
+        if self.initial_name_col_width.is_none() {
+            let available_w = ui.available_width();
+            let other_cols_w = 740.0;
+            let table_padding_and_scrollbar = 240.0;
+            let computed_w = (available_w - other_cols_w - table_padding_and_scrollbar).max(320.0);
+            self.initial_name_col_width = Some(computed_w);
+        }
+
+        let name_col_width = self.initial_name_col_width.unwrap_or(320.0);
+
         let columns = vec![
-            egui_table_kit::layout::Column::new(320.0).resizable(true),
+            egui_table_kit::layout::Column::new(name_col_width).resizable(true),
             egui_table_kit::layout::Column::new(140.0)
                 .range(80.0..=400.0)
                 .resizable(true),

@@ -96,6 +96,8 @@ pub struct GuiApp {
     // Caching layer for tree search matches
     pub(crate) query_coordinator: crate::gui::explorer::QueryCoordinator,
 
+    pub(crate) initial_name_col_width: Option<f32>,
+
     // Visualization tabs
     pub(crate) vis_mode: VisMode,
     pub(crate) plot_type: PlotType,
@@ -299,6 +301,7 @@ impl GuiApp {
             time_format: prefs.time_format.clone(),
             last_saved_preferences: prefs.clone(),
             query_coordinator: crate::gui::explorer::QueryCoordinator::new(),
+            initial_name_col_width: None,
             vis_mode: VisMode::Treemap,
             plot_type: PlotType::SizeDistribution,
             layout_mode: LayoutMode::WinDirStat,
