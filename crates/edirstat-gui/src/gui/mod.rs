@@ -2046,11 +2046,13 @@ impl GuiApp {
     }
 
     fn render_windirstat_layout(&mut self, ui: &mut egui::Ui, snapshot: &FileArenaSnapshot) {
+        let default_top_height = (ui.available_height() * 0.5).clamp(180.0, 1200.0);
+
         // We want a top panel and a bottom panel (Central Panel space).
         egui::Panel::top("windirstat_top_panel")
             .resizable(true)
-            .default_size(380.0)
-            .size_range(150.0..=600.0)
+            .default_size(default_top_height)
+            .size_range(150.0..=1200.0)
             .show(ui, |ui| {
                 ui.add_space(4.0);
                 ui.horizontal(|ui| {
