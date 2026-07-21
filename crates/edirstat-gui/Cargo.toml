@@ -12,6 +12,9 @@ default = ["online"]
 online = ["reqwest", "egui-async", "semver"]
 profile-tracy = ["dep:tracy-client"]
 
+[package.metadata.cargo-shear]
+ignored = ["image"]
+
 [dependencies]
 edirstat-core = { path = "../edirstat-core" }
 
@@ -23,10 +26,11 @@ compact_str = "0.10.0"
 eframe = "0.35.0"
 egui-notify = { version = "0.22.0", git = "https://github.com/xangelix/egui-notify.git", branch = "egui-0.35" }
 egui-table-kit = "0.5.3"
-egui_extras = { version = "0.35.0", features = ["svg_text"] }
+egui_extras = { version = "0.35.0", features = ["image"] }
 egui_plot = "0.36.0"
 fixedbitset = "0.5.7"
 fluent-zero = "0.1.4"
+image = { version = "0.25.10", default-features = false, features = ["png"] }
 include_packed = "0.1.6"
 parking_lot = { version = "0.12.5", features = ["hardware-lock-elision"] }
 prettier-bytes = "0.2.1"

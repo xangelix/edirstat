@@ -1296,7 +1296,7 @@ impl GuiApp {
                             ui.vertical_centered(|ui| {
                                 ui.add(
                                     egui::Image::new(egui::include_image!(
-                                        "../../../../assets/img/logo-nosubtext-transparent.svg"
+                                        "../../../../assets/img/logo-nosubtext-transparent.png"
                                     ))
                                     .max_height(100.0),
                                 );

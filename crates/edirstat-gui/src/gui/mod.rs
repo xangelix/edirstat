@@ -1233,7 +1233,7 @@ impl eframe::App for GuiApp {
                 );
                 ui.add(
                     egui::Image::new(egui::include_image!(
-                        "../../../../assets/img/icon-transparent.svg"
+                        "../../../../assets/img/icon-transparent.png"
                     ))
                     .max_height(24.0),
                 );
