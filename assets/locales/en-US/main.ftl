@@ -52,6 +52,7 @@ toggle-right-panel = { $collapsed ->
 
 collapse-all = ⏏ Collapse All
 about = ℹ About
+web-not-available = Feature not available in the web version
 
 # Status Indicators
 scanning-disk = Scanning Disk...

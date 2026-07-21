@@ -52,6 +52,7 @@ toggle-right-panel = { $collapsed ->
 
 collapse-all = ⏏ Alles inklappen
 about = ℹ Over eDirStat
+web-not-available = Functie niet beschikbaar in de webversie
 
 # Status Indicators
 scanning-disk = Schijf scannen...

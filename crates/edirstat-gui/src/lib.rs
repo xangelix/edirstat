@@ -49,6 +49,10 @@ pub use static_cache::*;
 /// Gates UI for functionality that needs a live local filesystem or OS integration.
 pub(crate) const IS_NATIVE: bool = !cfg!(target_family = "wasm");
 
+/// When true, UI elements that are non-viable or native-only are completely hidden in WASM/web.
+/// When false (default), non-viable UI elements remain visible but disabled with hover text.
+pub(crate) const HIDE_NA_UI: bool = false;
+
 /// Backend capable of starting directory scans. Implemented by the native
 /// crate on top of the traversal engine; the wasm frontend passes `None` and
 /// acts as a pure snapshot viewer.

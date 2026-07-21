@@ -128,9 +128,13 @@ impl super::GuiApp {
                     t!("dedup-ignore-hidden"),
                 );
 
-                ui.separator();
-                let can_scan = !snapshot.nodes.is_empty();
+                let can_scan = !snapshot.nodes.is_empty() && crate::IS_NATIVE;
                 let scan_btn = ui.add_enabled(can_scan, egui::Button::new(t!("dedup-start-scan")));
+                let scan_btn = if crate::IS_NATIVE {
+                    scan_btn
+                } else {
+                    scan_btn.on_disabled_hover_text(t!("web-not-available"))
+                };
 
                 if scan_btn.clicked() {
                     self.selected_duplicates.clear();
@@ -445,102 +449,114 @@ impl super::GuiApp {
                     .format(total_selected_size)
                     .to_string();
 
-                ui.add_enabled_ui(has_selection, |ui| {
-                    ui.scope(|ui| {
-                        ui.style_mut().visuals.widgets.inactive.weak_bg_fill =
-                            crate::colors::BUTTON_ORANGE;
-                        ui.style_mut().visuals.widgets.hovered.weak_bg_fill =
-                            crate::colors::BUTTON_ORANGE_HOVER;
-                        ui.style_mut().visuals.widgets.active.weak_bg_fill =
-                            crate::colors::BUTTON_ORANGE;
-                        ui.style_mut().visuals.widgets.inactive.bg_stroke = egui::Stroke::NONE;
-                        ui.style_mut().visuals.widgets.hovered.bg_stroke = egui::Stroke::NONE;
-                        ui.style_mut().visuals.widgets.active.bg_stroke = egui::Stroke::NONE;
+                let res_link = ui
+                    .add_enabled_ui(has_selection && crate::IS_NATIVE, |ui| {
+                        ui.scope(|ui| {
+                            ui.style_mut().visuals.widgets.inactive.weak_bg_fill =
+                                crate::colors::BUTTON_ORANGE;
+                            ui.style_mut().visuals.widgets.hovered.weak_bg_fill =
+                                crate::colors::BUTTON_ORANGE_HOVER;
+                            ui.style_mut().visuals.widgets.active.weak_bg_fill =
+                                crate::colors::BUTTON_ORANGE;
+                            ui.style_mut().visuals.widgets.inactive.bg_stroke = egui::Stroke::NONE;
+                            ui.style_mut().visuals.widgets.hovered.bg_stroke = egui::Stroke::NONE;
+                            ui.style_mut().visuals.widgets.active.bg_stroke = egui::Stroke::NONE;
 
-                        let link_button_text = if has_selection {
-                            t!("dedup-link-menu", {
-                                "count" => self.selected_duplicates.len()
-                            })
-                            .into_owned()
-                        } else {
-                            t!("dedup-link-menu-disabled").into_owned()
-                        };
+                            let link_button_text = if has_selection {
+                                t!("dedup-link-menu", {
+                                    "count" => self.selected_duplicates.len()
+                                })
+                                .into_owned()
+                            } else {
+                                t!("dedup-link-menu-disabled").into_owned()
+                            };
 
-                        let link_label = egui::RichText::new(link_button_text)
-                            .color(crate::colors::COLOR_WHITE)
-                            .strong();
-                        ui.menu_button(link_label, |ui| {
-                            ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
+                            let link_label = egui::RichText::new(link_button_text)
+                                .color(crate::colors::COLOR_WHITE)
+                                .strong();
+                            ui.menu_button(link_label, |ui| {
+                                ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
 
-                            if ui.button(t!("dedup-link-hardlinks")).clicked() {
-                                self.delete_duplicates_indices =
-                                    self.selected_duplicates.iter().copied().collect();
-                                self.delete_confirm_checked = false;
-                                self.active_modal =
-                                    Some(crate::gui::ActiveModal::HardlinkDuplicates);
-                                ui.close_kind(egui::UiKind::Menu);
-                            }
+                                if ui.button(t!("dedup-link-hardlinks")).clicked() {
+                                    self.delete_duplicates_indices =
+                                        self.selected_duplicates.iter().copied().collect();
+                                    self.delete_confirm_checked = false;
+                                    self.active_modal =
+                                        Some(crate::gui::ActiveModal::HardlinkDuplicates);
+                                    ui.close_kind(egui::UiKind::Menu);
+                                }
 
-                            if ui.button(t!("dedup-link-softlinks")).clicked() {
-                                self.delete_duplicates_indices =
-                                    self.selected_duplicates.iter().copied().collect();
-                                self.delete_confirm_checked = false;
-                                self.active_modal =
-                                    Some(crate::gui::ActiveModal::SoftlinkDuplicates);
-                                ui.close_kind(egui::UiKind::Menu);
-                            }
+                                if ui.button(t!("dedup-link-softlinks")).clicked() {
+                                    self.delete_duplicates_indices =
+                                        self.selected_duplicates.iter().copied().collect();
+                                    self.delete_confirm_checked = false;
+                                    self.active_modal =
+                                        Some(crate::gui::ActiveModal::SoftlinkDuplicates);
+                                    ui.close_kind(egui::UiKind::Menu);
+                                }
+                            });
                         });
-                    });
-                });
+                    })
+                    .response;
+                if !crate::IS_NATIVE {
+                    res_link.on_disabled_hover_text(t!("web-not-available"));
+                }
 
                 // Combined drop-down menu button styled with deletion red hues
-                ui.add_enabled_ui(has_selection, |ui| {
-                    ui.scope(|ui| {
-                        // Custom styles to make the dropdown host button look prominently Red (Deletion)
-                        ui.style_mut().visuals.widgets.inactive.weak_bg_fill =
-                            crate::colors::DELETION_BORDER;
-                        ui.style_mut().visuals.widgets.hovered.weak_bg_fill =
-                            crate::colors::DELETION_WARNING;
-                        ui.style_mut().visuals.widgets.active.weak_bg_fill =
-                            crate::colors::DELETION_BORDER;
-                        ui.style_mut().visuals.widgets.inactive.bg_stroke = egui::Stroke::NONE;
-                        ui.style_mut().visuals.widgets.hovered.bg_stroke = egui::Stroke::NONE;
-                        ui.style_mut().visuals.widgets.active.bg_stroke = egui::Stroke::NONE;
+                let res_remove = ui
+                    .add_enabled_ui(has_selection && crate::IS_NATIVE, |ui| {
+                        ui.scope(|ui| {
+                            // Custom styles to make the dropdown host button look prominently Red (Deletion)
+                            ui.style_mut().visuals.widgets.inactive.weak_bg_fill =
+                                crate::colors::DELETION_BORDER;
+                            ui.style_mut().visuals.widgets.hovered.weak_bg_fill =
+                                crate::colors::DELETION_WARNING;
+                            ui.style_mut().visuals.widgets.active.weak_bg_fill =
+                                crate::colors::DELETION_BORDER;
+                            ui.style_mut().visuals.widgets.inactive.bg_stroke = egui::Stroke::NONE;
+                            ui.style_mut().visuals.widgets.hovered.bg_stroke = egui::Stroke::NONE;
+                            ui.style_mut().visuals.widgets.active.bg_stroke = egui::Stroke::NONE;
 
-                        let button_text = if has_selection {
-                            t!("dedup-remove-menu", {
-                                "count" => self.selected_duplicates.len(),
-                                "size" => reclaim_str.as_str()
-                            })
-                            .into_owned()
-                        } else {
-                            t!("dedup-remove-menu-disabled").into_owned()
-                        };
+                            let button_text = if has_selection {
+                                t!("dedup-remove-menu", {
+                                    "count" => self.selected_duplicates.len(),
+                                    "size" => reclaim_str.as_str()
+                                })
+                                .into_owned()
+                            } else {
+                                t!("dedup-remove-menu-disabled").into_owned()
+                            };
 
-                        let remove_label = egui::RichText::new(button_text)
-                            .color(crate::colors::COLOR_WHITE)
-                            .strong();
-                        ui.menu_button(remove_label, |ui| {
-                            ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
+                            let remove_label = egui::RichText::new(button_text)
+                                .color(crate::colors::COLOR_WHITE)
+                                .strong();
+                            ui.menu_button(remove_label, |ui| {
+                                ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
 
-                            if ui.button(t!("dedup-remove-trash")).clicked() {
-                                self.delete_duplicates_indices =
-                                    self.selected_duplicates.iter().copied().collect();
-                                self.delete_confirm_checked = false;
-                                self.active_modal = Some(crate::gui::ActiveModal::TrashDuplicates);
-                                ui.close_kind(egui::UiKind::Menu);
-                            }
+                                if ui.button(t!("dedup-remove-trash")).clicked() {
+                                    self.delete_duplicates_indices =
+                                        self.selected_duplicates.iter().copied().collect();
+                                    self.delete_confirm_checked = false;
+                                    self.active_modal =
+                                        Some(crate::gui::ActiveModal::TrashDuplicates);
+                                    ui.close_kind(egui::UiKind::Menu);
+                                }
 
-                            if ui.button(t!("dedup-remove-delete")).clicked() {
-                                self.delete_duplicates_indices =
-                                    self.selected_duplicates.iter().copied().collect();
-                                self.delete_confirm_checked = false;
-                                self.active_modal = Some(crate::gui::ActiveModal::DeleteDuplicates);
-                                ui.close_kind(egui::UiKind::Menu);
-                            }
+                                if ui.button(t!("dedup-remove-delete")).clicked() {
+                                    self.delete_duplicates_indices =
+                                        self.selected_duplicates.iter().copied().collect();
+                                    self.delete_confirm_checked = false;
+                                    self.active_modal =
+                                        Some(crate::gui::ActiveModal::DeleteDuplicates);
+                                    ui.close_kind(egui::UiKind::Menu);
+                                }
+                            });
                         });
-                    });
-                });
+                    })
+                    .response;
+                if !crate::IS_NATIVE {
+                    res_remove.on_disabled_hover_text(t!("web-not-available"));
+                }
             });
         });
 

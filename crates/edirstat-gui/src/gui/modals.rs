@@ -1010,8 +1010,15 @@ impl GuiApp {
                                         )
                                         .fill(cfg.border_color);
 
-                                        let confirm_res = ui
-                                            .add_enabled(self.delete_confirm_checked, confirm_btn);
+                                        let can_confirm =
+                                            self.delete_confirm_checked && crate::IS_NATIVE;
+                                        let confirm_res = ui.add_enabled(can_confirm, confirm_btn);
+                                        let confirm_res = if crate::IS_NATIVE {
+                                            confirm_res
+                                        } else {
+                                            confirm_res
+                                                .on_disabled_hover_text(t!("web-not-available"))
+                                        };
                                         if confirm_res.clicked() {
                                             match cfg.action {
                                                 DeletionAction::DeleteMultiple => {
@@ -1313,6 +1320,15 @@ impl GuiApp {
                                 {
                                     ui.add_space(4.0);
                                     self.draw_update_check_ui(ui);
+                                }
+                                #[cfg(all(feature = "online", target_family = "wasm"))]
+                                if !crate::HIDE_NA_UI {
+                                    ui.add_space(4.0);
+                                    let res = ui.add_enabled(
+                                        false,
+                                        egui::Button::new("🔍 Check for Updates"),
+                                    );
+                                    res.on_disabled_hover_text(t!("web-not-available"));
                                 }
                                 ui.add_space(8.0);
                                 ui.separator();
@@ -1719,11 +1735,10 @@ impl GuiApp {
                                         self.paste_requested = 3;
                                         ctx.send_viewport_cmd(egui::ViewportCommand::RequestPaste);
                                     }
-
                                     // Browse folder button
                                     let browse_btn = ui
-                                        .button("📁")
-                                        .on_hover_text(t!("modal-scan-options-browse-tooltip"));
+                                        .add_enabled(crate::IS_NATIVE, egui::Button::new("📁"))
+                                        .on_disabled_hover_text(t!("web-not-available"));
                                     if browse_btn.clicked() {
                                         // The modal itself is unreachable on wasm
                                         // (no scanner), and rfd's sync dialogs are
@@ -1760,7 +1775,14 @@ impl GuiApp {
                                     .fill(theme::get_color_scanning());
 
                                     let is_empty = self.scan_path_input.trim().is_empty();
-                                    if ui.add_enabled(!is_empty, scan_btn).clicked() {
+                                    let can_scan = !is_empty && self.scanner.is_some();
+                                    let res_scan = ui.add_enabled(can_scan, scan_btn);
+                                    let res_scan = if self.scanner.is_none() {
+                                        res_scan.on_disabled_hover_text(t!("web-not-available"))
+                                    } else {
+                                        res_scan
+                                    };
+                                    if res_scan.clicked() {
                                         let path =
                                             std::path::PathBuf::from(self.scan_path_input.trim());
                                         self.start_scan(path);

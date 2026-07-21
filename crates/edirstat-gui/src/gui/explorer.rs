@@ -1286,81 +1286,89 @@ impl GuiApp {
                 ui.add_space(4.0);
 
                 // Filesystem-mutating operations are native-only
-                if crate::IS_NATIVE {
-                    ui.weak(t!("explorer-actions-operations"));
-                    ui.add_space(4.0);
-                    ui.vertical(|ui| {
-                        let is_scanning = self.shared_state.is_scanning.load(Ordering::SeqCst);
-                        let is_dir_selected = directories > 0 && !is_scanning;
+                if crate::IS_NATIVE || !crate::HIDE_NA_UI {
+                    let res = ui
+                        .add_enabled_ui(crate::IS_NATIVE, |ui| {
+                            ui.weak(t!("explorer-actions-operations"));
+                            ui.add_space(4.0);
+                            ui.vertical(|ui| {
+                                let is_scanning =
+                                    self.shared_state.is_scanning.load(Ordering::SeqCst);
+                                let is_dir_selected = directories > 0 && !is_scanning;
 
-                        let refresh_btn = draw_action_button(
-                            ui,
-                            &t!("explorer-action-refresh-directory"),
-                            egui::Color32::from_rgb(34, 197, 94), // Green
-                            is_dir_selected,
-                        )
-                        .on_hover_text(t!("explorer-action-refresh-hover"));
-                        if refresh_btn.clicked() {
-                            let dirs: Vec<u32> = self
-                                .table_state
-                                .selected_rows
-                                .iter()
-                                .filter(|&idx| {
-                                    (idx as usize) < snapshot.nodes.len()
-                                        && snapshot.nodes[idx as usize].is_directory()
-                                })
-                                .collect();
-                            self.refresh_directory_subtrees(&dirs);
-                        }
-                        ui.add_space(4.0);
+                                let refresh_btn = draw_action_button(
+                                    ui,
+                                    &t!("explorer-action-refresh-directory"),
+                                    egui::Color32::from_rgb(34, 197, 94), // Green
+                                    is_dir_selected,
+                                )
+                                .on_hover_text(t!("explorer-action-refresh-hover"));
+                                if refresh_btn.clicked() {
+                                    let dirs: Vec<u32> = self
+                                        .table_state
+                                        .selected_rows
+                                        .iter()
+                                        .filter(|&idx| {
+                                            (idx as usize) < snapshot.nodes.len()
+                                                && snapshot.nodes[idx as usize].is_directory()
+                                        })
+                                        .collect();
+                                    self.refresh_directory_subtrees(&dirs);
+                                }
+                                ui.add_space(4.0);
 
-                        let trash_btn = draw_action_button(
-                            ui,
-                            "♻ Move to Trash",
-                            egui::Color32::from_rgb(234, 179, 8), // Yellow/Orange
-                            !is_scanning,
-                        );
-                        if trash_btn.clicked() {
-                            self.delete_node_indices =
-                                self.table_state.selected_rows.iter().collect();
-                            if self.trash_confirmation {
-                                self.active_modal = Some(ActiveModal::Trash);
-                                self.delete_confirm_checked = false;
-                                self.remember_confirmation = false;
-                            } else {
-                                self.execute_deletion(
-                                    &self.delete_node_indices.clone(),
-                                    true,
-                                    ui.ctx(),
+                                let trash_btn = draw_action_button(
+                                    ui,
+                                    "♻ Move to Trash",
+                                    egui::Color32::from_rgb(234, 179, 8), // Yellow/Orange
+                                    !is_scanning,
                                 );
-                                self.delete_node_indices.clear();
-                            }
-                        }
-                        ui.add_space(4.0);
+                                if trash_btn.clicked() {
+                                    self.delete_node_indices =
+                                        self.table_state.selected_rows.iter().collect();
+                                    if self.trash_confirmation {
+                                        self.active_modal = Some(ActiveModal::Trash);
+                                        self.delete_confirm_checked = false;
+                                        self.remember_confirmation = false;
+                                    } else {
+                                        self.execute_deletion(
+                                            &self.delete_node_indices.clone(),
+                                            true,
+                                            ui.ctx(),
+                                        );
+                                        self.delete_node_indices.clear();
+                                    }
+                                }
+                                ui.add_space(4.0);
 
-                        let delete_btn = draw_action_button(
-                            ui,
-                            "🗑 Permanently delete",
-                            egui::Color32::from_rgb(239, 68, 68), // Red
-                            !is_scanning,
-                        );
-                        if delete_btn.clicked() {
-                            self.delete_node_indices =
-                                self.table_state.selected_rows.iter().collect();
-                            if self.deletion_confirmation {
-                                self.active_modal = Some(ActiveModal::Delete);
-                                self.delete_confirm_checked = false;
-                                self.remember_confirmation = false;
-                            } else {
-                                self.execute_deletion(
-                                    &self.delete_node_indices.clone(),
-                                    false,
-                                    ui.ctx(),
+                                let delete_btn = draw_action_button(
+                                    ui,
+                                    "🗑 Permanently delete",
+                                    egui::Color32::from_rgb(239, 68, 68), // Red
+                                    !is_scanning,
                                 );
-                                self.delete_node_indices.clear();
-                            }
-                        }
-                    });
+                                if delete_btn.clicked() {
+                                    self.delete_node_indices =
+                                        self.table_state.selected_rows.iter().collect();
+                                    if self.deletion_confirmation {
+                                        self.active_modal = Some(ActiveModal::Delete);
+                                        self.delete_confirm_checked = false;
+                                        self.remember_confirmation = false;
+                                    } else {
+                                        self.execute_deletion(
+                                            &self.delete_node_indices.clone(),
+                                            false,
+                                            ui.ctx(),
+                                        );
+                                        self.delete_node_indices.clear();
+                                    }
+                                }
+                            });
+                        })
+                        .response;
+                    if !crate::IS_NATIVE {
+                        res.on_disabled_hover_text(t!("web-not-available"));
+                    }
                 }
             });
         });
@@ -1629,22 +1637,31 @@ impl GuiApp {
                         }
 
                         // Opening the system file manager is native-only
-                        #[cfg(not(target_family = "wasm"))]
-                        {
-                            let open_btn = draw_action_button(
-                                ui,
-                                &t!("explorer-action-open-manager"),
-                                egui::Color32::from_rgb(245, 158, 11), // Amber/Orange
-                                true,
-                            );
+                        if crate::IS_NATIVE || !crate::HIDE_NA_UI {
+                            let mut open_btn = ui
+                                .add_enabled_ui(crate::IS_NATIVE, |ui| {
+                                    draw_action_button(
+                                        ui,
+                                        &t!("explorer-action-open-manager"),
+                                        egui::Color32::from_rgb(245, 158, 11), // Amber/Orange
+                                        true,
+                                    )
+                                })
+                                .inner;
+                            if !crate::IS_NATIVE {
+                                open_btn = open_btn.on_disabled_hover_text(t!("web-not-available"));
+                            }
                             if open_btn.clicked() {
-                                let path = std::path::Path::new(&full_path);
-                                let dir_to_open = if path.is_dir() {
-                                    path
-                                } else {
-                                    path.parent().map_or(path, |p| p)
-                                };
-                                let _ = open::that(dir_to_open);
+                                #[cfg(not(target_family = "wasm"))]
+                                {
+                                    let path = std::path::Path::new(&full_path);
+                                    let dir_to_open = if path.is_dir() {
+                                        path
+                                    } else {
+                                        path.parent().map_or(path, |p| p)
+                                    };
+                                    let _ = open::that(dir_to_open);
+                                }
                             }
                         }
                     });
@@ -1652,71 +1669,78 @@ impl GuiApp {
                     ui.add_space(12.0);
 
                     // File operations (native-only: need a live filesystem)
-                    if crate::IS_NATIVE {
-                        ui.weak(t!("explorer-actions-operations"));
-                        ui.add_space(4.0);
-                        ui.vertical(|ui| {
-                            let is_dir_selected = is_dir
-                                && !self
-                                    .shared_state
-                                    .is_scanning
-                                    .load(std::sync::atomic::Ordering::SeqCst);
-                            let refresh_btn = draw_action_button(
-                                ui,
-                                &t!("explorer-action-refresh-subtree"),
-                                egui::Color32::from_rgb(34, 197, 94), // Green
-                                is_dir_selected,
-                            );
-                            if refresh_btn.clicked() {
-                                self.refresh_directory_subtree(node_idx);
-                            }
-                            ui.add_space(4.0);
+                    if crate::IS_NATIVE || !crate::HIDE_NA_UI {
+                        let res = ui
+                            .add_enabled_ui(crate::IS_NATIVE, |ui| {
+                                ui.weak(t!("explorer-actions-operations"));
+                                ui.add_space(4.0);
+                                ui.vertical(|ui| {
+                                    let is_dir_selected = is_dir
+                                        && !self
+                                            .shared_state
+                                            .is_scanning
+                                            .load(std::sync::atomic::Ordering::SeqCst);
+                                    let refresh_btn = draw_action_button(
+                                        ui,
+                                        &t!("explorer-action-refresh-subtree"),
+                                        egui::Color32::from_rgb(34, 197, 94), // Green
+                                        is_dir_selected,
+                                    );
+                                    if refresh_btn.clicked() {
+                                        self.refresh_directory_subtree(node_idx);
+                                    }
+                                    ui.add_space(4.0);
 
-                            let trash_btn = draw_action_button(
-                                ui,
-                                &t!("explorer-action-move-trash"),
-                                egui::Color32::from_rgb(234, 179, 8), // Yellow/Orange
-                                true,
-                            );
-                            if trash_btn.clicked() {
-                                self.delete_node_indices = vec![node_idx];
-                                if self.trash_confirmation {
-                                    self.active_modal = Some(ActiveModal::Trash);
-                                    self.delete_confirm_checked = false;
-                                    self.remember_confirmation = false;
-                                } else {
-                                    self.execute_deletion(
-                                        &self.delete_node_indices.clone(),
+                                    let trash_btn = draw_action_button(
+                                        ui,
+                                        &t!("explorer-action-move-trash"),
+                                        egui::Color32::from_rgb(234, 179, 8), // Yellow/Orange
                                         true,
-                                        ui.ctx(),
                                     );
-                                    self.delete_node_indices.clear();
-                                }
-                            }
-                            ui.add_space(4.0);
+                                    if trash_btn.clicked() {
+                                        self.delete_node_indices = vec![node_idx];
+                                        if self.trash_confirmation {
+                                            self.active_modal = Some(ActiveModal::Trash);
+                                            self.delete_confirm_checked = false;
+                                            self.remember_confirmation = false;
+                                        } else {
+                                            self.execute_deletion(
+                                                &self.delete_node_indices.clone(),
+                                                true,
+                                                ui.ctx(),
+                                            );
+                                            self.delete_node_indices.clear();
+                                        }
+                                    }
+                                    ui.add_space(4.0);
 
-                            let delete_btn = draw_action_button(
-                                ui,
-                                &t!("explorer-action-delete-permanently"),
-                                egui::Color32::from_rgb(239, 68, 68), // Red
-                                true,
-                            );
-                            if delete_btn.clicked() {
-                                self.delete_node_indices = vec![node_idx];
-                                if self.deletion_confirmation {
-                                    self.active_modal = Some(ActiveModal::Delete);
-                                    self.delete_confirm_checked = false;
-                                    self.remember_confirmation = false;
-                                } else {
-                                    self.execute_deletion(
-                                        &self.delete_node_indices.clone(),
-                                        false,
-                                        ui.ctx(),
+                                    let delete_btn = draw_action_button(
+                                        ui,
+                                        &t!("explorer-action-delete-permanently"),
+                                        egui::Color32::from_rgb(239, 68, 68), // Red
+                                        true,
                                     );
-                                    self.delete_node_indices.clear();
-                                }
-                            }
-                        });
+                                    if delete_btn.clicked() {
+                                        self.delete_node_indices = vec![node_idx];
+                                        if self.deletion_confirmation {
+                                            self.active_modal = Some(ActiveModal::Delete);
+                                            self.delete_confirm_checked = false;
+                                            self.remember_confirmation = false;
+                                        } else {
+                                            self.execute_deletion(
+                                                &self.delete_node_indices.clone(),
+                                                false,
+                                                ui.ctx(),
+                                            );
+                                            self.delete_node_indices.clear();
+                                        }
+                                    }
+                                });
+                            })
+                            .response;
+                        if !crate::IS_NATIVE {
+                            res.on_disabled_hover_text(t!("web-not-available"));
+                        }
                     }
                 });
             });

@@ -52,6 +52,7 @@ toggle-right-panel = { $collapsed ->
 
 collapse-all = ⏏ Comprimi tutto
 about = ℹ Informazioni su eDirStat
+web-not-available = Funzionalità non disponibile nella versione web
 
 # Status Indicators
 scanning-disk = Analisi del disco...

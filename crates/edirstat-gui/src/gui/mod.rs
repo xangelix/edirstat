@@ -209,13 +209,11 @@ impl GuiApp {
         // Initialize the command queue channels
         let (command_tx, command_rx) = std::sync::mpsc::channel();
 
-        // Ops that require a live local filesystem or OS integration are native-only.
-        #[cfg_attr(target_family = "wasm", allow(unused_mut))]
+        // Ops that require a live local filesystem or OS integration are native-only unless HIDE_NA_UI is false.
         let mut nav_ops: Vec<Box<dyn egui_table_kit::operations::TableOperation>> = vec![Box::new(
             crate::gui::operations::UpOneLevelOp::new(shared_state.clone(), command_tx.clone()),
         )];
-        #[cfg(not(target_family = "wasm"))]
-        {
+        if crate::IS_NATIVE || !crate::HIDE_NA_UI {
             nav_ops.push(Box::new(crate::gui::operations::RefreshRootOp::new(
                 shared_state.clone(),
                 command_tx.clone(),
@@ -226,19 +224,20 @@ impl GuiApp {
             )));
         }
 
-        let operations = egui_table_kit::operations::TableOperations::new().with_group(nav_ops);
+        let mut operations = egui_table_kit::operations::TableOperations::new().with_group(nav_ops);
 
-        #[cfg(not(target_family = "wasm"))]
-        let operations = operations.with_group(vec![
-            Box::new(crate::gui::operations::OpenFileManagerOp::new(
-                shared_state.clone(),
-            )),
-            Box::new(crate::gui::operations::OpenTerminalOp::new(
-                shared_state.clone(),
-            )),
-        ]);
+        if crate::IS_NATIVE || !crate::HIDE_NA_UI {
+            operations = operations.with_group(vec![
+                Box::new(crate::gui::operations::OpenFileManagerOp::new(
+                    shared_state.clone(),
+                )),
+                Box::new(crate::gui::operations::OpenTerminalOp::new(
+                    shared_state.clone(),
+                )),
+            ]);
+        }
 
-        let operations = operations.with_group(vec![
+        operations = operations.with_group(vec![
             Box::new(crate::gui::operations::CopyNameOp::new(
                 shared_state.clone(),
             )),
@@ -247,15 +246,16 @@ impl GuiApp {
             )),
         ]);
 
-        #[cfg(not(target_family = "wasm"))]
-        let operations = operations.with_group(vec![
-            Box::new(crate::gui::operations::TrashSelectedOp::new(
-                command_tx.clone(),
-            )),
-            Box::new(crate::gui::operations::DeleteSelectedOp::new(
-                command_tx.clone(),
-            )),
-        ]);
+        if crate::IS_NATIVE || !crate::HIDE_NA_UI {
+            operations = operations.with_group(vec![
+                Box::new(crate::gui::operations::TrashSelectedOp::new(
+                    command_tx.clone(),
+                )),
+                Box::new(crate::gui::operations::DeleteSelectedOp::new(
+                    command_tx.clone(),
+                )),
+            ]);
+        }
 
         #[cfg(target_os = "windows")]
         let active_modal = if cli_or_gui::is_elevated() {
@@ -821,12 +821,19 @@ impl GuiApp {
             // Right side: Active Visualizer Modes
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 // Deduplication requires live filesystem access (native-only)
-                if crate::IS_NATIVE {
-                    ui.selectable_value(
-                        &mut self.vis_mode,
-                        VisMode::Deduplicator,
-                        t!("vis-mode-deduplicator"),
-                    );
+                if crate::IS_NATIVE || !crate::HIDE_NA_UI {
+                    let res = ui
+                        .add_enabled_ui(crate::IS_NATIVE, |ui| {
+                            ui.selectable_value(
+                                &mut self.vis_mode,
+                                VisMode::Deduplicator,
+                                t!("vis-mode-deduplicator"),
+                            )
+                        })
+                        .inner;
+                    if !crate::IS_NATIVE {
+                        res.on_disabled_hover_text(t!("web-not-available"));
+                    }
                 }
                 ui.selectable_value(&mut self.vis_mode, VisMode::Plots, t!("vis-mode-plots"));
                 ui.selectable_value(&mut self.vis_mode, VisMode::Treemap, t!("vis-mode-treemap"));
@@ -1389,8 +1396,16 @@ impl eframe::App for GuiApp {
                 ui.separator();
 
                 // Scan initiation requires a native scanner backend
-                if self.scanner.is_some() {
-                    self.draw_scan_button(ui, is_scanning, &snapshot);
+                if self.scanner.is_some() || !crate::HIDE_NA_UI {
+                    let has_scanner = self.scanner.is_some();
+                    let res = ui
+                        .add_enabled_ui(has_scanner, |ui| {
+                            self.draw_scan_button(ui, is_scanning, &snapshot);
+                        })
+                        .response;
+                    if !has_scanner {
+                        res.on_disabled_hover_text(t!("web-not-available"));
+                    }
                 }
 
                 ui.add_space(10.0);

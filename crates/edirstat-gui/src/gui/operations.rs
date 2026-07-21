@@ -134,6 +134,17 @@ impl TableOperation for RefreshRootOp {
         TableOperationEnablement::Always
     }
 
+    fn evaluate_enablement(
+        &self,
+        _state: &egui_table_kit::state::TableState,
+    ) -> (bool, Cow<'static, str>) {
+        if crate::IS_NATIVE {
+            (true, Cow::Borrowed(""))
+        } else {
+            (false, t!("web-not-available"))
+        }
+    }
+
     fn exec(&mut self, _ctx: &mut OperationContext<'_, '_>) -> Result<(), TableError> {
         let snapshot = get_snapshot(&self.shared_state);
 
@@ -177,6 +188,20 @@ impl TableOperation for RefreshDirectoryOp {
         TableOperationEnablement::AtLeastOneSelected
     }
 
+    fn evaluate_enablement(
+        &self,
+        state: &egui_table_kit::state::TableState,
+    ) -> (bool, Cow<'static, str>) {
+        if crate::IS_NATIVE {
+            (
+                !state.selected_rows.is_empty(),
+                t!("operation-at-least-one"),
+            )
+        } else {
+            (false, t!("web-not-available"))
+        }
+    }
+
     fn exec(&mut self, ctx: &mut OperationContext<'_, '_>) -> Result<(), TableError> {
         let snapshot = get_snapshot(&self.shared_state);
 
@@ -198,20 +223,18 @@ impl TableOperation for RefreshDirectoryOp {
 }
 
 // --- Open in File Manager ---
-#[cfg(not(target_family = "wasm"))]
 #[derive(Debug)]
 pub struct OpenFileManagerOp {
+    #[allow(dead_code)]
     shared_state: Arc<SharedState>,
 }
 
-#[cfg(not(target_family = "wasm"))]
 impl OpenFileManagerOp {
     pub const fn new(shared_state: Arc<SharedState>) -> Self {
         Self { shared_state }
     }
 }
 
-#[cfg(not(target_family = "wasm"))]
 impl TableOperation for OpenFileManagerOp {
     fn name(&self) -> Cow<'_, str> {
         t!("op-open-file-manager")
@@ -225,52 +248,65 @@ impl TableOperation for OpenFileManagerOp {
         TableOperationEnablement::OneSelected
     }
 
-    fn exec(&mut self, ctx: &mut OperationContext<'_, '_>) -> Result<(), TableError> {
-        let snapshot = get_snapshot(&self.shared_state);
+    fn evaluate_enablement(
+        &self,
+        state: &egui_table_kit::state::TableState,
+    ) -> (bool, Cow<'static, str>) {
+        if crate::IS_NATIVE {
+            (state.selected_rows.len() == 1, t!("operation-one"))
+        } else {
+            (false, t!("web-not-available"))
+        }
+    }
 
-        if let Some(idx) = ctx.data.selected_rows.iter().next() {
-            let path_str = snapshot.get_full_path(idx);
-            let path = Path::new(&path_str);
-            let dir_to_open = if path.is_dir() {
-                path
-            } else {
-                path.parent().map_or(path, |p| p)
-            };
-            match open::that(dir_to_open) {
-                Ok(()) => {
-                    let path_lossy = dir_to_open.to_string_lossy();
-                    let cleaned_path = crate::arena::clean_unc_path(&path_lossy);
-                    crate::gui::toast_info(
-                        t!("toast-opened-manager", { "path" => cleaned_path.as_ref() }),
-                    );
-                }
-                Err(e) => {
-                    let err_msg = e.to_string();
-                    crate::gui::toast_error(
-                        t!("toast-failed-open-manager", { "error" => err_msg.as_str() }),
-                    );
+    fn exec(&mut self, ctx: &mut OperationContext<'_, '_>) -> Result<(), TableError> {
+        #[cfg(not(target_family = "wasm"))]
+        {
+            let snapshot = get_snapshot(&self.shared_state);
+
+            if let Some(idx) = ctx.data.selected_rows.iter().next() {
+                let path_str = snapshot.get_full_path(idx);
+                let path = Path::new(&path_str);
+                let dir_to_open = if path.is_dir() {
+                    path
+                } else {
+                    path.parent().map_or(path, |p| p)
+                };
+                match open::that(dir_to_open) {
+                    Ok(()) => {
+                        let path_lossy = dir_to_open.to_string_lossy();
+                        let cleaned_path = crate::arena::clean_unc_path(&path_lossy);
+                        crate::gui::toast_info(
+                            t!("toast-opened-manager", { "path" => cleaned_path.as_ref() }),
+                        );
+                    }
+                    Err(e) => {
+                        let err_msg = e.to_string();
+                        crate::gui::toast_error(
+                            t!("toast-failed-open-manager", { "error" => err_msg.as_str() }),
+                        );
+                    }
                 }
             }
         }
+        let _ = ctx;
         Ok(())
     }
 }
 
 // --- Open Terminal Here ---
-#[cfg(not(target_family = "wasm"))]
 #[derive(Debug)]
 pub struct OpenTerminalOp {
+    #[allow(dead_code)]
     shared_state: Arc<SharedState>,
 }
 
-#[cfg(not(target_family = "wasm"))]
 impl OpenTerminalOp {
     pub const fn new(shared_state: Arc<SharedState>) -> Self {
         Self { shared_state }
     }
 }
 
-#[cfg(not(target_family = "wasm"))]
 impl TableOperation for OpenTerminalOp {
     fn name(&self) -> Cow<'_, str> {
         t!("op-open-terminal")
@@ -284,26 +320,41 @@ impl TableOperation for OpenTerminalOp {
         TableOperationEnablement::OneSelected
     }
 
-    fn exec(&mut self, ctx: &mut OperationContext<'_, '_>) -> Result<(), TableError> {
-        let snapshot = get_snapshot(&self.shared_state);
+    fn evaluate_enablement(
+        &self,
+        state: &egui_table_kit::state::TableState,
+    ) -> (bool, Cow<'static, str>) {
+        if crate::IS_NATIVE {
+            (state.selected_rows.len() == 1, t!("operation-one"))
+        } else {
+            (false, t!("web-not-available"))
+        }
+    }
 
-        if let Some(idx) = ctx.data.selected_rows.iter().next()
-            && (idx as usize) < snapshot.nodes.len()
-            && snapshot.nodes[idx as usize].is_directory()
+    fn exec(&mut self, ctx: &mut OperationContext<'_, '_>) -> Result<(), TableError> {
+        #[cfg(not(target_family = "wasm"))]
         {
-            let path_str = snapshot.get_full_path(idx);
-            match super::open_terminal_at(Path::new(&path_str)) {
-                Ok(()) => crate::gui::toast_info(
-                    t!("toast-opened-terminal", { "path" => path_str.as_str() }),
-                ),
-                Err(e) => {
-                    let err_msg = e.to_string();
-                    crate::gui::toast_error(
-                        t!("toast-failed-open-terminal", { "error" => err_msg.as_str() }),
-                    );
+            let snapshot = get_snapshot(&self.shared_state);
+
+            if let Some(idx) = ctx.data.selected_rows.iter().next()
+                && (idx as usize) < snapshot.nodes.len()
+                && snapshot.nodes[idx as usize].is_directory()
+            {
+                let path_str = snapshot.get_full_path(idx);
+                match super::open_terminal_at(Path::new(&path_str)) {
+                    Ok(()) => crate::gui::toast_info(
+                        t!("toast-opened-terminal", { "path" => path_str.as_str() }),
+                    ),
+                    Err(e) => {
+                        let err_msg = e.to_string();
+                        crate::gui::toast_error(
+                            t!("toast-failed-open-terminal", { "error" => err_msg.as_str() }),
+                        );
+                    }
                 }
             }
         }
+        let _ = ctx;
         Ok(())
     }
 }
@@ -428,6 +479,20 @@ impl TableOperation for TrashSelectedOp {
         TableOperationEnablement::AtLeastOneSelected
     }
 
+    fn evaluate_enablement(
+        &self,
+        state: &egui_table_kit::state::TableState,
+    ) -> (bool, Cow<'static, str>) {
+        if crate::IS_NATIVE {
+            (
+                !state.selected_rows.is_empty(),
+                t!("operation-at-least-one"),
+            )
+        } else {
+            (false, t!("web-not-available"))
+        }
+    }
+
     fn exec(&mut self, ctx: &mut OperationContext<'_, '_>) -> Result<(), TableError> {
         let targets: Vec<u32> = ctx.data.selected_rows.iter().collect();
         let _ = self.command_tx.send(AppCommand::ShowTrashModal(targets));
@@ -459,6 +524,20 @@ impl TableOperation for DeleteSelectedOp {
 
     fn enabled(&self) -> TableOperationEnablement {
         TableOperationEnablement::AtLeastOneSelected
+    }
+
+    fn evaluate_enablement(
+        &self,
+        state: &egui_table_kit::state::TableState,
+    ) -> (bool, Cow<'static, str>) {
+        if crate::IS_NATIVE {
+            (
+                !state.selected_rows.is_empty(),
+                t!("operation-at-least-one"),
+            )
+        } else {
+            (false, t!("web-not-available"))
+        }
     }
 
     fn exec(&mut self, ctx: &mut OperationContext<'_, '_>) -> Result<(), TableError> {
