@@ -169,6 +169,168 @@ fn walk_dir(dir_path: &std::path::Path, parent_idx: u32, dir_idx: u32, ctx: &mut
     }
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct SystemDrive {
+    pub name: String,
+    pub mount_point: std::path::PathBuf,
+    pub fs_type: String,
+    pub total_bytes: u64,
+    pub available_bytes: u64,
+    pub is_removable: bool,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct QuickLocation {
+    pub label: &'static str,
+    pub icon: &'static str,
+    pub path: std::path::PathBuf,
+}
+
+#[cfg(not(target_family = "wasm"))]
+pub(crate) fn get_detected_drives(force_refresh: bool) -> Vec<SystemDrive> {
+    use std::{
+        cell::RefCell,
+        time::{Duration, Instant},
+    };
+
+    thread_local! {
+        static CACHE: RefCell<Option<(Instant, Vec<SystemDrive>)>> = const { RefCell::new(None) };
+    }
+
+    CACHE.with(|cache| {
+        let mut borrow = cache.borrow_mut();
+        if !force_refresh
+            && let Some((last_update, ref drives)) = *borrow
+            && last_update.elapsed() < Duration::from_secs(10)
+        {
+            return drives.clone();
+        }
+
+        let disks = sysinfo::Disks::new_with_refreshed_list();
+        let mut drives = Vec::new();
+        for disk in &disks {
+            let fs_str = disk.file_system().to_string_lossy().into_owned();
+            let fs_lower = fs_str.to_lowercase();
+            if matches!(
+                fs_lower.as_str(),
+                "tmpfs"
+                    | "proc"
+                    | "sysfs"
+                    | "devtmpfs"
+                    | "devfs"
+                    | "cgroup"
+                    | "pstore"
+                    | "overlay"
+                    | "squashfs"
+                    | "nsfs"
+                    | "ramfs"
+            ) {
+                continue;
+            }
+
+            let mount_str = disk.mount_point().to_string_lossy();
+            let name_str = disk.name().to_string_lossy();
+
+            let name = if name_str.trim().is_empty() || name_str == mount_str {
+                if mount_str == "/" {
+                    t!("modal-scan-options-root-system").to_string()
+                } else {
+                    disk.mount_point()
+                        .file_name()
+                        .map(|n| n.to_string_lossy().into_owned())
+                        .filter(|n| !n.trim().is_empty())
+                        .unwrap_or_else(|| mount_str.into_owned())
+                }
+            } else {
+                name_str.trim().to_string()
+            };
+
+            drives.push(SystemDrive {
+                name,
+                mount_point: disk.mount_point().to_path_buf(),
+                fs_type: fs_str,
+                total_bytes: disk.total_space(),
+                available_bytes: disk.available_space(),
+                is_removable: disk.is_removable(),
+            });
+        }
+        drives.sort_by(|a, b| a.mount_point.cmp(&b.mount_point));
+        *borrow = Some((Instant::now(), drives.clone()));
+        drives
+    })
+}
+
+#[cfg(target_family = "wasm")]
+pub(crate) fn get_detected_drives(_force_refresh: bool) -> Vec<SystemDrive> {
+    Vec::new()
+}
+
+#[cfg(not(target_family = "wasm"))]
+pub(crate) fn get_quick_locations() -> Vec<QuickLocation> {
+    use std::cell::RefCell;
+
+    thread_local! {
+        static CACHE: RefCell<Option<Vec<QuickLocation>>> = const { RefCell::new(None) };
+    }
+
+    CACHE.with(|cache| {
+        let mut borrow = cache.borrow_mut();
+        if let Some(ref locs) = *borrow {
+            return locs.clone();
+        }
+
+        let mut locs = Vec::new();
+        if let Some(user_dirs) = directories::UserDirs::new() {
+            locs.push(QuickLocation {
+                label: "Home",
+                icon: "🏠",
+                path: user_dirs.home_dir().to_path_buf(),
+            });
+            if let Some(p) = user_dirs.document_dir() {
+                locs.push(QuickLocation {
+                    label: "Documents",
+                    icon: "📄",
+                    path: p.to_path_buf(),
+                });
+            }
+            if let Some(p) = user_dirs.download_dir() {
+                locs.push(QuickLocation {
+                    label: "Downloads",
+                    icon: "📥",
+                    path: p.to_path_buf(),
+                });
+            }
+            if let Some(p) = user_dirs.desktop_dir() {
+                locs.push(QuickLocation {
+                    label: "Desktop",
+                    icon: "🖥️",
+                    path: p.to_path_buf(),
+                });
+            }
+            if let Some(p) = user_dirs.picture_dir() {
+                locs.push(QuickLocation {
+                    label: "Pictures",
+                    icon: "🖼️",
+                    path: p.to_path_buf(),
+                });
+            }
+        } else if let Ok(home) = std::env::var("HOME") {
+            locs.push(QuickLocation {
+                label: "Home",
+                icon: "🏠",
+                path: std::path::PathBuf::from(home),
+            });
+        }
+        *borrow = Some(locs.clone());
+        locs
+    })
+}
+
+#[cfg(target_family = "wasm")]
+pub(crate) fn get_quick_locations() -> Vec<QuickLocation> {
+    Vec::new()
+}
+
 impl GuiApp {
     /// Performs a zero-copy update to the active snapshot by unlinking deleted nodes,
     /// backtracking size weights up to the root, and swapping the updated tree structure.
@@ -1660,6 +1822,7 @@ impl GuiApp {
                 .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
                 .collapsible(false)
                 .resizable(false)
+                .default_width(600.0)
                 .open(&mut open)
                 .title_bar(false) // Disable default system title bar
                 .frame(
@@ -1668,14 +1831,14 @@ impl GuiApp {
                         .stroke(egui::Stroke::new(
                             1.2f32,
                             egui::Color32::from_rgb(74, 85, 104),
-                        )) // Matching bright slate border
+                        )) // Bright slate border
                         .inner_margin(egui::Margin::ZERO)
-                        .corner_radius(8.0),
+                        .corner_radius(10.0),
                 )
                 .show(ctx, |ui| {
-                    // Custom Header Area
+                    // Custom Header Area (uses standard window background)
                     egui::Frame::new()
-                        .inner_margin(egui::Margin::symmetric(16, 12))
+                        .inner_margin(egui::Margin::symmetric(20, 14))
                         .show(ui, |ui| {
                             ui.horizontal(|ui| {
                                 ui.heading(
@@ -1693,9 +1856,15 @@ impl GuiApp {
                                     },
                                 );
                             });
+                            ui.add_space(2.0);
+                            ui.label(
+                                egui::RichText::new("Select a storage volume, quick location, or custom directory to analyze.")
+                                    .size(12.0)
+                                    .color(ui.visuals().weak_text_color()),
+                            );
                         });
 
-                    // Thin, subtle separator line
+                    // Separator line
                     let (rect, _) = ui.allocate_exact_size(
                         egui::vec2(ui.available_width(), 1.0),
                         egui::Sense::hover(),
@@ -1708,21 +1877,279 @@ impl GuiApp {
 
                     // Content Area
                     egui::Frame::new()
-                        .inner_margin(egui::Margin::same(16))
+                        .inner_margin(egui::Margin {
+                            left: 20,
+                            right: 20,
+                            top: 10,
+                            bottom: 20,
+                        })
                         .show(ui, |ui| {
+                            ui.set_width(580.0);
                             ui.vertical(|ui| {
-                                ui.label(t!("modal-scan-options-path-label"));
+                                // --- Section 1: Detected Drives & Storage Mounts ---
+                                let mut force_refresh = false;
+
+                                // Header row with right-aligned refresh button
+                                ui.horizontal(|ui| {
+                                    ui.label(
+                                        egui::RichText::new(t!("modal-scan-options-drives-header"))
+                                            .strong()
+                                            .size(13.0),
+                                    );
+
+                                    ui.with_layout(
+                                        egui::Layout::right_to_left(egui::Align::Center),
+                                        |ui| {
+                                            let refresh_btn = ui
+                                                .button("🔄")
+                                                .on_hover_text(t!("modal-scan-options-refresh-tooltip"));
+                                            if refresh_btn.clicked() {
+                                                force_refresh = true;
+                                            }
+                                        },
+                                    );
+                                });
+                                ui.add_space(6.0);
+
+                                let drives = get_detected_drives(force_refresh);
+                                if !drives.is_empty() {
+                                    egui::Frame::new()
+                                        .fill(theme::get_bg_panel().linear_multiply(0.7))
+                                        .stroke(egui::Stroke::new(1.0, theme::get_stroke_border()))
+                                        .corner_radius(8.0)
+                                        .inner_margin(egui::Margin::symmetric(6, 6))
+                                        .show(ui, |ui| {
+                                            egui::ScrollArea::vertical()
+                                                .max_height(240.0)
+                                                .min_scrolled_width(528.0)
+                                                .auto_shrink([false, false])
+                                                .show(ui, |ui| {
+                                                    ui.add_space(4.0); // Top padding to prevent stroke clipping
+                                                    let card_width = 496.0;
+
+                                                    for drive in &drives {
+                                                        let drive_path_str = drive.mount_point.to_string_lossy();
+                                                        let is_selected = self.scan_path_input.trim() == drive_path_str;
+
+                                                        let (card_rect, response) = ui.allocate_exact_size(
+                                                            egui::vec2(card_width, 80.0),
+                                                            egui::Sense::click(),
+                                                        );
+
+                                                        // Maintain hover state even when pointer is over child text labels
+                                                        let is_hovered = ui.rect_contains_pointer(card_rect);
+                                                        if is_hovered {
+                                                            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                                                        }
+
+                                                        let bg_color = if is_selected {
+                                                            theme::get_color_scanning().linear_multiply(0.18)
+                                                        } else if is_hovered {
+                                                            ui.visuals().widgets.hovered.bg_fill
+                                                        } else {
+                                                            theme::get_bg_panel()
+                                                        };
+
+                                                        let stroke_color = if is_selected {
+                                                            theme::get_color_scanning()
+                                                        } else if is_hovered {
+                                                            ui.visuals().widgets.hovered.bg_stroke.color
+                                                        } else {
+                                                            theme::get_stroke_border()
+                                                        };
+
+                                                        let stroke_width = if is_selected { 1.5 } else if is_hovered { 1.2 } else { 1.0 };
+
+                                                        // Paint card background with inside stroke to prevent edge clipping
+                                                        ui.painter().rect(
+                                                            card_rect,
+                                                            6.0,
+                                                            bg_color,
+                                                            egui::Stroke::new(stroke_width, stroke_color),
+                                                            egui::StrokeKind::Inside,
+                                                        );
+
+                                                        // Inner content layout
+                                                        let inner_rect = card_rect.shrink2(egui::vec2(12.0, 8.0));
+                                                        let mut card_ui = ui.new_child(egui::UiBuilder::new().max_rect(inner_rect));
+
+                                                        ui.add_space(4.0);
+                                                        card_ui.horizontal(|ui| {
+                                                            // Large drive icon on the left
+                                                            let icon = if drive.mount_point == std::path::Path::new("/") || drive_path_str == "C:\\" {
+                                                                "💻"
+                                                            } else if drive.is_removable {
+                                                                "🔌"
+                                                            } else {
+                                                                "💽"
+                                                            };
+                                                            ui.label(egui::RichText::new(icon).size(26.0));
+                                                            ui.add_space(6.0);
+
+                                                            // Right Column containing details & storage usage bar
+                                                            ui.vertical(|ui| {
+                                                                ui.add_space(2.0);
+                                                                // Top Row: Name on left, badges (FS & Selected) right-aligned in top right
+                                                                ui.horizontal(|ui| {
+                                                                    ui.label(
+                                                                        egui::RichText::new(&drive.name)
+                                                                            .strong()
+                                                                            .size(13.0),
+                                                                    );
+
+                                                                    ui.with_layout(
+                                                                        egui::Layout::right_to_left(egui::Align::Center),
+                                                                        |ui| {
+                                                                            if is_selected {
+                                                                                ui.label(
+                                                                                    egui::RichText::new(t!("modal-scan-options-selected-badge"))
+                                                                                        .size(11.0)
+                                                                                        .color(theme::get_color_scanning())
+                                                                                        .strong(),
+                                                                                );
+                                                                            }
+                                                                            if !drive.fs_type.is_empty() {
+                                                                                ui.label(
+                                                                                    egui::RichText::new(&drive.fs_type)
+                                                                                        .size(10.5)
+                                                                                        .color(theme::EXT_TOML)
+                                                                                        .strong(),
+                                                                                );
+                                                                            }
+                                                                        },
+                                                                    );
+                                                                });
+
+                                                                // Middle Row: Mount Path
+                                                                ui.label(
+                                                                    egui::RichText::new(drive_path_str.as_ref())
+                                                                        .size(11.0)
+                                                                        .color(ui.visuals().weak_text_color()),
+                                                                );
+
+                                                                ui.add_space(8.0);
+
+                                                                // Bottom Row: Full width progress bar + Free space info
+                                                                let total = drive.total_bytes;
+                                                                let free = drive.available_bytes;
+                                                                let used = total.saturating_sub(free);
+
+                                                                let free_fmt = prettier_bytes::ByteFormatter::new().format(free).to_string();
+                                                                let total_fmt = prettier_bytes::ByteFormatter::new().format(total).to_string();
+
+                                                                #[allow(clippy::cast_precision_loss)]
+                                                                let pct = if total > 0 {
+                                                                    (used as f64 / total as f64) as f32
+                                                                } else {
+                                                                    0.0
+                                                                };
+
+                                                                ui.horizontal(|ui| {
+                                                                    // Storage usage bar
+                                                                    let bar_width = (ui.available_width() - 150.0).max(100.0);
+                                                                    let bar_size = egui::vec2(bar_width, 6.0);
+                                                                    let (bar_rect, _) = ui.allocate_exact_size(bar_size, egui::Sense::hover());
+
+                                                                    // Bar background
+                                                                    ui.painter().rect_filled(bar_rect, 3.0, theme::get_stroke_border());
+
+                                                                    // Bar fill color
+                                                                    let fill_color = if pct > 0.90 {
+                                                                        theme::WARNING_RED
+                                                                    } else if pct > 0.75 {
+                                                                        theme::COLOR_DUPLICATE_ORANGE
+                                                                    } else {
+                                                                        theme::COLOR_SCAN_COMPLETE
+                                                                    };
+
+                                                                    let fill_rect = egui::Rect::from_min_size(
+                                                                        bar_rect.min,
+                                                                        egui::vec2(bar_rect.width() * pct, bar_rect.height()),
+                                                                    );
+                                                                    ui.painter().rect_filled(fill_rect, 3.0, fill_color);
+
+                                                                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                                                        ui.label(
+                                                                            egui::RichText::new(t!(
+                                                                                "modal-scan-options-free-of",
+                                                                                {
+                                                                                    "free" => free_fmt.as_str(),
+                                                                                    "total" => total_fmt.as_str()
+                                                                                }
+                                                                            ))
+                                                                            .size(10.5)
+                                                                            .color(ui.visuals().text_color()),
+                                                                        );
+                                                                    });
+                                                                });
+                                                            });
+                                                        });
+
+                                                        if response.clicked() {
+                                                            self.scan_path_input = drive_path_str.into_owned();
+                                                        }
+                                                    }
+                                                    ui.add_space(4.0);
+                                                });
+                                        });
+
+                                    ui.add_space(12.0);
+                                }
+
+                                // --- Section 2: Quick Locations ---
+                                let locs = get_quick_locations();
+                                if !locs.is_empty() {
+                                    ui.label(
+                                        egui::RichText::new("📍 Quick Access Shortcuts")
+                                            .strong()
+                                            .size(13.0),
+                                    );
+                                    ui.add_space(6.0);
+
+                                    ui.horizontal_wrapped(|ui| {
+                                        for loc in &locs {
+                                            let loc_path_str = loc.path.to_string_lossy();
+                                            let is_selected = self.scan_path_input.trim() == loc_path_str;
+
+                                            let text = format!("{} {}", loc.icon, loc.label);
+                                            let chip = if is_selected {
+                                                egui::Button::new(
+                                                    egui::RichText::new(text)
+                                                        .color(theme::COLOR_WHITE)
+                                                        .strong(),
+                                                )
+                                                .fill(theme::get_color_scanning())
+                                                .corner_radius(12.0)
+                                            } else {
+                                                egui::Button::new(text)
+                                                    .corner_radius(12.0)
+                                            };
+
+                                            if ui.add(chip).clicked() {
+                                                self.scan_path_input = loc_path_str.into_owned();
+                                            }
+                                        }
+                                    });
+
+                                    ui.add_space(14.0);
+                                }
+
+                                // --- Section 3: Custom Directory Path ---
+                                ui.label(
+                                    egui::RichText::new(t!("modal-scan-options-path-label"))
+                                        .strong()
+                                        .size(13.0),
+                                );
                                 ui.add_space(6.0);
 
                                 ui.horizontal(|ui| {
-                                    // User input for folder path
-                                    let text_edit =
-                                        egui::TextEdit::singleline(&mut self.scan_path_input)
-                                            .hint_text("/path/to/scan");
+                                    // Path input field
+                                    let text_edit = egui::TextEdit::singleline(&mut self.scan_path_input)
+                                        .hint_text("/path/to/scan");
                                     ui.add_sized(
                                         egui::vec2(
-                                            ui.available_width() - 80.0,
-                                            ui.spacing().interact_size.y,
+                                            ui.available_width() - 86.0,
+                                            ui.spacing().interact_size.y + 4.0,
                                         ),
                                         text_edit,
                                     );
@@ -1735,14 +2162,12 @@ impl GuiApp {
                                         self.paste_requested = 3;
                                         ctx.send_viewport_cmd(egui::ViewportCommand::RequestPaste);
                                     }
+
                                     // Browse folder button
                                     let browse_btn = ui
                                         .add_enabled(crate::IS_NATIVE, egui::Button::new("📁"))
                                         .on_disabled_hover_text(t!("web-not-available"));
                                     if browse_btn.clicked() {
-                                        // The modal itself is unreachable on wasm
-                                        // (no scanner), and rfd's sync dialogs are
-                                        // native-only.
                                         #[cfg(not(target_family = "wasm"))]
                                         if let Some(path) = rfd::FileDialog::new().pick_folder() {
                                             self.scan_path_input =
@@ -1751,7 +2176,38 @@ impl GuiApp {
                                     }
                                 });
 
-                                ui.add_space(8.0);
+                                // Real-time Path Status Validation
+                                ui.add_space(4.0);
+                                let current_trimmed = self.scan_path_input.trim();
+                                let path_obj = std::path::Path::new(current_trimmed);
+                                if current_trimmed.is_empty() {
+                                    ui.label(
+                                        egui::RichText::new("ℹ️ Select a drive above or enter a directory path.")
+                                            .size(11.0)
+                                            .color(ui.visuals().weak_text_color()),
+                                    );
+                                } else if path_obj.is_dir() {
+                                    ui.label(
+                                        egui::RichText::new("✅ Valid Directory — Ready to Scan")
+                                            .size(11.0)
+                                            .color(theme::COLOR_SCAN_COMPLETE)
+                                            .strong(),
+                                    );
+                                } else if path_obj.is_file() {
+                                    ui.label(
+                                        egui::RichText::new("⚠️ Path points to a file — please select a folder.")
+                                            .size(11.0)
+                                            .color(theme::WARNING_RED),
+                                    );
+                                } else {
+                                    ui.label(
+                                        egui::RichText::new("⚠️ Directory does not exist on filesystem.")
+                                            .size(11.0)
+                                            .color(theme::COLOR_DUPLICATE_ORANGE),
+                                    );
+                                }
+
+                                ui.add_space(10.0);
                                 ui.checkbox(
                                     &mut self.same_filesystem,
                                     t!("modal-scan-options-same-filesystem"),
@@ -1761,33 +2217,28 @@ impl GuiApp {
                                 ui.separator();
                                 ui.add_space(12.0);
 
-                                // Footer: Scan & Cancel
+                                // Footer: Scan & Cancel Buttons
                                 ui.horizontal(|ui| {
                                     if ui.button(t!("modal-scan-options-cancel-btn")).clicked() {
                                         self.active_modal = None;
                                     }
 
-                                    let scan_btn = egui::Button::new(
-                                        egui::RichText::new(t!("modal-scan-options-scan-btn"))
-                                            .color(theme::COLOR_WHITE)
-                                            .strong(),
-                                    )
-                                    .fill(theme::get_color_scanning());
-
-                                    let is_empty = self.scan_path_input.trim().is_empty();
-                                    let can_scan = !is_empty && self.scanner.is_some();
-                                    let res_scan = ui.add_enabled(can_scan, scan_btn);
-                                    let res_scan = if self.scanner.is_none() {
-                                        res_scan.on_disabled_hover_text(t!("web-not-available"))
-                                    } else {
-                                        res_scan
-                                    };
-                                    if res_scan.clicked() {
-                                        let path =
-                                            std::path::PathBuf::from(self.scan_path_input.trim());
-                                        self.start_scan(path);
-                                        self.active_modal = None;
-                                    }
+                                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                        let target_path = self.scan_path_input.trim();
+                                        let is_valid = std::path::Path::new(target_path).is_dir();
+                                        let can_scan = is_valid && self.scanner.is_some();
+                                        let res_scan = ui.add_enabled(can_scan, egui::Button::new(t!("modal-scan-options-scan-btn")));
+                                        let res_scan = if self.scanner.is_none() {
+                                            res_scan.on_disabled_hover_text(t!("web-not-available"))
+                                        } else {
+                                            res_scan
+                                        };
+                                        if res_scan.clicked() {
+                                            let path = std::path::PathBuf::from(target_path);
+                                            self.start_scan(path);
+                                            self.active_modal = None;
+                                        }
+                                    });
                                 });
                             });
                         });
