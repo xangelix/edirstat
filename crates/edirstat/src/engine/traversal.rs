@@ -118,12 +118,7 @@ impl TraversalEngine {
                 if let Some(fs_type) = super::mft::get_fs_type(&root_path)
                     && fs_type.eq_ignore_ascii_case("NTFS")
                 {
-                    match super::mft::try_scan_mft(
-                        &root_path,
-                        scan_cancel.clone(),
-                        &event_tx,
-                        &stats,
-                    ) {
+                    match super::mft::try_scan_mft(&root_path, &scan_cancel, &event_tx, &stats) {
                         Ok(()) => {
                             // Raw scan was executed successfully, end thread execution
                             return;
