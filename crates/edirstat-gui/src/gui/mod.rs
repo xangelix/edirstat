@@ -135,6 +135,9 @@ pub struct GuiApp {
     // Single-use trigger to automatically scroll the list view to the target row
     pub(crate) scroll_to_selected: bool,
 
+    // Single-use trigger to scroll the table to the top-most selected row after a resort
+    pub(crate) scroll_to_top_selected: bool,
+
     // Deduplicator states
     pub(crate) deduplicator_config: crate::stats::deduplicator::DeduplicatorConfig,
     pub(crate) deduplicator_progress: atomic_progress::Progress,
@@ -326,6 +329,7 @@ impl GuiApp {
             extension_stats: Vec::new(),
             last_extension_update: None,
             scroll_to_selected: false,
+            scroll_to_top_selected: false,
             deduplicator_config: crate::stats::deduplicator::DeduplicatorConfig::default(),
             deduplicator_progress: atomic_progress::Progress::new_spinner("Deduplicator"),
             deduplicator_results: Arc::new(parking_lot::RwLock::new(
@@ -410,6 +414,7 @@ impl GuiApp {
         self.duplicate_waste_chart = stats::duplicate_waste::DuplicateWasteChart::default();
 
         self.scroll_to_selected = false;
+        self.scroll_to_top_selected = false;
         self.last_rendered_snapshot_ptr = 0;
         self.last_extension_stats_ptr = 0;
         self.pending_expand_restore = None;

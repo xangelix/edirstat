@@ -910,6 +910,24 @@ impl GuiApp {
             self.scroll_to_selected = false;
         }
 
+        // After a resort, bring the top-most selected row (in the new ordering)
+        // back into view; active_rows were just rebuilt by flatten_tree above.
+        if self.scroll_to_top_selected {
+            if let Some(row_index) = self
+                .table_state
+                .active_rows
+                .iter()
+                .position(|&node_idx| self.table_state.selected_rows.contains(node_idx as u32))
+            {
+                table = table.scroll_to_row(row_index as u64, Some(egui::Align::Center));
+            }
+            self.scroll_to_top_selected = false;
+        }
+
+        // Capture the sort state before the headers are shown so a resort can
+        // be detected once process_responses has applied it below.
+        let sort_state_before = self.table_state.get_sort_state();
+
         let snapshot_nodes = Arc::clone(&snapshot.nodes);
         let snapshot_string_pool = Arc::clone(&snapshot.string_pool);
         let active_rows = self.table_state.active_rows.clone();
@@ -1192,6 +1210,15 @@ impl GuiApp {
         let _ = self
             .table_state
             .process_responses(&provider, collected_responses);
+
+        // A resort reorders rows out from under the current scroll offset, which can
+        // leave the selection far off-screen. Trigger a scroll to the top-most selected
+        // row next frame, once flatten_tree has rebuilt active_rows in the new order.
+        if self.table_state.get_sort_state() != sort_state_before
+            && !self.table_state.selected_rows.is_empty()
+        {
+            self.scroll_to_top_selected = true;
+        }
 
         let name_filter_text = self.table_state.columns[0].response.filtering.search.text();
         if name_filter_text != self.search_query {
