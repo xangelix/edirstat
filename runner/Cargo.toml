@@ -1,12 +1,12 @@
 [package]
 name = "edirstat-runner"
-version = "2.0.1"
+version = "2.1.0"
 edition = "2024"
 publish = false
 
 [package.metadata.winresource]
 ProductName = "edirstat"
-ProductVersion = "2.0.1"
+ProductVersion = "2.1.0"
 OriginalFilename = "edirstat.exe"
 FileDescription = "A fast, cross-platform disk usage analyzer with work-stealing multithreading, zero-copy snapshots, deduplication, and an interactive treemap GUI."
 CompanyName = "Cody Wyatt Neiman (xangelix) <neiman@cody.to>"

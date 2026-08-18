@@ -2,7 +2,22 @@
 
 ---
 
-## [Unreleased]
+## [v2.1.0] - 2026-08-17
+
+**eDirStat 2.1.0 is our biggest quality-of-life release yet — eight languages, four themes, a browser-based snapshot viewer, NTFS MFT scanning on Linux, and a faster v3 snapshot format, all backed by 100+ new tests.**
+
+> **✨ Highlights**
+>
+> - 🌍 **Speak your language** — Full GUI localization in 8 languages with a built-in selector
+> - 🎨 **Your theme, your way** — System (auto), Dark, Light, and High Contrast themes
+> - 🌐 **Snapshots in the browser** — Explore saved `.edst` scans online, no install required
+> - 🐧 **MFT scanning on Linux** — NTFS Master File Table parsing joins Windows, extension records included
+> - 💾 **v3 snapshots** — Compact columnar encoding: smaller files, faster loads (v2 files still open)
+> - ⏹️ **Total scan control** — Cancel any scan mid-flight, or restrict it to a single filesystem
+> - 🖥️ **New Scan dialog** — Pick from detected drives and mount points, no typing required
+> - 🏁 **Termination race fixed** — A rare work-stealing early-exit bug is gone, with stress tests to prove it
+
+**🔧 Under the hood:** the project is now three crates (`edirstat-core`, `edirstat`, `edirstat-gui`) for cleaner crates.io publishing · view preferences persist between sessions · `Del` / `Shift+Del` trash & delete shortcuts · configurable timestamp formats · UI stack upgraded to egui v0.36 · 100+ new tests now guard the arena, snapshot format, scan engine, and every statistics chart.
 
 ### Added
 
@@ -139,6 +154,19 @@
 ---
 
 ## [v2.0.0] - 2026-06-21
+
+Version 2.0.0 focuses on performance optimizations, architectural hardening, and broader platform compatibility. Key updates include the integration of a Windows-native NTFS Master File Table (MFT) driver for faster scanning, a classic WinDirStat-style layout option, and headless command-line snapshot capabilities. Additionally, this release refactors several critical paths—such as transitioning snapshot persistence to a safe, Zstd-compressed format and replacing unsafe operations with compiler-optimized safe Rust—to improve reliability and resource efficiency across all supported operating systems.
+
+The project also has a new website at: [edirstat.com](https://edirstat.com)!
+
+### 📦 Distribution Model & Project Support
+
+eDirStat is, and will always remain, entirely open-source and free. However, to support continuous development, engineering, and maintenance costs, **official pre-compiled binaries for Windows, macOS, and Linux are distributed exclusively as a paid download via [Itch.io - xangelix.itch.io/edirstat](https://xangelix.itch.io/edirstat)**.
+
+- **100% Open Source:** The complete codebase is free of charge and publicly available under the permissive **MIT License**. If you prefer to build the tool yourself, you are welcome to compile the source code on Windows, Linux, or macOS at no cost. Instructions are provided in the `README.md`.
+- **Package Managers:** Package managers and their repository maintainers are welcome to bundle and distribute eDirStat through their respective channels at no cost, provided that it is distributed un-paid, "unofficial", and under the MIT License.
+
+Purchasing precompiled packages directly funds the engineering efforts required to keep eDirStat fast, secure, and compatible with the latest operating systems.
 
 ### Added
 

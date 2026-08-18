@@ -31,8 +31,8 @@ online = ["edirstat-gui/online"]
 profile-tracy = ["tracy-client", "edirstat-gui/profile-tracy"]
 
 [dependencies]
-edirstat-core = { path = "../edirstat-core" }
-edirstat-gui = { path = "../edirstat-gui", default-features = false }
+edirstat-core = { path = "../edirstat-core", version = "2.1.0" }
+edirstat-gui = { path = "../edirstat-gui", version = "2.1.0", default-features = false }
 
 ahash = "0.8.12"
 anyhow = "1.0.104"

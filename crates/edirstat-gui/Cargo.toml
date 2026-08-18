@@ -16,7 +16,7 @@ profile-tracy = ["dep:tracy-client"]
 ignored = ["image"]
 
 [dependencies]
-edirstat-core = { path = "../edirstat-core" }
+edirstat-core = { path = "../edirstat-core", version = "2.1.0" }
 
 ahash = "0.8.12"
 atomic-progress = { version = "0.1.6", default-features = false, features = [
