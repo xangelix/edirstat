@@ -180,6 +180,7 @@ pub struct GuiApp {
 #[derive(Default, PartialEq, strum::EnumIter)]
 pub(crate) enum Locale {
     #[default]
+    TrTr,
     EnUs,
     EsEs,
     DeDe,
@@ -193,6 +194,7 @@ pub(crate) enum Locale {
 impl std::fmt::Display for Locale {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::TrTr => write!(f, "tr-TR"),
             Self::EnUs => write!(f, "en-US"),
             Self::EsEs => write!(f, "es-ES"),
             Self::DeDe => write!(f, "de-DE"),
@@ -215,6 +217,13 @@ impl GuiApp {
     ) -> Self {
         // Initialize the command queue channels
         let (command_tx, command_rx) = std::sync::mpsc::channel();
+        let locale = Locale::default();
+
+        // Keep the Fluent runtime aligned with the language shown in the UI
+        // from the very first frame.
+        if let Ok(lang) = fluent_zero::LanguageIdentifier::from_str(&locale.to_string()) {
+            fluent_zero::set_lang(lang);
+        }
 
         // Ops that require a live local filesystem or OS integration are native-only unless HIDE_NA_UI is false.
         let mut nav_ops: Vec<Box<dyn egui_table_kit::operations::TableOperation>> = vec![Box::new(
@@ -359,7 +368,7 @@ impl GuiApp {
 
             same_filesystem,
 
-            locale: Locale::default(),
+            locale,
 
             #[cfg(all(feature = "online", not(target_family = "wasm")))]
             update_checker: egui_async::Bind::default(),
