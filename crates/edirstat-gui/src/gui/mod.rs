@@ -180,8 +180,8 @@ pub struct GuiApp {
 #[derive(Default, PartialEq, strum::EnumIter)]
 pub(crate) enum Locale {
     #[default]
-    TrTr,
     EnUs,
+    TrTr,
     EsEs,
     DeDe,
     NlNl,
