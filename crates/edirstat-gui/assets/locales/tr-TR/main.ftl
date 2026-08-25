@@ -15,7 +15,7 @@ idle = Boşta
 monospace-paths = 🅰 Eş aralıklı yollar
 highlight-duplicates = ✨ Yinelenenleri vurgula
 treemap-borders = 🔳 Treemap kenarlıkları
-treemap-style = 🎨 Treemap stili
+treemap-style =  Treemap stili
 treemap-style-vertical = Dikey geçiş
 treemap-style-offset-vertical = Kaydırılmış dikey geçiş
 treemap-style-diagonal = Çapraz geçiş
@@ -85,7 +85,7 @@ plot-deduplicator-waste = 👥 Uzantıya göre yinelenen alan kaybı
 
 # Yinelenen Bulucu
 dedup-desc = Kriptografik olarak güvenli BLAKE3 özetleriyle birebir aynı dosyaları bulun ve güvenle kaldırın.
-dedup-how-it-works = ℹ Nasıl çalışır?
+dedup-how-it-works = ℹ Nasıl çalışır
 dedup-min-size = En küçük dosya boyutu:
 dedup-ignore-system = Sistem dosyalarını yoksay
 dedup-ignore-hidden = Gizli dosyaları yoksay
@@ -233,7 +233,7 @@ modal-process-single = Aşağıdaki yol üzerinde işlem yapmak üzeresiniz:
 
 # Silme / Çöp Kutusu / Bağlama Onayları
 modal-delete-title = ⚠ KALICI SİLME UYARISI
-modal-delete-header = ⚠ Kalıcı silme uyarısı
+modal-delete-header = ⚠ Kalıcı silme uyarısı!
 modal-delete-info = Toplam boyut: { $size }
 modal-delete-warning = Bu işlem özyinelemeli silmedir. Seçili yol veya yolların altındaki tüm dosyalar, klasörler ve alt dizinler geri dönüşüm kutusu atlanarak kalıcı biçimde silinecek ve geri getirilemeyecektir.
 modal-delete-checkbox = Dosyaların kalıcı olarak silineceğini ve geri getirilemeyeceğini anlıyorum.
@@ -247,7 +247,7 @@ modal-trash-checkbox = Bunu çöp kutusuna taşımak istediğimi onaylıyorum.
 modal-trash-confirm = ♻ Evet, çöp kutusuna taşı
 
 modal-delete-duplicates-title = ⚠ KALICI YİNELENEN SİLME UYARISI
-modal-delete-duplicates-header = ⚠ Kalıcı yinelenen silme uyarısı
+modal-delete-duplicates-header = ⚠ Kalıcı yinelenen silme uyarısı!
 modal-delete-duplicates-info = Geri kazanılacak toplam alan: { $size }
 modal-delete-duplicates-warning = Seçili tüm dosyalar geri dönüşüm kutusu atlanarak kalıcı biçimde silinecek ve geri getirilemeyecektir.
 modal-delete-duplicates-checkbox = Dosyaların kalıcı olarak silineceğini ve geri getirilemeyeceğini anlıyorum.
@@ -275,7 +275,7 @@ modal-softlink-duplicates-checkbox = Seçili dosyaları sembolik bağlantılarla
 modal-softlink-duplicates-confirm = 🔗 Evet, sembolik bağlantılarla değiştir
 
 # Yol Bulunamadı Penceresi
-modal-path-not-exist-title = ❌ Yol mevcut değil
+modal-path-not-exist-title = ❌ Yol mevcut değil!
 modal-path-not-exist-msg = Hata: Silmeye çalıştığınız yol diskte bulunmuyor.
 modal-close-btn = Kapat
 modal-details-label = Ayrıntılar:
@@ -300,7 +300,7 @@ modal-about-licenses-btn = Açık kaynak lisanslarını görüntüle
 modal-about-version = v{ $version }
 
 # Yinelenen Bulucu Açıklaması
-modal-how-dedup-title = ℹ Yinelenen bulucu nasıl çalışır?
+modal-how-dedup-title = ℹ Yinelenen bulucu nasıl çalışır
 modal-how-dedup-desc1 = Bu sistem, her dosyanın baytlarını yavaş ve ikili O(N²) karşılaştırmalarla okumak yerine, aynı içeriği güvenli ve verimli biçimde tanımlamak için yüksek düzeyde optimize edilmiş 7 aşamalı bir hat kullanır.
 modal-how-dedup-pipeline-title = 7 aşamalı süreç:
 modal-how-dedup-why-title = Bu neden yeterli?
@@ -345,7 +345,7 @@ explorer-hdr-modified = Değiştirilme
 
 # Güncelleme Denetleyicisi
 update-checking = Güncellemeler denetleniyor...
-update-available = Yeni sürüm { $version } kullanılabilir.
+update-available = Yeni sürüm { $version } kullanılabilir!
 update-up-to-date = Güncelsiniz
 update-failed = Güncelleme denetimi başarısız oldu: { $error }
 
