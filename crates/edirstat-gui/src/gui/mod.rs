@@ -65,6 +65,9 @@ pub enum LayoutMode {
     WinDirStat,
 }
 
+/// Host-injected top-panel widget closure (see [`GuiApp::top_panel_prefix`]).
+pub type TopPanelPrefix = Box<dyn FnMut(&mut egui::Ui)>;
+
 #[allow(clippy::struct_excessive_bools)]
 pub struct GuiApp {
     pub(crate) shared_state: Arc<SharedState>,
@@ -86,7 +89,11 @@ pub struct GuiApp {
     pub(crate) search_query: String,
     pub(crate) monospace_paths: bool,
     pub(crate) treemap_borders: bool,
-    pub(crate) theme: theme::ThemePreference,
+    pub theme: theme::ThemePreference,
+    /// Optional host-injected widgets rendered at the very start of the top
+    /// panel (e.g. a host app's back/navigation button). `None` for the
+    /// standalone app.
+    pub top_panel_prefix: Option<TopPanelPrefix>,
     pub(crate) treemap_style: stats::treemap::TreemapStyle,
     pub(crate) left_panel_collapsed: bool,
     pub(crate) right_panel_collapsed: bool,
@@ -388,6 +395,7 @@ impl GuiApp {
             monospace_paths: prefs.monospace_paths,
             treemap_borders: prefs.treemap_borders,
             theme: prefs.theme,
+            top_panel_prefix: None,
             treemap_style: prefs.treemap_style,
             left_panel_collapsed: false,
             right_panel_collapsed: false,
@@ -1335,6 +1343,10 @@ impl eframe::App for GuiApp {
         // Top Control Panel
         egui::Panel::top("top_panel").show(ui, |ui| {
             ui.horizontal(|ui| {
+                if let Some(prefix) = &mut self.top_panel_prefix {
+                    prefix(ui);
+                    ui.separator();
+                }
                 ui.heading(
                     egui::RichText::new("eDirStat")
                         .strong()
