@@ -36,10 +36,10 @@ prettier-bytes = "0.2.1"
 regex = { version = "1.13.1", features = ["use_std"] }
 rfd = "0.17.2"
 serde = { version = "1.0.229", features = ["derive"] }
-smallvec = "1.15.2"
+smallvec = "1.16.0"
 strum = { version = "0.28.0", features = ["derive"] }
 sys-locale = { version = "0.3.2", features = ["js"] }
-toml = "1.1.4"
+toml = "1.1.5"
 
 [target.'cfg(target_family = "wasm")'.dependencies]
 console_error_panic_hook = "0.1"
@@ -56,17 +56,17 @@ web-sys = { version = "0.3", features = [
 # Native-only functionality: filesystem mutation, dedup hashing, desktop dialogs,
 # preferences persistence, and the online update checker.
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
-blake3 = "1.8.6"
+blake3 = "1.8.7"
 cli-or-gui = "0.1.1"
 directories = "6.0.0"
 egui-async = { version = "0.6.0", optional = true }
-open = "5.4.1"
+open = "5.4.3"
 rayon = "1.12.0"
 reqwest = { version = "0.13", features = [
     "rustls",
 ], default-features = false, optional = true }
 semver = { version = "1", optional = true }
-tracy-client = { version = "0.18.4", optional = true }
+tracy-client = { version = "0.19.0", optional = true }
 sysinfo = { version = "0.39.6", default-features = false, features = ["disk"] }
 trash = "5.2.6"
 
