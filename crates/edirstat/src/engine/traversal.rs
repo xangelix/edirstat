@@ -136,8 +136,7 @@ impl TraversalEngine {
             let root_id = (0, 0); // Placeholder for root
             let root_metadata = fs::metadata(&root_path);
             let root_file_id = root_metadata.as_ref().map_or(root_id, get_file_id);
-            let is_root_scan = root_path == std::path::Path::new("/");
-            let expected_device_id = if same_filesystem || !is_root_scan {
+            let expected_device_id = if same_filesystem {
                 root_metadata.as_ref().map(get_device_id).ok()
             } else {
                 None
@@ -734,6 +733,43 @@ mod tests {
             node_index(&snapshot, "deep").map(|i| snapshot.nodes[i].size),
             Some(50)
         );
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        Ok(())
+    }
+
+    #[test]
+    fn test_traversal_same_filesystem_false_allows_subdirectories()
+    -> Result<(), crate::EdirstatError> {
+        let temp_dir = std::env::current_dir()?
+            .join("target")
+            .join("test_traversal_same_fs_false");
+        let subdir = temp_dir.join("subvol_mock");
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        std::fs::create_dir_all(&subdir)?;
+
+        std::fs::write(subdir.join("file.txt"), vec![0u8; 123])?;
+
+        let shared_state = Arc::new(SharedState::new());
+        let engine = TraversalEngine::new(shared_state.scan_stats.clone());
+        let (tx, rx) = crossbeam::channel::unbounded();
+
+        // Launch traversal with same_filesystem = false (should traverse all subdirectories)
+        let handle = engine.start_traversal(
+            temp_dir.clone(),
+            false,
+            shared_state.scan_cancel.clone(),
+            tx,
+        )?;
+
+        let mut coordinator = Coordinator::new(rx, shared_state);
+        coordinator.run_coordinator_loop(&temp_dir.to_string_lossy());
+        let _ = handle.join();
+
+        let stats = engine.stats();
+        assert_eq!(stats.files_scanned.load(Ordering::SeqCst), 1);
+        assert_eq!(stats.dirs_scanned.load(Ordering::SeqCst), 2);
+        assert_eq!(stats.bytes_scanned.load(Ordering::SeqCst), 123);
 
         let _ = std::fs::remove_dir_all(&temp_dir);
         Ok(())
