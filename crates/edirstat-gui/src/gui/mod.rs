@@ -213,6 +213,7 @@ pub enum Locale {
     EsEs,
     FrFr,
     ItIt,
+    JaJp,
     NlNl,
     PlPl,
     PtPt,
@@ -228,6 +229,7 @@ impl std::fmt::Display for Locale {
             Self::EsEs => write!(f, "es-ES"),
             Self::FrFr => write!(f, "fr-FR"),
             Self::ItIt => write!(f, "it-IT"),
+            Self::JaJp => write!(f, "ja-JP"),
             Self::NlNl => write!(f, "nl-NL"),
             Self::PlPl => write!(f, "pl-PL"),
             Self::PtPt => write!(f, "pt-PT"),
@@ -246,6 +248,7 @@ impl Locale {
             Self::EsEs => "es-ES",
             Self::FrFr => "fr-FR",
             Self::ItIt => "it-IT",
+            Self::JaJp => "ja-JP",
             Self::NlNl => "nl-NL",
             Self::PlPl => "pl-PL",
             Self::PtPt => "pt-PT",
@@ -2882,9 +2885,12 @@ mod tests {
         assert_eq!(Locale::from_bcp47("en-US"), Some(Locale::EnUs));
         assert_eq!(Locale::from_bcp47("en-GB"), Some(Locale::EnUs));
         assert_eq!(Locale::from_bcp47("en"), Some(Locale::EnUs));
+        assert_eq!(Locale::from_bcp47("ja-JP"), Some(Locale::JaJp));
+        assert_eq!(Locale::from_bcp47("ja_JP.UTF-8"), Some(Locale::JaJp));
+        assert_eq!(Locale::from_bcp47("ja"), Some(Locale::JaJp));
 
         // Unsupported / invalid
-        assert_eq!(Locale::from_bcp47("ja-JP"), None);
+        assert_eq!(Locale::from_bcp47("ar-SA"), None);
         assert_eq!(Locale::from_bcp47(""), None);
     }
 }
