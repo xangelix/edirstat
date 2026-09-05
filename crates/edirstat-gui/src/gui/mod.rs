@@ -214,6 +214,7 @@ pub enum Locale {
     FrFr,
     ItIt,
     JaJp,
+    KoKr,
     NlNl,
     PlPl,
     PtPt,
@@ -230,6 +231,7 @@ impl std::fmt::Display for Locale {
             Self::FrFr => write!(f, "fr-FR"),
             Self::ItIt => write!(f, "it-IT"),
             Self::JaJp => write!(f, "ja-JP"),
+            Self::KoKr => write!(f, "ko-KR"),
             Self::NlNl => write!(f, "nl-NL"),
             Self::PlPl => write!(f, "pl-PL"),
             Self::PtPt => write!(f, "pt-PT"),
@@ -249,6 +251,7 @@ impl Locale {
             Self::FrFr => "fr-FR",
             Self::ItIt => "it-IT",
             Self::JaJp => "ja-JP",
+            Self::KoKr => "ko-KR",
             Self::NlNl => "nl-NL",
             Self::PlPl => "pl-PL",
             Self::PtPt => "pt-PT",
@@ -2888,6 +2891,8 @@ mod tests {
         assert_eq!(Locale::from_bcp47("ja-JP"), Some(Locale::JaJp));
         assert_eq!(Locale::from_bcp47("ja_JP.UTF-8"), Some(Locale::JaJp));
         assert_eq!(Locale::from_bcp47("ja"), Some(Locale::JaJp));
+        assert_eq!(Locale::from_bcp47("ko-KR"), Some(Locale::KoKr));
+        assert_eq!(Locale::from_bcp47("ko"), Some(Locale::KoKr));
 
         // Unsupported / invalid
         assert_eq!(Locale::from_bcp47("ar-SA"), None);
