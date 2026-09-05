@@ -221,6 +221,7 @@ pub enum Locale {
     RuRu,
     TrTr,
     ZhCn,
+    ZhHk,
 }
 
 impl std::fmt::Display for Locale {
@@ -239,6 +240,7 @@ impl std::fmt::Display for Locale {
             Self::RuRu => write!(f, "ru-RU"),
             Self::TrTr => write!(f, "tr-TR"),
             Self::ZhCn => write!(f, "zh-CN"),
+            Self::ZhHk => write!(f, "zh-HK"),
         }
     }
 }
@@ -260,6 +262,7 @@ impl Locale {
             Self::RuRu => "ru-RU",
             Self::TrTr => "tr-TR",
             Self::ZhCn => "zh-CN",
+            Self::ZhHk => "zh-HK",
         }
     }
 
@@ -2897,6 +2900,8 @@ mod tests {
         assert_eq!(Locale::from_bcp47("ko-KR"), Some(Locale::KoKr));
         assert_eq!(Locale::from_bcp47("ko"), Some(Locale::KoKr));
         assert_eq!(Locale::from_bcp47("zh-CN"), Some(Locale::ZhCn));
+        assert_eq!(Locale::from_bcp47("zh-HK"), Some(Locale::ZhHk));
+        assert_eq!(Locale::from_bcp47("zh_HK.UTF-8"), Some(Locale::ZhHk));
         assert_eq!(Locale::from_bcp47("zh-Hans-CN"), Some(Locale::ZhCn));
 
         // Unsupported / invalid
