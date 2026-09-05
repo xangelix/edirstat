@@ -28,6 +28,8 @@ pub struct ScanTask {
     pub ancestors: smallvec::SmallVec<[(u64, u64); 16]>,
     /// The device/volume identifier to restrict traversal within.
     pub expected_device_id: Option<u64>,
+    /// Allowed secondary device identifier (e.g. macOS APFS Data volume paired with System root).
+    pub allowed_secondary_device_id: Option<u64>,
 }
 
 pub enum ScanEvent {
@@ -136,10 +138,13 @@ impl TraversalEngine {
             let root_id = (0, 0); // Placeholder for root
             let root_metadata = fs::metadata(&root_path);
             let root_file_id = root_metadata.as_ref().map_or(root_id, get_file_id);
-            let expected_device_id = if same_filesystem {
-                root_metadata.as_ref().map(get_device_id).ok()
+            let (expected_device_id, allowed_secondary_device_id) = if same_filesystem {
+                (
+                    root_metadata.as_ref().map(get_device_id).ok(),
+                    get_secondary_device_id(&root_path),
+                )
             } else {
-                None
+                (None, None)
             };
 
             let initial_task = ScanTask {
@@ -148,6 +153,7 @@ impl TraversalEngine {
                 worker_id: 0,
                 ancestors: smallvec::smallvec![root_file_id],
                 expected_device_id,
+                allowed_secondary_device_id,
             };
             injector.push(initial_task);
 
@@ -366,10 +372,11 @@ fn scan_directory(task: &ScanTask, ctx: &mut WorkerContext<'_>) {
             }
 
             // Mount Point / Device boundary safety protection check
-            if let Some(expected_dev) = task.expected_device_id
-                && meta.file_id != (0, 0)
-                && meta.file_id.0 != expected_dev
-            {
+            if is_device_boundary_crossed(
+                task.expected_device_id,
+                task.allowed_secondary_device_id,
+                meta.file_id.0,
+            ) {
                 // Do not descend into subdirectories across filesystem boundaries (e.g. /sys or /proc)
                 continue;
             }
@@ -409,6 +416,7 @@ fn scan_directory(task: &ScanTask, ctx: &mut WorkerContext<'_>) {
                 worker_id: ctx.worker_id,
                 ancestors: new_ancestors,
                 expected_device_id: task.expected_device_id,
+                allowed_secondary_device_id: task.allowed_secondary_device_id,
             };
             ctx.local_worker.push(new_task);
             // Keep the in-flight count nonzero for as long as queued work
@@ -471,6 +479,45 @@ fn get_device_id(meta: &fs::Metadata) -> u64 {
 #[cfg(not(any(unix, windows)))]
 fn get_device_id(_meta: &fs::Metadata) -> u64 {
     0
+}
+
+#[cfg(target_os = "macos")]
+fn get_secondary_device_id(root_path: &Path) -> Option<u64> {
+    // When scanning root "/" on macOS, the system partition (read-only snapshot)
+    // is paired with the Data partition mounted at "/System/Volumes/Data".
+    // Firmlinks (such as /Users, /Applications, /Library) reside on this Data volume.
+    if root_path == Path::new("/") {
+        fs::metadata("/System/Volumes/Data")
+            .ok()
+            .as_ref()
+            .map(get_device_id)
+    } else {
+        None
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+const fn get_secondary_device_id(_root_path: &Path) -> Option<u64> {
+    None
+}
+
+/// Checks whether a subdirectory crosses outside the allowed filesystem/device boundaries.
+#[must_use]
+pub(crate) const fn is_device_boundary_crossed(
+    expected_dev: Option<u64>,
+    secondary_dev: Option<u64>,
+    entry_dev: u64,
+) -> bool {
+    if let Some(expected) = expected_dev
+        && entry_dev != 0
+        && entry_dev != expected
+    {
+        return match secondary_dev {
+            Some(sec) => sec != entry_dev,
+            None => true,
+        };
+    }
+    false
 }
 
 /// Determines if a directory entry should be skipped when traversing the system root.
@@ -1375,5 +1422,32 @@ mod tests {
         let ext_drive = Path::new("/Volumes/External/Data");
         assert!(!should_skip_root_entry(ext_drive, "Volumes"));
         assert!(!should_skip_root_entry(ext_drive, "proc"));
+    }
+
+    #[test]
+    fn test_is_device_boundary_crossed() {
+        // When same_filesystem is false (expected_dev is None), never consider crossed
+        assert!(!is_device_boundary_crossed(None, None, 100));
+        assert!(!is_device_boundary_crossed(None, Some(200), 300));
+
+        let root_dev = Some(100);
+        let data_dev = Some(200);
+
+        // Same filesystem as root
+        assert!(!is_device_boundary_crossed(root_dev, None, 100));
+        assert!(!is_device_boundary_crossed(root_dev, data_dev, 100));
+
+        // Unknown device ID (0) should not trigger boundary check
+        assert!(!is_device_boundary_crossed(root_dev, None, 0));
+        assert!(!is_device_boundary_crossed(root_dev, data_dev, 0));
+
+        // Different filesystem without secondary device allowed -> boundary crossed
+        assert!(is_device_boundary_crossed(root_dev, None, 200));
+
+        // Paired secondary device (e.g. APFS Data volume paired with System root) -> NOT crossed
+        assert!(!is_device_boundary_crossed(root_dev, data_dev, 200));
+
+        // Third filesystem (e.g. external volume or disk image) -> boundary crossed
+        assert!(is_device_boundary_crossed(root_dev, data_dev, 300));
     }
 }

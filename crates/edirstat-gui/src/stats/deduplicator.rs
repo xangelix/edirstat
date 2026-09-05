@@ -236,6 +236,10 @@ fn calculate_hash_at_range(
     // Timestamps are stored as u32 epoch seconds, so compare the lower 32 bits.
     let metadata = std::fs::metadata(path).ok()?;
 
+    if edirstat_core::fs_utils::is_dataless_file(&metadata) {
+        return None; // dataless/cloud placeholder: do not hydrate
+    }
+
     if let Ok(modified_time) = metadata.modified()
         && let Ok(duration) = modified_time.duration_since(std::time::UNIX_EPOCH)
         && duration.as_secs() as u32 != expected_modified
@@ -270,6 +274,10 @@ fn calculate_multi_range_hash(
     expected_created: u32,
 ) -> Option<[u8; 32]> {
     let metadata = std::fs::metadata(path).ok()?;
+
+    if edirstat_core::fs_utils::is_dataless_file(&metadata) {
+        return None; // dataless/cloud placeholder: do not hydrate
+    }
 
     if let Ok(modified_time) = metadata.modified()
         && let Ok(duration) = modified_time.duration_since(std::time::UNIX_EPOCH)
@@ -308,6 +316,10 @@ fn calculate_full_hash(
     expected_created: u32,
 ) -> Option<[u8; 32]> {
     let metadata = std::fs::metadata(path).ok()?;
+
+    if edirstat_core::fs_utils::is_dataless_file(&metadata) {
+        return None; // dataless/cloud placeholder: do not hydrate
+    }
 
     if let Ok(modified_time) = metadata.modified()
         && let Ok(duration) = modified_time.duration_since(std::time::UNIX_EPOCH)
