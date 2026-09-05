@@ -63,6 +63,9 @@ jobs:
         with:
           toolchain: nightly-2026-07-15
 
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@nextest
+
       - name: Cache dependencies
         uses: swatinem/rust-cache@v2
 
