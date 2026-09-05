@@ -24,22 +24,22 @@ jobs:
         uses: swatinem/rust-cache@v2
 
       - name: Check typos
-        run: typos
+        run: ./scripts/check.sh typos
 
       - name: Check formatting
-        run: cargo fmt --all -- --check
+        run: ./scripts/check.sh fmt
 
       - name: Check for unused dependencies
-        run: cargo shear
+        run: ./scripts/check.sh shear
+
+      - name: Check lints
+        run: ./scripts/check.sh clippy
 
       - name: Run tests
-        run: cargo test --workspace
+        run: ./scripts/check.sh test
 
       - name: Verify fallback fonts match translation corpus
-        run: |
-          ./scripts/fetch_fonts.sh
-          python3 scripts/subset_fonts.py
-          git diff --exit-code crates/edirstat-gui/assets/fonts/
+        run: ./scripts/check.sh fonts
 
       # - name: Verify licenses matching committed ones
       #   run: |
@@ -67,7 +67,7 @@ jobs:
         uses: swatinem/rust-cache@v2
 
       - name: Run tests
-        run: cargo test --workspace
+        run: ./scripts/check.sh test
 
   build-linux:
     name: Build Linux

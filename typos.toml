@@ -3,3 +3,6 @@ extend-exclude = ["assets"]
 
 [default.extend-words]
 INDX = "INDX"
+wdth = "wdth"
+PNGs = "PNGs"
+pn = "pn"
