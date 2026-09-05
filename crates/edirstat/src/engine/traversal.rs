@@ -1,6 +1,6 @@
 use std::{
     fs,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{
         Arc,
         atomic::{AtomicBool, AtomicUsize, Ordering},
@@ -359,14 +359,10 @@ fn scan_directory(task: &ScanTask, ctx: &mut WorkerContext<'_>) {
 
         // Check if directory
         if meta.is_dir {
-            // If we are scanning the system root, skip locations that contain
-            // virtual files, network mounts, or sandboxed/containerized filesystems.
-            if task.path == std::path::Path::new("/") {
-                let name_str = meta.name.as_str();
-                match name_str {
-                    "proc" | "sys" | "dev" | "run" | "tmp" | "mnt" | "media" => continue,
-                    _ => {}
-                }
+            // Skip virtual filesystems, device nodes, network mounts, and macOS APFS
+            // sub-volume mirror mount points when scanning the system root.
+            if should_skip_root_entry(&task.path, meta.name.as_str()) {
+                continue;
             }
 
             // Mount Point / Device boundary safety protection check
@@ -475,6 +471,66 @@ fn get_device_id(meta: &fs::Metadata) -> u64 {
 #[cfg(not(any(unix, windows)))]
 fn get_device_id(_meta: &fs::Metadata) -> u64 {
     0
+}
+
+/// Determines if a directory entry should be skipped when traversing the system root.
+///
+/// Prevents recursion into virtual filesystems, device nodes, transient mounts,
+/// and macOS APFS volume mirrors (`/Volumes`, `/System/Volumes`).
+#[must_use]
+pub(crate) fn should_skip_root_entry(task_path: &Path, name: &str) -> bool {
+    // 1. Direct children of the system root ("/")
+    if task_path == Path::new("/") {
+        // Universal / Linux virtual filesystems, device nodes, and transient mounts
+        if matches!(
+            name,
+            "proc" | "sys" | "dev" | "run" | "tmp" | "mnt" | "media" | "lost+found"
+        ) {
+            return true;
+        }
+
+        // macOS / Darwin root mounts, virtual filesystems, and index stores
+        #[cfg(any(target_os = "macos", test))]
+        if matches!(
+            name,
+            "Volumes"
+                | "volumes"
+                | "Network"
+                | "network"
+                | "cores"
+                | ".vol"
+                | ".file"
+                | ".Spotlight-V100"
+                | ".spotlight-v100"
+                | ".fseventsd"
+                | ".DocumentRevisions-V100"
+                | ".documentrevisions-v100"
+                | ".MobileBackups"
+                | ".mobilebackups"
+                | ".PKInstallSandboxManager"
+                | ".PKInstallSandboxManager-SystemSoftware"
+                | ".cleverfiles"
+                | ".Trashes"
+                | ".trashes"
+        ) {
+            return true;
+        }
+    }
+
+    // 2. macOS /System sub-mounts: /System/Volumes contains /System/Volumes/Data
+    // (which mirrors /Users, /Applications, etc. via firmlinks) plus Preboot, Recovery, and VM.
+    #[cfg(any(target_os = "macos", test))]
+    if (task_path == Path::new("/System")
+        || (task_path
+            .file_name()
+            .is_some_and(|f| f.eq_ignore_ascii_case("System"))
+            && task_path.parent() == Some(Path::new("/"))))
+        && (name == "Volumes" || name == "volumes")
+    {
+        return true;
+    }
+
+    false
 }
 
 #[cfg(test)]
@@ -1215,5 +1271,109 @@ mod tests {
 
         let _ = std::fs::remove_dir_all(&temp_dir);
         Ok(())
+    }
+
+    #[test]
+    fn test_should_skip_root_entry_universal_and_linux() {
+        let root = Path::new("/");
+        let linux_skips = [
+            "proc",
+            "sys",
+            "dev",
+            "run",
+            "tmp",
+            "mnt",
+            "media",
+            "lost+found",
+        ];
+        for name in linux_skips {
+            assert!(
+                should_skip_root_entry(root, name),
+                "expected root skip for '{name}'"
+            );
+        }
+
+        // Standard user and system dirs at root must NOT be skipped
+        let allowed = ["home", "etc", "var", "usr", "opt", "bin", "boot", "srv"];
+        for name in allowed {
+            assert!(
+                !should_skip_root_entry(root, name),
+                "expected '{name}' at root to be allowed"
+            );
+        }
+    }
+
+    #[test]
+    fn test_should_skip_root_entry_macos() {
+        let root = Path::new("/");
+        let macos_root_skips = [
+            "Volumes",
+            "volumes",
+            "Network",
+            "network",
+            "cores",
+            ".vol",
+            ".file",
+            ".Spotlight-V100",
+            ".spotlight-v100",
+            ".fseventsd",
+            ".DocumentRevisions-V100",
+            ".documentrevisions-v100",
+            ".MobileBackups",
+            ".mobilebackups",
+            ".PKInstallSandboxManager",
+            ".PKInstallSandboxManager-SystemSoftware",
+            ".cleverfiles",
+            ".Trashes",
+            ".trashes",
+        ];
+        for name in macos_root_skips {
+            assert!(
+                should_skip_root_entry(root, name),
+                "expected macOS root skip for '{name}'"
+            );
+        }
+
+        // macOS standard firmlinks and root directories must NOT be skipped
+        let macos_allowed = ["Users", "Applications", "Library", "System", "private"];
+        for name in macos_allowed {
+            assert!(
+                !should_skip_root_entry(root, name),
+                "expected '{name}' at root to be allowed"
+            );
+        }
+
+        // macOS /System/Volumes sub-mount must be skipped to avoid double-counting
+        let sys_path = Path::new("/System");
+        assert!(should_skip_root_entry(sys_path, "Volumes"));
+        assert!(should_skip_root_entry(sys_path, "volumes"));
+        assert!(!should_skip_root_entry(sys_path, "Library"));
+        assert!(!should_skip_root_entry(sys_path, "Applications"));
+        assert!(!should_skip_root_entry(sys_path, "Cryptexes"));
+
+        // With trailing slash on /System/
+        let sys_trailing = Path::new("/System/");
+        assert!(should_skip_root_entry(sys_trailing, "Volumes"));
+        assert!(should_skip_root_entry(sys_trailing, "volumes"));
+        assert!(!should_skip_root_entry(sys_trailing, "Library"));
+    }
+
+    #[test]
+    fn test_should_skip_root_entry_non_root_paths() {
+        // When scanning non-root folders, directories with names like "Volumes", "proc",
+        // or "tmp" must NOT be skipped.
+        let user_path = Path::new("/home/tux/Volumes");
+        assert!(!should_skip_root_entry(user_path, "Volumes"));
+        assert!(!should_skip_root_entry(user_path, "proc"));
+        assert!(!should_skip_root_entry(user_path, "tmp"));
+
+        let mac_user_path = Path::new("/Users/tux/Projects");
+        assert!(!should_skip_root_entry(mac_user_path, "Volumes"));
+        assert!(!should_skip_root_entry(mac_user_path, "cores"));
+        assert!(!should_skip_root_entry(mac_user_path, "media"));
+
+        let ext_drive = Path::new("/Volumes/External/Data");
+        assert!(!should_skip_root_entry(ext_drive, "Volumes"));
+        assert!(!should_skip_root_entry(ext_drive, "proc"));
     }
 }
