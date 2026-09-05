@@ -61,7 +61,7 @@ Purchasing precompiled packages directly funds the engineering efforts required 
 - ⚡ **Work-Stealing Multi-threading:** Powered by a lock-free task injector queue that keeps all CPU cores saturated during scanning-- inspired by `ripgrep`.
 - 🪟 **NTFS MFT Scanner (Windows & Linux):** Accesses raw NTFS volumes to parse the Master File Table directly, bypassing OS filesystem bottlenecks for near-instantaneous drive indexing (requires administrative/root privileges). Exported `$MFT` files can also be parsed offline on any platform.
 - 👥 **7-Stage Deduplication Engine:** Safely identifies byte-for-byte identical files using cryptographically secure BLAKE3 hashing. It is hardlink-aware to protect shared filesystem links.
-- 🌍 **Full Localization:** Community-translated interface in 10 languages (English, German, Spanish, French, Italian, Dutch, Polish, Portuguese, Russian, and Turkish) with a built-in language selector.
+- 🌍 **Full Localization:** Community-translated interface in 14 languages (English, Chinese (Simplified), Chinese (Traditional), Dutch, French, German, Italian, Japanese, Korean, Polish, Portuguese, Russian, Spanish, and Turkish) with embedded fallback fonts and a built-in language selector.
 - 🎨 **Theme System:** System (auto-detected), Dark, Light, and High Contrast themes.
 - ⏹️ **Scan Control:** Cancel in-progress scans at any time, and restrict scans to a single filesystem (`-x`).
 - 🌐 **Browser Snapshot Viewer:** Explore saved `.edst` snapshots in the browser via the wasm build on [edirstat.com](https://edirstat.com).
