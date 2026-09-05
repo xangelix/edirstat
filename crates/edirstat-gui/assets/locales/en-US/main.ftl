@@ -196,10 +196,10 @@ placeholder-treemap = Scanned filesystem will be visualized as a treemap here.
 placeholder-plots = Scanned filesystem will be plotted here.
 
 # Treemap Zoom & Navigation
-zoom-up = Up
-zoom-reset = Reset
-zoom-to-dir = Focus in Treemap
-zoom-up-level = Go Up One Level
+zoom-up = ⏶ Up
+zoom-reset = ❌ Reset
+zoom-to-dir = 🔍 Focus in Treemap
+zoom-up-level = ⏶ Go Up One Level
 zoom-empty-dir = Directory is empty
 
 # --- Extensions Panel ---
@@ -384,3 +384,19 @@ modal-scan-options-refresh-tooltip = Refresh storage drives
 modal-scan-options-root-system = Root System
 modal-scan-options-selected-badge = ✅ Selected
 modal-scan-options-free-of = { $free } free of { $total }
+modal-scan-options-subtitle = Select a storage volume, quick location, or custom directory to analyze.
+modal-scan-options-quick-access = 📍 Quick Access Shortcuts
+modal-scan-options-path-hint = /path/to/scan
+modal-scan-options-hint = ℹ Select a drive above or enter a directory path.
+modal-scan-options-sandbox-auth = 🔒 Sandbox Access Required — Click Scan to Grant Access
+modal-scan-options-valid-dir = ✅ Valid Directory — Ready to Scan
+modal-scan-options-points-to-file = ⚠ Path points to a file — please select a folder.
+modal-scan-options-dir-not-exist = ⚠ Directory does not exist on filesystem.
+quick-loc-home = 🏠 Home
+quick-loc-documents = 📄 Documents
+quick-loc-downloads = 📥 Downloads
+quick-loc-desktop = 🖥 Desktop
+quick-loc-pictures = 🖼 Pictures
+search-use-regex = Use Regular Expression (Regex)
+search-match-case = Match Case (Case Sensitive)
+dedup-pref-dir-hint = e.g. /home/user/Archive

@@ -196,10 +196,10 @@ placeholder-treemap = Das gescannte Dateisystem wird hier als Treemap visualisie
 placeholder-plots = Das gescannte Dateisystem wird hier grafisch dargestellt.
 
 # Treemap Zoom & Navigation
-zoom-up = Nach oben
-zoom-reset = Zurücksetzen
-zoom-to-dir = In Treemap fokussieren
-zoom-up-level = Eine Ebene nach oben
+zoom-up = ⏶ Nach oben
+zoom-reset = ❌ Zurücksetzen
+zoom-to-dir = 🔍 In Treemap fokussieren
+zoom-up-level = ⏶ Eine Ebene nach oben
 zoom-empty-dir = Verzeichnis ist leer
 
 # --- Extensions Panel ---
@@ -384,3 +384,19 @@ modal-scan-options-refresh-tooltip = Speicherlaufwerke aktualisieren
 modal-scan-options-root-system = Wurzelsystem
 modal-scan-options-selected-badge = ✅ Ausgewählt
 modal-scan-options-free-of = { $free } frei von { $total }
+modal-scan-options-subtitle = Wählen Sie einen Datenträger, einen Schnellzugriff oder ein benutzerdefiniertes Verzeichnis zum Analysieren aus.
+modal-scan-options-quick-access = 📍 Schnellzugriff
+modal-scan-options-path-hint = /pfad/zum/scannen
+modal-scan-options-hint = ℹ Wählen Sie oben ein Laufwerk aus oder geben Sie einen Verzeichnispfad ein.
+modal-scan-options-sandbox-auth = 🔒 Sandbox-Zugriff erforderlich — Klicken Sie auf Scannen, um Zugriff zu gewähren
+modal-scan-options-valid-dir = ✅ Gültiges Verzeichnis — Bereit zum Scannen
+modal-scan-options-points-to-file = ⚠ Pfad verweist auf eine Datei — bitte wählen Sie einen Ordner aus.
+modal-scan-options-dir-not-exist = ⚠ Verzeichnis existiert nicht im Dateisystem.
+quick-loc-home = 🏠 Benutzer
+quick-loc-documents = 📄 Dokumente
+quick-loc-downloads = 📥 Downloads
+quick-loc-desktop = 🖥 Schreibtisch
+quick-loc-pictures = 🖼 Bilder
+search-use-regex = Regulären Ausdruck verwenden (Regex)
+search-match-case = Groß-/Kleinschreibung beachten
+dedup-pref-dir-hint = z. B. /home/user/Archive

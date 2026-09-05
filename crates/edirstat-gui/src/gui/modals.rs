@@ -181,9 +181,21 @@ pub(crate) struct SystemDrive {
 
 #[derive(Debug, Clone)]
 pub(crate) struct QuickLocation {
-    pub label: &'static str,
-    pub icon: &'static str,
+    pub label_key: &'static str,
     pub path: std::path::PathBuf,
+}
+
+impl QuickLocation {
+    pub fn display_label(&self) -> std::borrow::Cow<'static, str> {
+        match self.label_key {
+            "home" => t!("quick-loc-home"),
+            "documents" => t!("quick-loc-documents"),
+            "downloads" => t!("quick-loc-downloads"),
+            "desktop" => t!("quick-loc-desktop"),
+            "pictures" => t!("quick-loc-pictures"),
+            _ => std::borrow::Cow::Borrowed(""),
+        }
+    }
 }
 
 #[cfg(not(target_family = "wasm"))]
@@ -288,42 +300,36 @@ pub(crate) fn get_quick_locations() -> Vec<QuickLocation> {
         let mut locs = Vec::new();
         if let Some(user_dirs) = directories::UserDirs::new() {
             locs.push(QuickLocation {
-                label: "Home",
-                icon: "🏠",
+                label_key: "home",
                 path: user_dirs.home_dir().to_path_buf(),
             });
             if let Some(p) = user_dirs.document_dir() {
                 locs.push(QuickLocation {
-                    label: "Documents",
-                    icon: "📄",
+                    label_key: "documents",
                     path: p.to_path_buf(),
                 });
             }
             if let Some(p) = user_dirs.download_dir() {
                 locs.push(QuickLocation {
-                    label: "Downloads",
-                    icon: "📥",
+                    label_key: "downloads",
                     path: p.to_path_buf(),
                 });
             }
             if let Some(p) = user_dirs.desktop_dir() {
                 locs.push(QuickLocation {
-                    label: "Desktop",
-                    icon: "🖥️",
+                    label_key: "desktop",
                     path: p.to_path_buf(),
                 });
             }
             if let Some(p) = user_dirs.picture_dir() {
                 locs.push(QuickLocation {
-                    label: "Pictures",
-                    icon: "🖼️",
+                    label_key: "pictures",
                     path: p.to_path_buf(),
                 });
             }
         } else if let Ok(home) = std::env::var("HOME") {
             locs.push(QuickLocation {
-                label: "Home",
-                icon: "🏠",
+                label_key: "home",
                 path: std::path::PathBuf::from(home),
             });
         }
@@ -1878,7 +1884,7 @@ impl GuiApp {
                             });
                             ui.add_space(2.0);
                             ui.label(
-                                egui::RichText::new("Select a storage volume, quick location, or custom directory to analyze.")
+                                egui::RichText::new(t!("modal-scan-options-subtitle"))
                                     .size(12.0)
                                     .color(ui.visuals().weak_text_color()),
                             );
@@ -2120,7 +2126,7 @@ impl GuiApp {
                                 let locs = get_quick_locations();
                                 if !locs.is_empty() {
                                     ui.label(
-                                        egui::RichText::new("📍 Quick Access Shortcuts")
+                                        egui::RichText::new(t!("modal-scan-options-quick-access"))
                                             .strong()
                                             .size(13.0),
                                     );
@@ -2131,17 +2137,17 @@ impl GuiApp {
                                             let loc_path_str = loc.path.to_string_lossy();
                                             let is_selected = self.scan_path_input.trim() == loc_path_str;
 
-                                            let text = format!("{} {}", loc.icon, loc.label);
+                                            let label = loc.display_label();
                                             let chip = if is_selected {
                                                 egui::Button::new(
-                                                    egui::RichText::new(text)
+                                                    egui::RichText::new(label.as_ref())
                                                         .color(theme::COLOR_WHITE)
                                                         .strong(),
                                                 )
                                                 .fill(theme::get_color_scanning())
                                                 .corner_radius(12.0)
                                             } else {
-                                                egui::Button::new(text)
+                                                egui::Button::new(label.as_ref())
                                                     .corner_radius(12.0)
                                             };
 
@@ -2165,7 +2171,7 @@ impl GuiApp {
                                 ui.horizontal(|ui| {
                                     // Path input field
                                     let text_edit = egui::TextEdit::singleline(&mut self.scan_path_input)
-                                        .hint_text("/path/to/scan");
+                                        .hint_text(t!("modal-scan-options-path-hint"));
                                     ui.add_sized(
                                         egui::vec2(
                                             ui.available_width() - 86.0,
@@ -2220,33 +2226,33 @@ impl GuiApp {
 
                                 if current_trimmed.is_empty() {
                                     ui.label(
-                                        egui::RichText::new("ℹ️ Select a drive above or enter a directory path.")
+                                        egui::RichText::new(t!("modal-scan-options-hint"))
                                             .size(11.0)
                                             .color(ui.visuals().weak_text_color()),
                                     );
                                 } else if is_permission_needed {
                                     ui.label(
-                                        egui::RichText::new("🔒 Sandbox Access Required — Click Scan to Grant Access")
+                                        egui::RichText::new(t!("modal-scan-options-sandbox-auth"))
                                             .size(11.0)
                                             .color(theme::COLOR_DUPLICATE_ORANGE)
                                             .strong(),
                                     );
                                 } else if is_valid {
                                     ui.label(
-                                        egui::RichText::new("✅ Valid Directory — Ready to Scan")
+                                        egui::RichText::new(t!("modal-scan-options-valid-dir"))
                                             .size(11.0)
                                             .color(theme::COLOR_SCAN_COMPLETE)
                                             .strong(),
                                     );
                                 } else if path_obj.is_file() {
                                     ui.label(
-                                        egui::RichText::new("⚠️ Path points to a file — please select a folder.")
+                                        egui::RichText::new(t!("modal-scan-options-points-to-file"))
                                             .size(11.0)
                                             .color(theme::WARNING_RED),
                                     );
                                 } else {
                                     ui.label(
-                                        egui::RichText::new("⚠️ Directory does not exist on filesystem.")
+                                        egui::RichText::new(t!("modal-scan-options-dir-not-exist"))
                                             .size(11.0)
                                             .color(theme::COLOR_DUPLICATE_ORANGE),
                                     );

@@ -192,10 +192,10 @@ placeholder-treemap = スキャンしたファイルシステムがここにツ�
 placeholder-plots = スキャンしたファイルシステムがここにグラフとして表示されます。
 
 # Treemap Zoom & Navigation
-zoom-up = 上へ
-zoom-reset = リセット
-zoom-to-dir = ツリーマップでフォーカス
-zoom-up-level = 1つ上の階層へ
+zoom-up = ⏶ 上へ
+zoom-reset = ❌ リセット
+zoom-to-dir = 🔍 ツリーマップでフォーカス
+zoom-up-level = ⏶ 1つ上の階層へ
 zoom-empty-dir = ディレクトリは空です
 
 # --- Extensions Panel ---
@@ -378,3 +378,19 @@ modal-scan-options-refresh-tooltip = ストレージドライブを更新
 modal-scan-options-root-system = ルートシステム
 modal-scan-options-selected-badge = ✅ 選択済み
 modal-scan-options-free-of = { $total } 中 { $free } が空き
+modal-scan-options-subtitle = 分析するストレージボリューム、クイックアクセス、またはカスタムディレクトリを選択してください。
+modal-scan-options-quick-access = 📍 クイックアクセス
+modal-scan-options-path-hint = /スキャンするパス
+modal-scan-options-hint = ℹ 上記のドライブを選択するか、ディレクトリパスを入力してください。
+modal-scan-options-sandbox-auth = 🔒 サンドボックスのアクセス許可が必要です — スキャンをクリックして権限を付与してください
+modal-scan-options-valid-dir = ✅ 有効なディレクトリ — スキャン可能
+modal-scan-options-points-to-file = ⚠ パスがファイルを指しています — フォルダを選択してください。
+modal-scan-options-dir-not-exist = ⚠ ディレクトリがファイルシステムに存在しません。
+quick-loc-home = 🏠 ホーム
+quick-loc-documents = 📄 ドキュメント
+quick-loc-downloads = 📥 ダウンロード
+quick-loc-desktop = 🖥 デスクトップ
+quick-loc-pictures = 🖼 ピクチャ
+search-use-regex = 正規表現を使用 (Regex)
+search-match-case = 大文字・小文字を区別
+dedup-pref-dir-hint = 例: /home/user/Archive

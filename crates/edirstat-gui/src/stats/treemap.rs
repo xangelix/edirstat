@@ -602,7 +602,7 @@ impl StatComponent for TreemapChart {
 
                     if target != NO_INDEX {
                         let is_current = target == self.zoom_root;
-                        let btn = eframe::egui::Button::new(format!("🔍 {}", t!("zoom-to-dir")));
+                        let btn = eframe::egui::Button::new(t!("zoom-to-dir"));
                         if is_current {
                             ui.add_enabled(false, btn)
                                 .on_disabled_hover_text(t!("toast-already-root"));
@@ -618,7 +618,7 @@ impl StatComponent for TreemapChart {
                 }
 
                 if self.zoom_root != 0 {
-                    if ui.button(format!("⏶ {}", t!("zoom-up-level"))).clicked() {
+                    if ui.button(t!("zoom-up-level")).clicked() {
                         let parent = snapshot
                             .nodes
                             .get(self.zoom_root as usize)
@@ -633,7 +633,7 @@ impl StatComponent for TreemapChart {
                         ui.close_kind(eframe::egui::UiKind::Menu);
                     }
 
-                    if ui.button(format!("❌ {}", t!("zoom-reset"))).clicked() {
+                    if ui.button(t!("zoom-reset")).clicked() {
                         self.zoom_root = 0;
                         ui.ctx().request_repaint();
                         ui.close_kind(eframe::egui::UiKind::Menu);

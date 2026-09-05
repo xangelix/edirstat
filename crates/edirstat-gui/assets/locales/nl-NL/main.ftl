@@ -196,10 +196,10 @@ placeholder-treemap = Gescande bestandssysteem wordt hier als treemap weergegeve
 placeholder-plots = Gescande bestandssysteem wordt hier grafisch weergegeven.
 
 # Treemap Zoom & Navigation
-zoom-up = Omhoog
-zoom-reset = Herstellen
-zoom-to-dir = Focussen in Treemap
-zoom-up-level = Een niveau omhoog
+zoom-up = ⏶ Omhoog
+zoom-reset = ❌ Herstellen
+zoom-to-dir = 🔍 Focussen in Treemap
+zoom-up-level = ⏶ Een niveau omhoog
 zoom-empty-dir = Map is leeg
 
 # --- Extensions Panel ---
@@ -384,3 +384,19 @@ modal-scan-options-refresh-tooltip = Opslagstations vernieuwen
 modal-scan-options-root-system = Systeem-root
 modal-scan-options-selected-badge = ✅ Geselecteerd
 modal-scan-options-free-of = { $free } vrij van { $total }
+modal-scan-options-subtitle = Selecteer een opslagvolume, snelle locatie of aangepaste map om te analyseren.
+modal-scan-options-quick-access = 📍 Snelle toegang
+modal-scan-options-path-hint = /pad/om/te/scannen
+modal-scan-options-hint = ℹ Selecteer hierboven een schijf of voer een mappad in.
+modal-scan-options-sandbox-auth = 🔒 Sandbox-toegang vereist — Klik op Scannen om toegang te verlenen
+modal-scan-options-valid-dir = ✅ Geldige map — Klaar om te scannen
+modal-scan-options-points-to-file = ⚠ Pad verwijst naar een bestand — selecteer een map.
+modal-scan-options-dir-not-exist = ⚠ Map bestaat niet op het bestandssysteem.
+quick-loc-home = 🏠 Persoonlijke map
+quick-loc-documents = 📄 Documenten
+quick-loc-downloads = 📥 Downloads
+quick-loc-desktop = 🖥 Bureaublad
+quick-loc-pictures = 🖼 Afbeeldingen
+search-use-regex = Reguliere expressie gebruiken (Regex)
+search-match-case = Hoofdlettergevoelig
+dedup-pref-dir-hint = bijv. /home/user/Archive

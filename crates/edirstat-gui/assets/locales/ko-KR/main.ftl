@@ -192,10 +192,10 @@ placeholder-treemap = 검사된 파일 시스템이 여기에 트리맵으로 �
 placeholder-plots = 검사된 파일 시스템이 여기에 차트로 표시됩니다.
 
 # Treemap Zoom & Navigation
-zoom-up = 위로
-zoom-reset = 재설정
-zoom-to-dir = 트리맵에서 포커스
-zoom-up-level = 한 수준 위로
+zoom-up = ⏶ 위로
+zoom-reset = ❌ 재설정
+zoom-to-dir = 🔍 트리맵에서 포커스
+zoom-up-level = ⏶ 한 수준 위로
 zoom-empty-dir = 디렉터리가 비어 있습니다
 
 # --- Extensions Panel ---
@@ -378,3 +378,19 @@ modal-scan-options-refresh-tooltip = 저장소 드라이브 새로 고침
 modal-scan-options-root-system = 루트 시스템
 modal-scan-options-selected-badge = ✅ 선택됨
 modal-scan-options-free-of = { $total } 중 { $free } 사용 가능
+modal-scan-options-subtitle = 분석할 저장 볼륨, 빠른 위치 또는 사용자 지정 디렉터리를 선택하세요.
+modal-scan-options-quick-access = 📍 빠른 접근 바로가기
+modal-scan-options-path-hint = /스캔할/경로
+modal-scan-options-hint = ℹ 위에서 드라이브를 선택하거나 디렉터리 경로를 입력하세요.
+modal-scan-options-sandbox-auth = 🔒 샌드박스 접근 권한 필요 — 스캔을 클릭하여 접근 권한 부여
+modal-scan-options-valid-dir = ✅ 유효한 디렉터리 — 스캔 준비 완료
+modal-scan-options-points-to-file = ⚠ 경로가 파일을 가리키고 있습니다 — 폴더를 선택하세요.
+modal-scan-options-dir-not-exist = ⚠ 파일 시스템에 디렉터리가 존재하지 않습니다.
+quick-loc-home = 🏠 홈
+quick-loc-documents = 📄 문서
+quick-loc-downloads = 📥 다운로드
+quick-loc-desktop = 🖥 바탕화면
+quick-loc-pictures = 🖼 사진
+search-use-regex = 정규식 사용 (Regex)
+search-match-case = 대소문자 구분
+dedup-pref-dir-hint = 예: /home/user/Archive

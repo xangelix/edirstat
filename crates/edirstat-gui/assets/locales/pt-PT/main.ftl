@@ -196,10 +196,10 @@ placeholder-treemap = O sistema de ficheiros analisado será visualizado como um
 placeholder-plots = O sistema de ficheiros analisado será traçado aqui.
 
 # Treemap Zoom & Navigation
-zoom-up = Subir
-zoom-reset = Redefinir
-zoom-to-dir = Focar no Treemap
-zoom-up-level = Subir um nível
+zoom-up = ⏶ Subir
+zoom-reset = ❌ Redefinir
+zoom-to-dir = 🔍 Focar no Treemap
+zoom-up-level = ⏶ Subir um nível
 zoom-empty-dir = O diretório está vazio
 
 # --- Extensions Panel ---
@@ -384,3 +384,19 @@ modal-scan-options-refresh-tooltip = Atualizar unidades de armazenamento
 modal-scan-options-root-system = Sistema raiz
 modal-scan-options-selected-badge = ✅ Selecionado
 modal-scan-options-free-of = { $free } livres de { $total }
+modal-scan-options-subtitle = Selecione um volume de armazenamento, localização rápida ou diretório personalizado para analisar.
+modal-scan-options-quick-access = 📍 Atalhos de acesso rápido
+modal-scan-options-path-hint = /caminho/para/analisar
+modal-scan-options-hint = ℹ Selecione uma unidade acima ou introduza o caminho de um diretório.
+modal-scan-options-sandbox-auth = 🔒 Acesso Sandbox obrigatório — Clique em Analisar para conceder acesso
+modal-scan-options-valid-dir = ✅ Diretório válido — Pronto para analisar
+modal-scan-options-points-to-file = ⚠ O caminho aponta para um ficheiro — selecione uma pasta.
+modal-scan-options-dir-not-exist = ⚠ O diretório não existe no sistema de ficheiros.
+quick-loc-home = 🏠 Pasta pessoal
+quick-loc-documents = 📄 Documentos
+quick-loc-downloads = 📥 Transferências
+quick-loc-desktop = 🖥 Ambiente de Trabalho
+quick-loc-pictures = 🖼 Imagens
+search-use-regex = Usar expressão regular (Regex)
+search-match-case = Sensível a maiúsculas/minúsculas
+dedup-pref-dir-hint = ex. /home/user/Archive

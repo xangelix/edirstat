@@ -846,8 +846,7 @@ impl GuiApp {
         let zoom_root = self.treemap_chart.zoom_root;
 
         if zoom_root != 0 {
-            let up_text = format!("⏶ {}", t!("zoom-up"));
-            if ui.button(up_text).clicked() {
+            if ui.button(t!("zoom-up")).clicked() {
                 let parent = snapshot
                     .nodes
                     .get(zoom_root as usize)
@@ -872,8 +871,7 @@ impl GuiApp {
                 ui.ctx().request_repaint();
             }
 
-            let reset_text = format!("❌ {}", t!("zoom-reset"));
-            if ui.button(reset_text).clicked() {
+            if ui.button(t!("zoom-reset")).clicked() {
                 self.treemap_chart.zoom_root = 0;
                 self.zoom_path = None;
                 ui.ctx().request_repaint();
@@ -2108,7 +2106,7 @@ impl GuiApp {
         ui.vertical(|ui| {
             ui.add_space(6.0);
             ui.horizontal(|ui| {
-                ui.strong("🔍 Filter:");
+                ui.strong(t!("search-filter-label"));
 
                 // Lay out control elements from right-to-left to prevent layout feedback loops
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -2116,7 +2114,7 @@ impl GuiApp {
                     let reg = self.filter_regex;
                     let reg_btn = ui
                         .selectable_label(reg, egui::RichText::new(".*").strong())
-                        .on_hover_text("Use Regular Expression (Regex)");
+                        .on_hover_text(t!("search-use-regex"));
                     if reg_btn.clicked() {
                         self.filter_regex = !reg;
                     }
@@ -2125,7 +2123,7 @@ impl GuiApp {
                     let case_sens = self.filter_case_sensitive;
                     let case_btn = ui
                         .selectable_label(case_sens, egui::RichText::new("Aa").strong())
-                        .on_hover_text("Match Case (Case Sensitive)");
+                        .on_hover_text(t!("search-match-case"));
                     if case_btn.clicked() {
                         self.filter_case_sensitive = !case_sens;
                     }
@@ -2446,7 +2444,7 @@ impl GuiApp {
                         let reg = self.filter_regex;
                         let reg_btn = ui
                             .selectable_label(reg, egui::RichText::new(".*").strong())
-                            .on_hover_text("Use Regular Expression (Regex)");
+                            .on_hover_text(t!("search-use-regex"));
                         if reg_btn.clicked() {
                             self.filter_regex = !reg;
                         }
@@ -2454,7 +2452,7 @@ impl GuiApp {
                         let case_sens = self.filter_case_sensitive;
                         let case_btn = ui
                             .selectable_label(case_sens, egui::RichText::new("Aa").strong())
-                            .on_hover_text("Match Case (Case Sensitive)");
+                            .on_hover_text(t!("search-match-case"));
                         if case_btn.clicked() {
                             self.filter_case_sensitive = !case_sens;
                         }

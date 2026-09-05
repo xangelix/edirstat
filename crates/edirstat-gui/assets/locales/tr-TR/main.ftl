@@ -192,10 +192,10 @@ placeholder-treemap = Taranan dosya sistemi burada treemap olarak görüntülene
 placeholder-plots = Taranan dosya sistemi burada grafik olarak görüntülenecek.
 
 # Treemap Zoom & Navigation
-zoom-up = Yukarı
-zoom-reset = Sıfırla
-zoom-to-dir = Treemap'te Odaklan
-zoom-up-level = Bir Düzey Yukarı
+zoom-up = ⏶ Yukarı
+zoom-reset = ❌ Sıfırla
+zoom-to-dir = 🔍 Treemap'te Odaklan
+zoom-up-level = ⏶ Bir Düzey Yukarı
 zoom-empty-dir = Dizin boş
 
 # --- Extensions Panel ---
@@ -379,3 +379,19 @@ modal-scan-options-refresh-tooltip = Depolama sürücülerini yenile
 modal-scan-options-root-system = Kök sistem
 modal-scan-options-selected-badge = ✅ Seçili
 modal-scan-options-free-of = { $total } alanın { $free } kadarı boş
+modal-scan-options-subtitle = Analiz etmek için bir depolama birimi, hızlı konum veya özel dizin seçin.
+modal-scan-options-quick-access = 📍 Hızlı Erişim Kısayolları
+modal-scan-options-path-hint = /taranacak/dizin
+modal-scan-options-hint = ℹ Yukarıdan bir sürücü seçin veya bir dizin yolu girin.
+modal-scan-options-sandbox-auth = 🔒 Korumalı Alan Erişimi Gerekli — Erişim İzni Vermek İçin Tara'ya Tıklayın
+modal-scan-options-valid-dir = ✅ Geçerli Dizin — Taramaya Hazır
+modal-scan-options-points-to-file = ⚠ Yol bir dosyayı gösteriyor — lütfen bir klasör seçin.
+modal-scan-options-dir-not-exist = ⚠ Dizin dosya sisteminde mevcut değil.
+quick-loc-home = 🏠 Ev Dizini
+quick-loc-documents = 📄 Belgeler
+quick-loc-downloads = 📥 İndirilenler
+quick-loc-desktop = 🖥 Masaüstü
+quick-loc-pictures = 🖼 Resimler
+search-use-regex = Düzenli İfade Kullan (Regex)
+search-match-case = Büyük/Küçük Harfe Duyarlı
+dedup-pref-dir-hint = örn. /home/user/Archive

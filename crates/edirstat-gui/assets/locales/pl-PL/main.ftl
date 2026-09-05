@@ -199,10 +199,10 @@ placeholder-treemap = Zeskanowany system plików zostanie tutaj przedstawiony w 
 placeholder-plots = Zeskanowany system plików zostanie tutaj przedstawiony na wykresie.
 
 # Treemap Zoom & Navigation
-zoom-up = W górę
-zoom-reset = Resetuj
-zoom-to-dir = Skup w Treemap
-zoom-up-level = Poziom w górę
+zoom-up = ⏶ W górę
+zoom-reset = ❌ Resetuj
+zoom-to-dir = 🔍 Skup w Treemap
+zoom-up-level = ⏶ Poziom w górę
 zoom-empty-dir = Katalog jest pusty
 
 # --- Extensions Panel ---
@@ -389,3 +389,19 @@ modal-scan-options-refresh-tooltip = Odśwież dyski pamięci
 modal-scan-options-root-system = System główny
 modal-scan-options-selected-badge = ✅ Wybrane
 modal-scan-options-free-of = { $free } wolne z { $total }
+modal-scan-options-subtitle = Wybierz wolumin pamięci, szybką lokalizację lub własny katalog do analizy.
+modal-scan-options-quick-access = 📍 Skróty szybkiego dostępu
+modal-scan-options-path-hint = /sciezka/do/skanowania
+modal-scan-options-hint = ℹ Wybierz dysk powyżej lub wprowadź ścieżkę do katalogu.
+modal-scan-options-sandbox-auth = 🔒 Wymagany dostęp do piaskownicy — kliknij Skanuj, aby przyznać dostęp
+modal-scan-options-valid-dir = ✅ Prawidłowy katalog — gotowy do skanowania
+modal-scan-options-points-to-file = ⚠ Ścieżka wskazuje na plik — wybierz folder.
+modal-scan-options-dir-not-exist = ⚠ Katalog nie istnieje w systemie plików.
+quick-loc-home = 🏠 Katalog domowy
+quick-loc-documents = 📄 Dokumenty
+quick-loc-downloads = 📥 Pobrane
+quick-loc-desktop = 🖥 Pulpit
+quick-loc-pictures = 🖼 Obrazy
+search-use-regex = Użyj wyrażeń regularnych (Regex)
+search-match-case = Uwzględniaj wielkość liter
+dedup-pref-dir-hint = np. /home/user/Archive

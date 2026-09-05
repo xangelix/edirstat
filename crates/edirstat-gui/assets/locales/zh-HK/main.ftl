@@ -192,10 +192,10 @@ placeholder-treemap = 掃瞄後的檔案系統將在此以矩形樹圖顯示。
 placeholder-plots = 掃瞄後的檔案系統將在此繪製成圖表。
 
 # Treemap Zoom & Navigation
-zoom-up = 向上
-zoom-reset = 重設
-zoom-to-dir = 在樹狀圖中聚焦
-zoom-up-level = 向上級目錄
+zoom-up = ⏶ 向上
+zoom-reset = ❌ 重設
+zoom-to-dir = 🔍 在樹狀圖中聚焦
+zoom-up-level = ⏶ 向上級目錄
 zoom-empty-dir = 目錄為空
 
 # --- Extensions Panel ---
@@ -378,3 +378,19 @@ modal-scan-options-refresh-tooltip = 重新整理儲存磁碟機
 modal-scan-options-root-system = 根系統
 modal-scan-options-selected-badge = ✅ 已選取
 modal-scan-options-free-of = { $free } 可用，共 { $total }
+modal-scan-options-subtitle = 選擇要分析的儲存卷、捷徑位置或自訂目錄。
+modal-scan-options-quick-access = 📍 捷徑存取
+modal-scan-options-path-hint = /要掃描的路徑
+modal-scan-options-hint = ℹ 請在上方選取磁碟機或輸入目錄路徑。
+modal-scan-options-sandbox-auth = 🔒 需要沙盒存取權限 — 點擊「掃描」以授予存取權限
+modal-scan-options-valid-dir = ✅ 有效目錄 — 隨時可掃描
+modal-scan-options-points-to-file = ⚠ 路徑指向一個檔案 — 請選取資料夾。
+modal-scan-options-dir-not-exist = ⚠ 目錄在檔案系統中不存在。
+quick-loc-home = 🏠 用戶目錄
+quick-loc-documents = 📄 文件
+quick-loc-downloads = 📥 下載
+quick-loc-desktop = 🖥 桌面
+quick-loc-pictures = 🖼 圖片
+search-use-regex = 使用正規表示式 (Regex)
+search-match-case = 區分大小寫
+dedup-pref-dir-hint = 例如 /home/user/Archive

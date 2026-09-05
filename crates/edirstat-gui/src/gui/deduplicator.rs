@@ -398,7 +398,7 @@ impl super::GuiApp {
                                 ui.label(t!("dedup-pref-dir-pattern"));
                                 ui.add(
                                     egui::TextEdit::singleline(&mut self.deduplicator_dir_filter)
-                                        .hint_text("e.g. /home/user/Archive")
+                                        .hint_text(t!("dedup-pref-dir-hint"))
                                         .desired_width(200.0),
                                 );
                             });
