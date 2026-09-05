@@ -38,6 +38,7 @@ pub mod fonts;
 pub mod modals;
 pub mod notifications;
 pub mod operations;
+pub mod reveal;
 pub mod theme;
 
 pub use extensions::ExtensionStat;
@@ -2773,11 +2774,16 @@ fn render_custom_op_button(
 
 #[cfg(not(target_family = "wasm"))]
 fn open_terminal_at(path: &Path) -> std::io::Result<()> {
+    let dir = if path.is_dir() {
+        path
+    } else {
+        path.parent().unwrap_or(path)
+    };
     #[cfg(target_os = "windows")]
     {
         std::process::Command::new("cmd")
             .args(["/c", "start", "cmd"])
-            .current_dir(path)
+            .current_dir(dir)
             .spawn()?;
         Ok(())
     }
@@ -2786,7 +2792,7 @@ fn open_terminal_at(path: &Path) -> std::io::Result<()> {
         std::process::Command::new("open")
             .arg("-a")
             .arg("Terminal")
-            .arg(path)
+            .arg(dir)
             .spawn()?;
         Ok(())
     }
@@ -2805,9 +2811,9 @@ fn open_terminal_at(path: &Path) -> std::io::Result<()> {
         for &emulator in &emulators {
             let mut cmd = std::process::Command::new(emulator);
             if emulator == "gnome-terminal" {
-                cmd.arg(format!("--working-directory={}", path.display()));
+                cmd.arg(format!("--working-directory={}", dir.display()));
             } else {
-                cmd.current_dir(path);
+                cmd.current_dir(dir);
             }
             match cmd.spawn() {
                 Ok(_) => return Ok(()),

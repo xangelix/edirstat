@@ -689,7 +689,8 @@ impl super::GuiApp {
                                                 let full_file_path =
                                                     std::path::Path::new(&parent_path)
                                                         .join(&filename);
-                                                let _ = open::that(&full_file_path);
+                                                let _ =
+                                                    crate::gui::reveal::open_file(&full_file_path);
                                             }
                                         }
                                         if is_hardlink {
@@ -755,7 +756,9 @@ impl super::GuiApp {
                                         };
                                         if !is_scan_running && response.clicked() {
                                             #[cfg(not(target_family = "wasm"))]
-                                            let _ = open::that(&parent_path);
+                                            let _ = crate::gui::reveal::reveal_in_file_manager(
+                                                std::path::Path::new(&parent_path),
+                                            );
                                         }
                                     },
                                 );

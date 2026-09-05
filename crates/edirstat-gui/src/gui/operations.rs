@@ -341,7 +341,7 @@ impl TableOperation for OpenFileOp {
             if let Some(idx) = ctx.data.selected_rows.iter().next() {
                 let path_str = snapshot.get_full_path(idx);
                 let path = Path::new(&path_str);
-                match open::that(path) {
+                match crate::gui::reveal::open_file(path) {
                     Ok(()) => {
                         let path_lossy = path.to_string_lossy();
                         let cleaned_path = crate::arena::clean_unc_path(&path_lossy);
@@ -409,14 +409,9 @@ impl TableOperation for OpenFileManagerOp {
             if let Some(idx) = ctx.data.selected_rows.iter().next() {
                 let path_str = snapshot.get_full_path(idx);
                 let path = Path::new(&path_str);
-                let dir_to_open = if path.is_dir() {
-                    path
-                } else {
-                    path.parent().map_or(path, |p| p)
-                };
-                match open::that(dir_to_open) {
+                match crate::gui::reveal::reveal_in_file_manager(path) {
                     Ok(()) => {
-                        let path_lossy = dir_to_open.to_string_lossy();
+                        let path_lossy = path.to_string_lossy();
                         let cleaned_path = crate::arena::clean_unc_path(&path_lossy);
                         crate::gui::toast_info(
                             t!("toast-opened-manager", { "path" => cleaned_path.as_ref() }),
@@ -480,13 +475,23 @@ impl TableOperation for OpenTerminalOp {
 
             if let Some(idx) = ctx.data.selected_rows.iter().next()
                 && (idx as usize) < snapshot.nodes.len()
-                && snapshot.nodes[idx as usize].is_directory()
             {
+                let is_dir = snapshot.nodes[idx as usize].is_directory();
                 let path_str = snapshot.get_full_path(idx);
-                match super::open_terminal_at(Path::new(&path_str)) {
-                    Ok(()) => crate::gui::toast_info(
-                        t!("toast-opened-terminal", { "path" => path_str.as_str() }),
-                    ),
+                let path = Path::new(&path_str);
+                let dir_to_open = if is_dir {
+                    path
+                } else {
+                    path.parent().unwrap_or(path)
+                };
+                match super::open_terminal_at(dir_to_open) {
+                    Ok(()) => {
+                        let path_lossy = dir_to_open.to_string_lossy();
+                        let cleaned_path = crate::arena::clean_unc_path(&path_lossy);
+                        crate::gui::toast_info(
+                            t!("toast-opened-terminal", { "path" => cleaned_path.as_ref() }),
+                        );
+                    }
                     Err(e) => {
                         let err_msg = e.to_string();
                         crate::gui::toast_error(

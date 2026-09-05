@@ -816,7 +816,7 @@ impl GuiApp {
                 #[cfg(not(target_family = "wasm"))]
                 {
                     let full_path = snapshot.get_full_path(node_idx);
-                    let _ = open::that(std::path::Path::new(&full_path));
+                    let _ = crate::gui::reveal::open_file(std::path::Path::new(&full_path));
                 }
             }
         } else if clicked {
@@ -1737,7 +1737,7 @@ impl GuiApp {
                                 #[cfg(not(target_family = "wasm"))]
                                 {
                                     let path = std::path::Path::new(&full_path);
-                                    let _ = open::that(path);
+                                    let _ = crate::gui::reveal::open_file(path);
                                 }
                             }
                         }
@@ -1761,12 +1761,7 @@ impl GuiApp {
                                 #[cfg(not(target_family = "wasm"))]
                                 {
                                     let path = std::path::Path::new(&full_path);
-                                    let dir_to_open = if path.is_dir() {
-                                        path
-                                    } else {
-                                        path.parent().map_or(path, |p| p)
-                                    };
-                                    let _ = open::that(dir_to_open);
+                                    let _ = crate::gui::reveal::reveal_in_file_manager(path);
                                 }
                             }
                         }
