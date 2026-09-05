@@ -34,6 +34,7 @@ use super::snapshot::save_snapshot;
 pub mod deduplicator;
 pub mod explorer;
 pub mod extensions;
+pub mod fonts;
 pub mod modals;
 pub mod notifications;
 pub mod operations;
@@ -185,6 +186,10 @@ pub struct GuiApp {
     pub(crate) locale: Locale,
 
     pub(crate) locale_preference: Option<Locale>,
+
+    /// One-shot guard: non-Latin fallback fonts are installed on the first
+    /// rendered frame (`fonts::install_fonts` is a no-op when none were built).
+    pub(crate) fonts_installed: bool,
 
     #[cfg(all(feature = "online", not(target_family = "wasm")))]
     pub(crate) update_checker: egui_async::Bind<Option<String>, String>,
@@ -470,6 +475,8 @@ impl GuiApp {
             locale,
 
             locale_preference: prefs.locale,
+
+            fonts_installed: false,
 
             #[cfg(all(feature = "online", not(target_family = "wasm")))]
             update_checker: egui_async::Bind::default(),
@@ -1426,6 +1433,13 @@ impl eframe::App for GuiApp {
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
+
+        // Install the subsetted non-Latin fallback fonts before the first
+        // frame lays out text; no-op when the build had no font sources.
+        if !self.fonts_installed {
+            fonts::install_fonts(&ctx);
+            self.fonts_installed = true;
+        }
 
         // Process any deferred command line paths on the first draw pass
         self.process_pending_initial_path();

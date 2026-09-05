@@ -5,3 +5,5 @@ target/
 /web/public
 /runner/target
 /crates/edirstat-gui/dist
+# Downloaded raw Noto sources for the font-subsetting pipeline (scripts/fetch_fonts.sh)
+/crates/edirstat-gui/assets/fonts/raw/

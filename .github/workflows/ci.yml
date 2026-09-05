@@ -35,6 +35,12 @@ jobs:
       - name: Run tests
         run: cargo test --workspace
 
+      - name: Verify fallback fonts match translation corpus
+        run: |
+          ./scripts/fetch_fonts.sh
+          python3 scripts/subset_fonts.py
+          git diff --exit-code crates/edirstat-gui/assets/fonts/
+
       # - name: Verify licenses matching committed ones
       #   run: |
       #     git config --global --add safe.directory "*"
