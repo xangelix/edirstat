@@ -41,15 +41,14 @@ jobs:
       - name: Verify fallback fonts match translation corpus
         run: ./scripts/check.sh fonts
 
-      # - name: Verify licenses matching committed ones
-      #   run: |
-      #     git config --global --add safe.directory "*"
-      #     if ! command -v cargo-about &> /dev/null; then
-      #       echo "cargo-about not found, installing..."
-      #       pacman -Syu --noconfirm cargo-about
-      #     fi
-      #     ./scripts/generate_licenses.sh
-      #     git diff --exit-code assets/
+      - name: Verify licenses matching committed ones
+        run: |
+          git config --global --add safe.directory "*"
+          if ! command -v cargo-about &> /dev/null; then
+            echo "cargo-about not found, installing..."
+            pacman -Syu --noconfirm --needed cargo-about
+          fi
+          ./scripts/check.sh licenses
 
   test-macos:
     name: Tests (macOS Native)

@@ -90,6 +90,18 @@ check_fonts() {
     group_end
 }
 
+check_licenses() {
+    group_start "Checking third-party licenses (cargo about)"
+    if ! command -v cargo-about >/dev/null 2>&1 && ! cargo about --version >/dev/null 2>&1; then
+        echo "error: 'cargo about' is required but not installed." >&2
+        echo "       Install it with: pacman -S cargo-about (or cargo install cargo-about)" >&2
+        exit 1
+    fi
+    ./scripts/generate_licenses.sh
+    git diff --exit-code crates/edirstat-gui/assets/licenses/
+    group_end
+}
+
 check_all() {
     check_fmt
     check_typos
@@ -97,21 +109,23 @@ check_all() {
     check_clippy
     check_test
     check_fonts
+    check_licenses
     echo "==> All checks passed successfully!"
 }
 
 cmd="${1:-all}"
 case "$cmd" in
-    fmt)    check_fmt ;;
-    typos)  check_typos ;;
-    shear)  check_shear ;;
-    clippy) check_clippy ;;
-    test)   check_test ;;
-    fonts)  check_fonts ;;
-    all)    check_all ;;
+    fmt)      check_fmt ;;
+    typos)    check_typos ;;
+    shear)    check_shear ;;
+    clippy)   check_clippy ;;
+    test)     check_test ;;
+    fonts)    check_fonts ;;
+    licenses) check_licenses ;;
+    all)      check_all ;;
     *)
         echo "Unknown command: $cmd" >&2
-        echo "Usage: $0 [all|fmt|typos|shear|clippy|test|fonts]" >&2
+        echo "Usage: $0 [all|fmt|typos|shear|clippy|test|fonts|licenses]" >&2
         exit 2
         ;;
 esac
