@@ -319,7 +319,7 @@ jobs:
   deploy-itchio:
     name: Deploy to itch.io
     runs-on: ubuntu-latest
-    needs: [combine-multivers, package-windows-installer]
+    needs: [combine-multivers, package-windows-installer, build-macos]
     # Environment scoping enables an approval gate before pushing to the paid
     # store, and lets the BUTLER_API_KEY secret be scoped to this deployment
     # (Settings → Environments → itchio).
@@ -356,15 +356,22 @@ jobs:
           name: edirstat-pacman-pkg
           path: staging-linux-installer
 
+      - name: Download macOS aarch64 Production Artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: edirstat-macos-aarch64-apple-darwin
+          path: dl-macos-aarch64
+
       - name: Stage Channels
         run: |
           # Versioned filenames become the download names shown on itch.io
           VERSION="${{ github.event.release.tag_name }}"
           VERSION="${VERSION#v}"
-          mkdir -p staging-windows staging-linux
+          mkdir -p staging-windows staging-linux staging-osx
           cp dl-multivers-windows/edirstat_multivers.exe "staging-windows/edirstat-$VERSION-portable-x86_64.exe"
           cp dl-multivers-linux/edirstat_multivers "staging-linux/edirstat-$VERSION-portable-x86_64"
           chmod +x "staging-linux/edirstat-$VERSION-portable-x86_64"
+          cp dl-macos-aarch64/edirstat-macos-aarch64-*.zip "staging-osx/edirstat-$VERSION-macos-aarch64.zip"
 
       - name: Push to itch.io
         env:
@@ -388,3 +395,4 @@ jobs:
           butler push staging-windows-installer/ xangelix/edirstat:windows-setup --userversion "$VERSION"
           butler push staging-linux/ xangelix/edirstat:linux-portable --userversion "$VERSION"
           butler push staging-linux-installer/ xangelix/edirstat:linux-setup --userversion "$VERSION"
+          butler push staging-osx/ xangelix/edirstat:osx-arm64 --userversion "$VERSION"
