@@ -195,6 +195,13 @@ load-demo = 👁 Carica snapshot di demo
 placeholder-treemap = Il file system scansionato verrà visualizzato qui come mappa ad albero.
 placeholder-plots = Il file system analizzato verrà rappresentato graficamente qui.
 
+# Treemap Zoom & Navigation
+zoom-up = Su
+zoom-reset = Ripristina
+zoom-to-dir = Metti a fuoco nel Treemap
+zoom-up-level = Sali di un livello
+zoom-empty-dir = La cartella è vuota
+
 # --- Extensions Panel ---
 extensions-header = 📂 Estensioni
 extensions-empty = Nessuna statistica ancora raccolta.
@@ -202,6 +209,7 @@ extensions-hover-files = File: { $count }
 
 # --- Operations (Context Actions) ---
 op-up-one-level = Sali di un livello
+op-zoom-treemap = Metti a fuoco nel Treemap
 op-refresh-entire-scan = Aggiorna analisi completa
 op-refresh-directory = Aggiorna cartella
 op-open-file = Apri file
@@ -215,6 +223,7 @@ op-permanently-delete = Elimina permanentemente
 # Toast Notifications
 toast-already-root = Sei già al livello principale
 toast-navigated-up = Sali di un livello navigato
+toast-zoomed-treemap = Treemap focalizzato sulla cartella
 toast-refreshing-scan = Aggiornamento dell'analisi in corso...
 toast-refreshing-dir = Aggiornamento delle cartelle selezionate...
 toast-opened-file = Aperto: { $path }

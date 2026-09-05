@@ -42,6 +42,7 @@ pub enum AppCommand {
     ShowTrashModal(Vec<u32>),
     ShowDeleteModal(Vec<u32>),
     BackgroundOpCompleted(BackgroundOpResult),
+    ZoomTreemap(u32),
     /// A snapshot file picked in the browser, delivered as raw bytes
     /// (used by the wasm frontend's async file picker).
     LoadSnapshotBytes {
@@ -53,6 +54,78 @@ pub enum AppCommand {
 // Helper to retrieve the current snapshot safely
 fn get_snapshot(shared_state: &Arc<SharedState>) -> Arc<FileArenaSnapshot> {
     shared_state.current_snapshot.load().clone()
+}
+
+// --- Focus in Treemap ---
+#[derive(Debug)]
+pub struct ZoomTreemapOp {
+    shared_state: Arc<SharedState>,
+    command_tx: Sender<AppCommand>,
+}
+
+impl ZoomTreemapOp {
+    pub const fn new(shared_state: Arc<SharedState>, command_tx: Sender<AppCommand>) -> Self {
+        Self {
+            shared_state,
+            command_tx,
+        }
+    }
+}
+
+impl TableOperation for ZoomTreemapOp {
+    fn name(&self) -> Cow<'_, str> {
+        t!("op-zoom-treemap")
+    }
+
+    fn icon(&self) -> &'static str {
+        "🔍"
+    }
+
+    fn enabled(&self) -> TableOperationEnablement {
+        TableOperationEnablement::OneSelected
+    }
+
+    fn evaluate_enablement(
+        &self,
+        state: &egui_table_kit::state::TableState,
+    ) -> (bool, Cow<'static, str>) {
+        if state.selected_rows.len() == 1
+            && let Some(idx) = state.selected_rows.iter().next()
+        {
+            let snapshot = get_snapshot(&self.shared_state);
+            if (idx as usize) < snapshot.nodes.len() {
+                let target = if snapshot.nodes[idx as usize].is_directory() {
+                    idx
+                } else {
+                    snapshot.nodes[idx as usize].parent
+                };
+                if target != crate::arena::NO_INDEX {
+                    return (true, Cow::Borrowed(""));
+                }
+            }
+        }
+        (false, t!("operation-one-selected"))
+    }
+
+    fn exec(&mut self, ctx: &mut OperationContext<'_, '_>) -> Result<(), TableError> {
+        let snapshot = get_snapshot(&self.shared_state);
+
+        if let Some(idx) = ctx.data.selected_rows.iter().next()
+            && (idx as usize) < snapshot.nodes.len()
+        {
+            let target = if snapshot.nodes[idx as usize].is_directory() {
+                idx
+            } else {
+                snapshot.nodes[idx as usize].parent
+            };
+
+            if target != crate::arena::NO_INDEX {
+                let _ = self.command_tx.send(AppCommand::ZoomTreemap(target));
+                crate::gui::toast_info(t!("toast-zoomed-treemap"));
+            }
+        }
+        Ok(())
+    }
 }
 
 // --- Up One Level ---

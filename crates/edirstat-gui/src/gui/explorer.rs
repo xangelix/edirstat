@@ -833,11 +833,6 @@ impl GuiApp {
         response.context_menu(|ui| {
             self.draw_file_menu_contents(ui, snapshot);
         });
-        if let Some(strip_response) = strip_response {
-            strip_response.context_menu(|ui| {
-                self.draw_file_menu_contents(ui, snapshot);
-            });
-        }
 
         // Draw vertical indentation guidelines to visually track nested guidelines
         let painter = ui.painter();

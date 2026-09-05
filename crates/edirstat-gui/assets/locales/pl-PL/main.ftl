@@ -198,6 +198,13 @@ load-demo = 👁 Załaduj przykładową migawkę demo
 placeholder-treemap = Zeskanowany system plików zostanie tutaj przedstawiony w postaci mapy drzewa. (treemap).
 placeholder-plots = Zeskanowany system plików zostanie tutaj przedstawiony na wykresie.
 
+# Treemap Zoom & Navigation
+zoom-up = W górę
+zoom-reset = Resetuj
+zoom-to-dir = Skup w Treemap
+zoom-up-level = Poziom w górę
+zoom-empty-dir = Katalog jest pusty
+
 # --- Extensions Panel ---
 extensions-header = 📂 Rozszerzenia
 extensions-empty = Nie zebrano jeszcze statystyk.
@@ -205,6 +212,7 @@ extensions-hover-files = Pliki: { $count }
 
 # --- Operations (Context Actions) ---
 op-up-one-level = Przejdź poziom wyżej
+op-zoom-treemap = Skup w Treemap
 op-refresh-entire-scan = Odśwież całe skanowanie
 op-refresh-directory = Odśwież katalog
 op-open-file = Otwórz plik
@@ -218,6 +226,7 @@ op-permanently-delete = Usuń trwale
 # Toast Notifications
 toast-already-root = Jesteś już na najwyższym poziomie
 toast-navigated-up = Przejście o poziom wyżej powiodło się
+toast-zoomed-treemap = Treemap skupiony na katalogu
 toast-refreshing-scan = Odświeżanie całego skanowania...
 toast-refreshing-dir = Odświeżanie zaznaczonych katalogów...
 toast-opened-file = Otwarto: { $path }

@@ -1,4 +1,5 @@
 use eframe::egui::{Color32, Rect, pos2};
+use fluent_zero::t;
 use smallvec::SmallVec;
 
 use super::{StatComponent, StatContext, StatsChart};
@@ -31,6 +32,9 @@ pub struct TreemapChart {
     pub last_rect: Rect,
     pub draw_borders: bool,
     pub style: TreemapStyle,
+    pub zoom_root: u32,
+    pub last_zoom_root: u32,
+    pub context_menu_target: Option<u32>,
 }
 
 impl TreemapChart {
@@ -42,6 +46,9 @@ impl TreemapChart {
             last_rect: Rect::NOTHING,
             draw_borders: false,
             style: TreemapStyle::VerticalGradient,
+            zoom_root: 0,
+            last_zoom_root: 0,
+            context_menu_target: None,
         }
     }
 }
@@ -61,13 +68,20 @@ impl StatsChart for TreemapChart {
             return blocks;
         }
 
+        if (self.zoom_root as usize) >= snapshot.nodes.len()
+            || snapshot.nodes[self.zoom_root as usize].size == 0
+            || (self.zoom_root != 0 && !snapshot.nodes[self.zoom_root as usize].is_directory())
+        {
+            self.zoom_root = 0;
+        }
+
         let config = TreemapConfig {
             nodes: &snapshot.nodes,
             string_pool: &snapshot.string_pool,
             max_depth: 20,
         };
 
-        build_treemap(&config, 0, self.last_rect, 0, &mut blocks);
+        build_treemap(&config, self.zoom_root, self.last_rect, 0, &mut blocks);
 
         // Enforce safe memory boundary to protect the GPU staging buffer limits
         if blocks.len() > TRUNCATE_DEPTH {
@@ -133,9 +147,18 @@ impl StatComponent for TreemapChart {
         // The rescan path always publishes a fresh `Arc`, so every content change
         // invalidates this cache.
         let snapshot_ptr = std::sync::Arc::as_ptr(&snapshot.nodes) as usize;
+
+        if (self.zoom_root as usize) >= snapshot.nodes.len()
+            || snapshot.nodes[self.zoom_root as usize].size == 0
+            || (self.zoom_root != 0 && !snapshot.nodes[self.zoom_root as usize].is_directory())
+        {
+            self.zoom_root = 0;
+        }
+
         let needs_rebuild = self.cached_blocks.is_empty()
             || snapshot_ptr != self.last_snapshot_ptr
-            || rect != self.last_rect;
+            || rect != self.last_rect
+            || self.zoom_root != self.last_zoom_root;
 
         if needs_rebuild {
             let mut blocks = Vec::new();
@@ -145,7 +168,7 @@ impl StatComponent for TreemapChart {
                     string_pool: &snapshot.string_pool,
                     max_depth: 20,
                 };
-                build_treemap(&config, 0, rect, 0, &mut blocks);
+                build_treemap(&config, self.zoom_root, rect, 0, &mut blocks);
             }
 
             // Safety cap to prevent GPU staging buffer overflows on massive directories
@@ -156,6 +179,7 @@ impl StatComponent for TreemapChart {
             self.cached_blocks = blocks;
             self.last_snapshot_ptr = snapshot_ptr;
             self.last_rect = rect;
+            self.last_zoom_root = self.zoom_root;
         }
 
         let painter = ui.painter_at(rect);
@@ -390,6 +414,24 @@ impl StatComponent for TreemapChart {
 
         painter.add(combined_mesh);
 
+        // Empty directory indicator when zoomed into an empty folder
+        if self.cached_blocks.is_empty()
+            && self.zoom_root != 0
+            && (self.zoom_root as usize) < snapshot.nodes.len()
+        {
+            let name = snapshot
+                .string_pool
+                .get(snapshot.nodes[self.zoom_root as usize].name_id)
+                .unwrap_or("");
+            painter.text(
+                rect.center(),
+                eframe::egui::Align2::CENTER_CENTER,
+                format!("📁 {name} ({})", t!("zoom-empty-dir")),
+                eframe::egui::FontId::proportional(15.0),
+                eframe::egui::Color32::GRAY,
+            );
+        }
+
         // Dynamic overlays for highlights
         if let Some(block) = hovered_block {
             let hover_stroke_color = if colors::get_current_theme() == colors::AppTheme::Light {
@@ -494,6 +536,128 @@ impl StatComponent for TreemapChart {
                 } else {
                     break;
                 }
+            }
+        }
+
+        // Double-click event to zoom into directory
+        if response.double_clicked()
+            && let Some(block) = hovered_block
+            && (block.node_idx as usize) < snapshot.nodes.len()
+        {
+            let clicked_node = &snapshot.nodes[block.node_idx as usize];
+            let target = if clicked_node.is_directory() {
+                block.node_idx
+            } else {
+                clicked_node.parent
+            };
+            if target != NO_INDEX && target != self.zoom_root {
+                self.zoom_root = target;
+                context.selected_nodes.clear();
+                context.selected_nodes.insert(target);
+                *context.scroll_to_selected = true;
+
+                let mut curr = Some(target);
+                while let Some(idx) = curr {
+                    if let Some(node) = snapshot.nodes.get(idx as usize) {
+                        if node.is_directory() {
+                            context.expanded_nodes.insert(idx);
+                        }
+                        curr = node.parent_opt();
+                    } else {
+                        break;
+                    }
+                }
+                ui.ctx().request_repaint();
+            }
+        }
+
+        // Capture clicked block and sync selection on right-click
+        if response.secondary_clicked() {
+            if let Some(block) = hovered_block {
+                self.context_menu_target = Some(block.node_idx);
+                context.selected_nodes.clear();
+                context.selected_nodes.insert(block.node_idx);
+                *context.scroll_to_selected = true;
+            } else {
+                self.context_menu_target = None;
+            }
+        }
+
+        // Context menu on right-click (only open if an item is targeted or we are zoomed in)
+        let has_context_menu = self.context_menu_target.is_some() || self.zoom_root != 0;
+        if has_context_menu {
+            let menu_response = response.context_menu(|ui| {
+                ui.style_mut().wrap_mode = Some(eframe::egui::TextWrapMode::Extend);
+                ui.set_min_width(180.0);
+
+                if let Some(node_idx) = self.context_menu_target
+                    && (node_idx as usize) < snapshot.nodes.len()
+                {
+                    let clicked_node = &snapshot.nodes[node_idx as usize];
+                    let target = if clicked_node.is_directory() {
+                        node_idx
+                    } else {
+                        clicked_node.parent
+                    };
+
+                    if target != NO_INDEX {
+                        let is_current = target == self.zoom_root;
+                        let btn = eframe::egui::Button::new(format!("🔍 {}", t!("zoom-to-dir")));
+                        if is_current {
+                            ui.add_enabled(false, btn)
+                                .on_disabled_hover_text(t!("toast-already-root"));
+                        } else if ui.add(btn).clicked() {
+                            self.zoom_root = target;
+                            context.selected_nodes.clear();
+                            context.selected_nodes.insert(target);
+                            *context.scroll_to_selected = true;
+                            ui.ctx().request_repaint();
+                            ui.close_kind(eframe::egui::UiKind::Menu);
+                        }
+                    }
+                }
+
+                if self.zoom_root != 0 {
+                    if ui.button(format!("⏶ {}", t!("zoom-up-level"))).clicked() {
+                        let parent = snapshot
+                            .nodes
+                            .get(self.zoom_root as usize)
+                            .map_or(NO_INDEX, |n| n.parent);
+                        self.zoom_root = if parent == NO_INDEX { 0 } else { parent };
+                        context.selected_nodes.clear();
+                        if self.zoom_root != 0 {
+                            context.selected_nodes.insert(self.zoom_root);
+                        }
+                        *context.scroll_to_selected = true;
+                        ui.ctx().request_repaint();
+                        ui.close_kind(eframe::egui::UiKind::Menu);
+                    }
+
+                    if ui.button(format!("❌ {}", t!("zoom-reset"))).clicked() {
+                        self.zoom_root = 0;
+                        ui.ctx().request_repaint();
+                        ui.close_kind(eframe::egui::UiKind::Menu);
+                    }
+                }
+            });
+
+            if menu_response.is_none() && !response.secondary_clicked() {
+                self.context_menu_target = None;
+            }
+        }
+
+        // Keyboard navigation shortcuts
+        if (response.hovered() || response.has_focus()) && self.zoom_root != 0 {
+            if ui.input(|i| i.key_pressed(eframe::egui::Key::Escape)) {
+                self.zoom_root = 0;
+                ui.ctx().request_repaint();
+            } else if ui.input(|i| i.key_pressed(eframe::egui::Key::Backspace)) {
+                let parent = snapshot
+                    .nodes
+                    .get(self.zoom_root as usize)
+                    .map_or(NO_INDEX, |n| n.parent);
+                self.zoom_root = if parent == NO_INDEX { 0 } else { parent };
+                ui.ctx().request_repaint();
             }
         }
 
@@ -945,6 +1109,139 @@ mod tests {
         assert_eq!(blocks[0].node_idx, 1);
         assert_eq!(blocks[0].rect.width(), 100.0);
         assert_eq!(blocks[0].rect.height(), 100.0);
+    }
+
+    #[allow(clippy::float_cmp)]
+    #[test]
+    fn test_treemap_zoom_subfolder() {
+        let mut pool = StringPool::new();
+        let r_id = pool.get_or_insert(b"root");
+        let d1_id = pool.get_or_insert(b"dir1");
+        let d2_id = pool.get_or_insert(b"dir2");
+        let f1_id = pool.get_or_insert(b"f1.txt");
+        let f2_id = pool.get_or_insert(b"f2.txt");
+
+        // root -> dir1, dir2
+        // dir1 -> f1.txt
+        // dir2 -> f2.txt
+        let mut nodes = vec![
+            FileNode::new(r_id, None, true, false, 0, 0),
+            FileNode::new(d1_id, Some(0), true, false, 0, 0),
+            FileNode::new(d2_id, Some(0), true, false, 0, 0),
+            FileNode::new(f1_id, Some(1), false, false, 0, 0),
+            FileNode::new(f2_id, Some(2), false, false, 0, 0),
+        ];
+        nodes[0].first_child = 1;
+        nodes[1].next_sibling = 2;
+        nodes[1].first_child = 3;
+        nodes[2].first_child = 4;
+        nodes[0].size = 1000;
+        nodes[1].size = 600;
+        nodes[2].size = 400;
+        nodes[3].size = 600;
+        nodes[4].size = 400;
+
+        let dir_counts = precompute_dir_counts(&nodes);
+        let snapshot = FileArenaSnapshot {
+            nodes: Arc::new(NodeStorage::Owned(nodes)),
+            string_pool: Arc::new(pool),
+            dir_counts: Arc::new(dir_counts),
+        };
+
+        // When zoomed to dir1 (index 1), only f1.txt (index 3) should be laid out, taking 100% of the canvas
+        let mut chart = TreemapChart::new();
+        chart.zoom_root = 1;
+        chart.last_rect =
+            Rect::from_min_size(eframe::egui::Pos2::ZERO, eframe::egui::vec2(200.0, 200.0));
+        let blocks = chart.compute(&snapshot);
+
+        assert_eq!(blocks.len(), 1);
+        assert_eq!(blocks[0].node_idx, 3);
+        assert_eq!(blocks[0].rect.width(), 200.0);
+        assert_eq!(blocks[0].rect.height(), 200.0);
+    }
+
+    #[test]
+    fn test_treemap_zoom_invalid_bounds_fallback() {
+        let mut pool = StringPool::new();
+        let r_id = pool.get_or_insert(b"root");
+        let f_id = pool.get_or_insert(b"file.txt");
+
+        let mut nodes = vec![
+            FileNode::new(r_id, None, true, false, 0, 0),
+            FileNode::new(f_id, Some(0), false, false, 0, 0),
+        ];
+        nodes[0].first_child = 1;
+        nodes[0].size = 500;
+        nodes[1].size = 500;
+
+        let dir_counts = precompute_dir_counts(&nodes);
+        let snapshot = FileArenaSnapshot {
+            nodes: Arc::new(NodeStorage::Owned(nodes)),
+            string_pool: Arc::new(pool),
+            dir_counts: Arc::new(dir_counts),
+        };
+
+        let mut chart = TreemapChart::new();
+        chart.zoom_root = 9999; // Out-of-bounds index
+        chart.last_rect =
+            Rect::from_min_size(eframe::egui::Pos2::ZERO, eframe::egui::vec2(100.0, 100.0));
+        let blocks = chart.compute(&snapshot);
+
+        // Safely falls back to root (index 0)
+        assert_eq!(chart.zoom_root, 0);
+        assert_eq!(blocks.len(), 1);
+        assert_eq!(blocks[0].node_idx, 1);
+    }
+
+    #[test]
+    fn test_treemap_context_menu_target_resolution() {
+        let mut pool = StringPool::new();
+        let r_id = pool.get_or_insert(b"root");
+        let d1_id = pool.get_or_insert(b"dir1");
+        let f1_id = pool.get_or_insert(b"root_file.txt");
+        let f2_id = pool.get_or_insert(b"sub_file.txt");
+
+        // root(0) -> dir1(1), root_file.txt(2)
+        // dir1(1) -> sub_file.txt(3)
+        let mut nodes = vec![
+            FileNode::new(r_id, None, true, false, 0, 0),
+            FileNode::new(d1_id, Some(0), true, false, 0, 0),
+            FileNode::new(f1_id, Some(0), false, false, 0, 0),
+            FileNode::new(f2_id, Some(1), false, false, 0, 0),
+        ];
+        nodes[0].first_child = 1;
+        nodes[1].next_sibling = 2;
+        nodes[1].first_child = 3;
+        nodes[0].size = 1000;
+        nodes[1].size = 500;
+        nodes[2].size = 500;
+        nodes[3].size = 500;
+
+        let dir_counts = precompute_dir_counts(&nodes);
+        let snapshot = FileArenaSnapshot {
+            nodes: Arc::new(NodeStorage::Owned(nodes)),
+            string_pool: Arc::new(pool),
+            dir_counts: Arc::new(dir_counts),
+        };
+
+        let mut chart = TreemapChart::new();
+        assert_eq!(chart.zoom_root, 0);
+        assert_eq!(chart.context_menu_target, None);
+
+        // If context_menu_target is a root file (node 2), target is its parent (0 == zoom_root)
+        chart.context_menu_target = Some(2);
+        let node = &snapshot.nodes[2];
+        let target = if node.is_directory() { 2 } else { node.parent };
+        assert_eq!(target, 0);
+        assert_eq!(target, chart.zoom_root); // Disabled when already at root
+
+        // If context_menu_target is a directory in root (node 1), target is node 1
+        chart.context_menu_target = Some(1);
+        let node = &snapshot.nodes[1];
+        let target = if node.is_directory() { 1 } else { node.parent };
+        assert_eq!(target, 1);
+        assert_ne!(target, chart.zoom_root); // Enabled to zoom into dir1
     }
 
     #[test]

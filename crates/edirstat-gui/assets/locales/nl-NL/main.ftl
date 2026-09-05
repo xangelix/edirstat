@@ -195,6 +195,13 @@ load-demo = 👁 Laad voorbeeld-demo snapshot
 placeholder-treemap = Gescande bestandssysteem wordt hier als treemap weergegeven.
 placeholder-plots = Gescande bestandssysteem wordt hier grafisch weergegeven.
 
+# Treemap Zoom & Navigation
+zoom-up = Omhoog
+zoom-reset = Herstellen
+zoom-to-dir = Focussen in Treemap
+zoom-up-level = Een niveau omhoog
+zoom-empty-dir = Map is leeg
+
 # --- Extensions Panel ---
 extensions-header = 📂 Extensies
 extensions-empty = Nog geen statistieken verzameld.
@@ -202,6 +209,7 @@ extensions-hover-files = Bestanden: { $count }
 
 # --- Operations (Context Actions) ---
 op-up-one-level = Niveau omhoog
+op-zoom-treemap = Focussen in Treemap
 op-refresh-entire-scan = Volledige scan vernieuwen
 op-refresh-directory = Map vernieuwen
 op-open-file = Bestand openen
@@ -215,6 +223,7 @@ op-permanently-delete = Permanent verwijderen
 # Toast Notifications
 toast-already-root = Al op het hoogste niveau
 toast-navigated-up = Niveau omhoog genavigeerd
+toast-zoomed-treemap = Treemap gefocust op map
 toast-refreshing-scan = Volledige scan vernieuwen...
 toast-refreshing-dir = Geselecteerde map(pen) vernieuwen...
 toast-opened-file = Geopend: { $path }

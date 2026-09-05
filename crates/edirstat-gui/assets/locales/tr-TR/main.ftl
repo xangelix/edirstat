@@ -191,6 +191,13 @@ load-demo = 👁 Örnek anlık görüntüyü yükle
 placeholder-treemap = Taranan dosya sistemi burada treemap olarak görüntülenecek.
 placeholder-plots = Taranan dosya sistemi burada grafik olarak görüntülenecek.
 
+# Treemap Zoom & Navigation
+zoom-up = Yukarı
+zoom-reset = Sıfırla
+zoom-to-dir = Treemap'te Odaklan
+zoom-up-level = Bir Düzey Yukarı
+zoom-empty-dir = Dizin boş
+
 # Uzantılar Paneli
 extensions-header = 📂 Uzantılar
 extensions-empty = Henüz istatistik toplanmadı.
@@ -198,6 +205,7 @@ extensions-hover-files = Dosyalar: { $count }
 
 # Bağlam İşlemleri
 op-up-one-level = Bir üst düzeye çık
+op-zoom-treemap = Treemap'te Odaklan
 op-refresh-entire-scan = Tüm taramayı yenile
 op-refresh-directory = Dizini yenile
 op-open-file = Dosyayı aç
@@ -211,6 +219,7 @@ op-permanently-delete = Kalıcı olarak sil
 # Bildirimler
 toast-already-root = Zaten kök düzeydesiniz
 toast-navigated-up = Bir üst düzeye çıkıldı
+toast-zoomed-treemap = Treemap dizine odaklandı
 toast-refreshing-scan = Tüm tarama yenileniyor...
 toast-refreshing-dir = Seçili dizin veya dizinler yenileniyor...
 toast-opened-file = Açıldı: { $path }

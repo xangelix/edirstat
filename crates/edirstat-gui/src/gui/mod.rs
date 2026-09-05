@@ -12,6 +12,7 @@ use std::path::Path;
 use compact_str::CompactString;
 use eframe::egui;
 use fluent_zero::t;
+use smallvec::SmallVec;
 use strum::IntoEnumIterator as _;
 
 #[cfg(not(target_family = "wasm"))]
@@ -178,6 +179,9 @@ pub struct GuiApp {
 
     pub(crate) same_filesystem: bool,
 
+    /// Persistent path of the currently zoomed treemap directory (for restoring after rescans).
+    pub(crate) zoom_path: Option<String>,
+
     pub(crate) locale: Locale,
 
     pub(crate) locale_preference: Option<Locale>,
@@ -306,9 +310,16 @@ impl GuiApp {
         let (command_tx, command_rx) = std::sync::mpsc::channel();
 
         // Ops that require a live local filesystem or OS integration are native-only unless HIDE_NA_UI is false.
-        let mut nav_ops: Vec<Box<dyn egui_table_kit::operations::TableOperation>> = vec![Box::new(
-            crate::gui::operations::UpOneLevelOp::new(shared_state.clone(), command_tx.clone()),
-        )];
+        let mut nav_ops: Vec<Box<dyn egui_table_kit::operations::TableOperation>> = vec![
+            Box::new(crate::gui::operations::UpOneLevelOp::new(
+                shared_state.clone(),
+                command_tx.clone(),
+            )),
+            Box::new(crate::gui::operations::ZoomTreemapOp::new(
+                shared_state.clone(),
+                command_tx.clone(),
+            )),
+        ];
         if crate::IS_NATIVE || !crate::HIDE_NA_UI {
             nav_ops.push(Box::new(crate::gui::operations::RefreshRootOp::new(
                 shared_state.clone(),
@@ -450,6 +461,8 @@ impl GuiApp {
             last_extension_stats_ptr: 0,
             pending_expand_restore: None,
 
+            zoom_path: None,
+
             unix_metadata_cache: None,
 
             same_filesystem,
@@ -520,6 +533,7 @@ impl GuiApp {
         self.last_rendered_snapshot_ptr = 0;
         self.last_extension_stats_ptr = 0;
         self.pending_expand_restore = None;
+        self.zoom_path = None;
 
         self.unix_metadata_cache = None;
 
@@ -738,11 +752,147 @@ impl GuiApp {
         ui: &mut egui::Ui,
         snapshot: &FileArenaSnapshot,
     ) {
+        ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
+        ui.set_min_width(180.0);
         let provider =
             crate::gui::explorer::TableProviderWrapper::new(snapshot, self.time_format.clone());
         let _ = self
             .operations
             .gui(ui, &provider, &mut self.table_state, true);
+    }
+
+    fn draw_breadcrumb_item(
+        &mut self,
+        ui: &mut egui::Ui,
+        snapshot: &FileArenaSnapshot,
+        node_idx: u32,
+        is_current: bool,
+    ) {
+        let raw_name = snapshot
+            .string_pool
+            .get(snapshot.nodes[node_idx as usize].name_id)
+            .unwrap_or("");
+        let display_name = if node_idx == 0 {
+            let cleaned = crate::arena::clean_unc_path(raw_name);
+            format!("🏠 {cleaned}")
+        } else {
+            raw_name.to_string()
+        };
+
+        if is_current {
+            ui.label(
+                egui::RichText::new(display_name)
+                    .strong()
+                    .color(ui.visuals().strong_text_color()),
+            );
+        } else if ui.link(display_name).clicked() {
+            self.treemap_chart.zoom_root = node_idx;
+            self.zoom_path = if node_idx == 0 {
+                None
+            } else {
+                Some(snapshot.get_full_path(node_idx))
+            };
+            self.table_state.selected_rows.clear();
+            if node_idx != 0 {
+                self.table_state.selected_rows.insert(node_idx);
+            }
+            self.scroll_to_selected = true;
+            ui.ctx().request_repaint();
+        }
+    }
+
+    fn draw_treemap_zoom_controls(&mut self, ui: &mut egui::Ui, snapshot: &FileArenaSnapshot) {
+        let zoom_root = self.treemap_chart.zoom_root;
+
+        if zoom_root != 0 {
+            let up_text = format!("⏶ {}", t!("zoom-up"));
+            if ui.button(up_text).clicked() {
+                let parent = snapshot
+                    .nodes
+                    .get(zoom_root as usize)
+                    .map_or(crate::arena::NO_INDEX, |n| n.parent);
+                self.treemap_chart.zoom_root = if parent == crate::arena::NO_INDEX {
+                    0
+                } else {
+                    parent
+                };
+                self.zoom_path = if self.treemap_chart.zoom_root == 0 {
+                    None
+                } else {
+                    Some(snapshot.get_full_path(self.treemap_chart.zoom_root))
+                };
+                self.table_state.selected_rows.clear();
+                if self.treemap_chart.zoom_root != 0 {
+                    self.table_state
+                        .selected_rows
+                        .insert(self.treemap_chart.zoom_root);
+                }
+                self.scroll_to_selected = true;
+                ui.ctx().request_repaint();
+            }
+
+            let reset_text = format!("❌ {}", t!("zoom-reset"));
+            if ui.button(reset_text).clicked() {
+                self.treemap_chart.zoom_root = 0;
+                self.zoom_path = None;
+                ui.ctx().request_repaint();
+            }
+
+            ui.separator();
+        }
+
+        // Build ancestor path from root (0) to zoom_root
+        let mut ancestors = SmallVec::<[u32; 16]>::new();
+        let mut curr = Some(zoom_root);
+        while let Some(idx) = curr {
+            ancestors.push(idx);
+            if idx == 0 || (idx as usize) >= snapshot.nodes.len() {
+                break;
+            }
+            curr = snapshot.nodes[idx as usize].parent_opt();
+        }
+        ancestors.reverse();
+
+        let max_visible = 4;
+        let truncate = ancestors.len() > max_visible + 1;
+
+        if truncate {
+            // First item (Root)
+            self.draw_breadcrumb_item(ui, snapshot, ancestors[0], false);
+            ui.weak("›");
+
+            // Middle collapsed items dropdown
+            ui.menu_button("…", |ui| {
+                for &node_idx in &ancestors[1..ancestors.len() - max_visible] {
+                    let name = snapshot
+                        .string_pool
+                        .get(snapshot.nodes[node_idx as usize].name_id)
+                        .unwrap_or("");
+                    if ui.button(format!("📁 {name}")).clicked() {
+                        self.treemap_chart.zoom_root = node_idx;
+                        self.zoom_path = Some(snapshot.get_full_path(node_idx));
+                        self.table_state.selected_rows.clear();
+                        self.table_state.selected_rows.insert(node_idx);
+                        self.scroll_to_selected = true;
+                        ui.ctx().request_repaint();
+                        ui.close_kind(egui::UiKind::Menu);
+                    }
+                }
+            });
+
+            // Last `max_visible` items
+            for &node_idx in &ancestors[ancestors.len() - max_visible..] {
+                ui.weak("›");
+                self.draw_breadcrumb_item(ui, snapshot, node_idx, node_idx == zoom_root);
+            }
+        } else {
+            for (i, &node_idx) in ancestors.iter().enumerate() {
+                if i > 0 {
+                    ui.weak("›");
+                }
+                self.draw_breadcrumb_item(ui, snapshot, node_idx, node_idx == zoom_root);
+            }
+        }
     }
 
     /// Renders a unified top row controls bar inside visualizer panel viewports.
@@ -760,6 +910,13 @@ impl GuiApp {
                             .strong()
                             .color(ui.visuals().strong_text_color()),
                     );
+
+                    if !snapshot.nodes.is_empty() {
+                        ui.add_space(4.0);
+                        ui.separator();
+                        ui.add_space(4.0);
+                        self.draw_treemap_zoom_controls(ui, snapshot);
+                    }
                 }
                 VisMode::Plots => {
                     ui.horizontal(|ui| {
@@ -961,6 +1118,21 @@ impl GuiApp {
                 crate::gui::operations::AppCommand::ScrollToSelected => {
                     self.scroll_to_selected = true;
                 }
+                crate::gui::operations::AppCommand::ZoomTreemap(target) => {
+                    if (target as usize) < snapshot.nodes.len() {
+                        self.treemap_chart.zoom_root = target;
+                        self.zoom_path = if target == 0 {
+                            None
+                        } else {
+                            Some(snapshot.get_full_path(target))
+                        };
+                        self.vis_mode = VisMode::Treemap;
+                        self.table_state.selected_rows.clear();
+                        self.table_state.selected_rows.insert(target);
+                        self.scroll_to_selected = true;
+                        ctx.request_repaint();
+                    }
+                }
                 crate::gui::operations::AppCommand::LoadSnapshotBytes { name, bytes } => {
                     if let Err(e) = self.load_snapshot_bytes(&name, &bytes) {
                         crate::gui::toast_error(format!("Failed to load snapshot: {e}"));
@@ -1088,6 +1260,23 @@ impl GuiApp {
                                 }
 
                                 self.remove_nodes_from_snapshot(&successfully_deleted);
+
+                                let new_snap = self.shared_state.current_snapshot.load();
+                                if let Some(ref path) = self.zoom_path {
+                                    if let Some(idx) = new_snap.resolve_path_index(path) {
+                                        if (idx as usize) < new_snap.nodes.len()
+                                            && new_snap.nodes[idx as usize].size > 0
+                                        {
+                                            self.treemap_chart.zoom_root = idx;
+                                        } else {
+                                            self.treemap_chart.zoom_root = 0;
+                                            self.zoom_path = None;
+                                        }
+                                    } else {
+                                        self.treemap_chart.zoom_root = 0;
+                                        self.zoom_path = None;
+                                    }
+                                }
                             }
                         }
                         crate::gui::operations::BackgroundOpResult::Hardlinking {
@@ -1268,6 +1457,14 @@ impl eframe::App for GuiApp {
                     {
                         self.table_state.expanded_rows.insert(idx);
                     }
+                }
+            }
+            if let Some(ref path) = self.zoom_path {
+                if let Some(idx) = snapshot.resolve_path_index(path) {
+                    self.treemap_chart.zoom_root = idx;
+                } else {
+                    self.treemap_chart.zoom_root = 0;
+                    self.zoom_path = None;
                 }
             }
             self.last_rendered_snapshot_ptr = snapshot_ptr;
@@ -2044,6 +2241,15 @@ impl GuiApp {
                         self.treemap_chart.style = self.treemap_style;
                         self.treemap_chart.render(ui, snapshot, &mut context);
 
+                        if self.treemap_chart.zoom_root != 0
+                            && (self.treemap_chart.zoom_root as usize) < snapshot.nodes.len()
+                        {
+                            self.zoom_path =
+                                Some(snapshot.get_full_path(self.treemap_chart.zoom_root));
+                        } else {
+                            self.zoom_path = None;
+                        }
+
                         // Content-Aware Sync (Selections)
                         let selection_changed = selected_nodes_set.len()
                             != self.table_state.selected_rows.len() as usize
@@ -2268,6 +2474,15 @@ impl GuiApp {
                             self.treemap_chart.draw_borders = self.treemap_borders;
                             self.treemap_chart.style = self.treemap_style;
                             self.treemap_chart.render(ui, snapshot, &mut context);
+
+                            if self.treemap_chart.zoom_root != 0
+                                && (self.treemap_chart.zoom_root as usize) < snapshot.nodes.len()
+                            {
+                                self.zoom_path =
+                                    Some(snapshot.get_full_path(self.treemap_chart.zoom_root));
+                            } else {
+                                self.zoom_path = None;
+                            }
 
                             // Content-Aware Sync (Selections)
                             let selection_changed = selected_nodes_set.len()
