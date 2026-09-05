@@ -1,17 +1,17 @@
-# Menü Çubuğu
+# Menu Bar Dropdowns
 file = Dosya
 view = Görünüm
 help = Yardım
 
-# Menü İşlemleri
+# Menu Bar Actions
 new-scan = 📁 Yeni tarama
 save-snapshot = 💾 Anlık görüntüyü kaydet
 load-snapshot = 📖 Anlık görüntü yükle
 
-# Menü Durumu
+# Menu Bar Status
 idle = Boşta
 
-# Görünüm Menüsü
+# View Menu Options
 monospace-paths = 🅰 Eş aralıklı yollar
 highlight-duplicates = ✨ Yinelenenleri vurgula
 treemap-borders = 🔳 Treemap kenarlıkları
@@ -33,7 +33,7 @@ select-plot-label = Grafik seç:
 vis-mode-deduplicator = 👥 Yinelenen dosya bulucu
 search-filter-label = 🔍 Filtrele:
 
-# Panel Kontrolleri
+# Panel Toggles
 toggle-left-panel = { $collapsed ->
     [true] ▶ Sol paneli göster (F9)
    *[false] ◀ Sol paneli gizle (F9)
@@ -54,7 +54,7 @@ collapse-all = ⏏ Tümünü daralt
 about = ℹ Hakkında
 web-not-available = Bu özellik web sürümünde kullanılamaz
 
-# Durum Göstergeleri
+# Status Indicators
 scanning-disk = Disk taranıyor...
 scan-complete = Tarama tamamlandı
 scan-cancelled = Tarama iptal edildi
@@ -62,20 +62,20 @@ path-label = Yol: { $path }
 worker-threads = ⚡ { $count } çalışma iş parçacığı
 worker-threads-hover = Dizin taraması için ayrılan paralel, iş çalan CPU çekirdeği sayısı.
 
-# Alt İstatistikler
+# Stats Panel (Bottom)
 directories-count = 📁 Dizinler: { $count }
 files-count = 📄 Dosyalar: { $count }
 total-size = 💾 Toplam boyut: { $size }
 elapsed-time = ⏱ Süre: { $time }
 scan-speed = ⚡ Hız: { $speed }/sn
 
-# Seçim Bilgisi
+# Selection Info
 selection-path = Seçim: { $path }
 selection-items = Seçim: { $count ->
    *[other] { $count } öğe
 }
 
-# Grafik Türleri
+# Plot Types
 plot-size-distribution = 📊 Dosya boyutu dağılımı
 plot-age-size = 🌌 Dosya yaşı ve boyutu
 plot-dir-composition = 🍰 Dizin bileşimi
@@ -83,7 +83,7 @@ plot-extension-boxplot = 📦 Uzantıya göre dosya boyutları
 plot-temporal-timeline = ⏱ Bağlantılı zaman çizelgeleri
 plot-deduplicator-waste = 👥 Uzantıya göre yinelenen alan kaybı
 
-# Yinelenen Bulucu
+# --- Deduplicator Strings ---
 dedup-desc = Kriptografik olarak güvenli BLAKE3 özetleriyle birebir aynı dosyaları bulun ve güvenle kaldırın.
 dedup-how-it-works = ℹ Nasıl çalışır
 dedup-min-size = En küçük dosya boyutu:
@@ -133,7 +133,7 @@ dedup-phase7-validation = Aşama 7/7: Son zaman damgası doğrulaması yapılıy
 dedup-phase-finished = { $duration } içinde tamamlandı. { $count } yinelenen grup bulundu. Geri kazanılabilir alan: { $space }
 dedup-scan-cancelled-with-error = Tarama iptal edildi: { $error }
 
-# Yinelenen Tablosu
+# Deduplicator Table Headers
 dedup-hdr-checkbox = [     ]
 dedup-hdr-filename = Dosya adı
 dedup-hdr-directory = Üst dizin
@@ -145,7 +145,7 @@ dedup-copies-selected = ({ $count ->
    *[other] { $count } kopya seçildi
 })
 
-# Gezgin Ayrıntıları
+# --- Explorer Details Panel ---
 explorer-details-header = ℹ Ayrıntılar
 explorer-deselect-hover = Öğelerin seçimini kaldır
 explorer-deselect-single-hover = Öğenin seçimini kaldır
@@ -169,12 +169,12 @@ explorer-grid-group = Grup:
 explorer-grid-permissions = İzinler:
 explorer-grid-path = Tam yol:
 
-# Gezgin Tür Adları
+# Explorer Type Names
 type-symlink = Sembolik bağlantı
 type-directory = Dizin
 type-file = Dosya
 
-# Gezgin İşlemleri
+# Explorer Actions
 explorer-action-copy-path = 📋 Yolu kopyala
 explorer-action-open-file = 📄 Dosyayı aç
 explorer-action-open-manager = 🗁 Dosya yöneticisinde aç
@@ -183,7 +183,7 @@ explorer-action-move-trash = ♻ Çöp kutusuna taşı
 explorer-action-delete-permanently = 🗑 Kalıcı olarak sil
 explorer-action-refresh-directory = 🔄 Dizini yenile
 
-# Gezgin Boş Durumu
+# Explorer Empty State
 explorer-empty-state = Disk kullanımını incelemek için “Yeni tarama”yı seçin.
 choose-an-option = Bir seçenek belirleyin
 web-viewer = Web görüntüleyici
@@ -198,12 +198,12 @@ zoom-to-dir = Treemap'te Odaklan
 zoom-up-level = Bir Düzey Yukarı
 zoom-empty-dir = Dizin boş
 
-# Uzantılar Paneli
+# --- Extensions Panel ---
 extensions-header = 📂 Uzantılar
 extensions-empty = Henüz istatistik toplanmadı.
 extensions-hover-files = Dosyalar: { $count }
 
-# Bağlam İşlemleri
+# --- Operations (Context Actions) ---
 op-up-one-level = Bir üst düzeye çık
 op-zoom-treemap = Treemap'te Odaklan
 op-refresh-entire-scan = Tüm taramayı yenile
@@ -216,7 +216,7 @@ op-copy-name = Adı kopyala
 op-move-trash = Çöp kutusuna taşı
 op-permanently-delete = Kalıcı olarak sil
 
-# Bildirimler
+# Toast Notifications
 toast-already-root = Zaten kök düzeydesiniz
 toast-navigated-up = Bir üst düzeye çıkıldı
 toast-zoomed-treemap = Treemap dizine odaklandı
@@ -235,12 +235,12 @@ toast-copied-names = { $count ->
    *[other] { $count } ad panoya kopyalandı
 }
 
-# İletişim Pencereleri
+# --- Modals ---
 modal-remember-confirmation = Tüm sonraki dosya ve dizinler için onayı hatırla
 modal-process-multiple = { $count } yinelenen dosya/öğe üzerinde işlem yapmak üzeresiniz:
 modal-process-single = Aşağıdaki yol üzerinde işlem yapmak üzeresiniz:
 
-# Silme / Çöp Kutusu / Bağlama Onayları
+# Confirm Deletion/Trash/Link Modals
 modal-delete-title = ⚠ KALICI SİLME UYARISI
 modal-delete-header = ⚠ Kalıcı silme uyarısı!
 modal-delete-info = Toplam boyut: { $size }
@@ -283,14 +283,14 @@ modal-softlink-duplicates-warning = Bu işlem seçili yinelenen dosyaları siler
 modal-softlink-duplicates-checkbox = Seçili dosyaları sembolik bağlantılarla değiştirmek istediğimi onaylıyorum.
 modal-softlink-duplicates-confirm = 🔗 Evet, sembolik bağlantılarla değiştir
 
-# Yol Bulunamadı Penceresi
+# Path Does Not Exist Modal
 modal-path-not-exist-title = ❌ Yol mevcut değil!
 modal-path-not-exist-msg = Hata: Silmeye çalıştığınız yol diskte bulunmuyor.
 modal-close-btn = Kapat
 modal-details-label = Ayrıntılar:
 modal-cancel-btn = İptal
 
-# Yönetici Yetkisi Önerisi
+# Elevation Recommended Modal
 modal-elevation-title = ⚠ Yönetici yetkisi önerilir
 modal-elevation-desc = eDirStat varsayılan olarak standart kullanıcı izinleriyle çalışır. Ancak Windows, fiziksel diske ham erişimi yönetici hesaplarıyla sınırlar.
 modal-elevation-mft-disabled = Windows NTFS MFT sürücüsü devre dışı
@@ -299,7 +299,7 @@ modal-elevation-relaunch-prompt = Uygulamayı şimdi yönetici yetkileriyle yeni
 modal-elevation-continue-std = Standart kullanıcı olarak devam et
 modal-elevation-relaunch-btn = 🛡 Yönetici olarak yeniden başlat
 
-# Hakkında Penceresi
+# About Modal
 modal-about-title = ℹ eDirStat hakkında
 modal-about-author = Geliştiren: Cody Wyatt Neiman (xangelix) <neiman@cody.to>
 modal-about-desc1 = Rust ile geliştirilmiş yüksek performanslı disk alanı analiz ve yinelenen bulma aracı.
@@ -308,14 +308,14 @@ modal-about-desc3 = Yerleşik yinelenen bulucu, özdeş dosya gruplarını güve
 modal-about-licenses-btn = Açık kaynak lisanslarını görüntüle
 modal-about-version = v{ $version }
 
-# Yinelenen Bulucu Açıklaması
+# How Deduplication Works Modal
 modal-how-dedup-title = ℹ Yinelenen bulucu nasıl çalışır
 modal-how-dedup-desc1 = Bu sistem, her dosyanın baytlarını yavaş ve ikili O(N²) karşılaştırmalarla okumak yerine, aynı içeriği güvenli ve verimli biçimde tanımlamak için yüksek düzeyde optimize edilmiş 7 aşamalı bir hat kullanır.
 modal-how-dedup-pipeline-title = 7 aşamalı süreç:
 modal-how-dedup-why-title = Bu neden yeterli?
 modal-how-dedup-why-desc1 = Çok aşamalı filtre; yalnızca boyutu, başlangıcı, orta noktası, sonu ve dağıtılmış blok örnekleri aynı olan dosyaların tamamının okunmasını sağlar. Son aşamada 256 bit BLAKE3 kriptografik özeti karşılaştırılır; bu da yavaş ikili bayt karşılaştırmalarına gerek kalmadan çok güçlü bir özdeşlik kanıtı sunar.
 
-# Yinelenen Bulucu Aşamaları
+# How Deduplication Works Steps
 modal-how-dedup-step1-title = 1. Boyuta göre ayırma
 modal-how-dedup-step1-desc = Dosyalar bayt cinsinden kesin boyutlarına göre gruplanır. Eşsiz boyuta sahip dosyalar, disk G/Ç işlemi yapılmadan hemen elenir.
 modal-how-dedup-step2-title = 2. Başlangıç özeti
@@ -331,18 +331,18 @@ modal-how-dedup-step6-desc = Kalan adaylar için tam BLAKE3 kriptografik özeti 
 modal-how-dedup-step7-title = 7. Zaman damgası doğrulaması
 modal-how-dedup-step7-desc = Herhangi bir yinelenen işlemi gösterilmeden veya yürütülmeden hemen önce, taramadan sonra oluşmuş değişikliklere karşı dosyaların disk üzerindeki zaman damgaları doğrulanır.
 
-# Açık Kaynak Lisansları
+# Open Source Licenses Modal
 modal-licenses-title = 📜 Açık kaynak lisansları
 modal-licenses-desc = Bu uygulamada aşağıdaki üçüncü taraf kütüphaneler ve Rust paketleri kullanılmaktadır:
 
-# İşlem Penceresi
+# Processing Modal
 modal-processing-title = ⏳ İşleniyor...
 modal-processing-deletion = Dosyalar ve dizinler siliniyor...
 modal-processing-trash = Dosyalar ve dizinler çöp kutusuna taşınıyor...
 modal-processing-hardlink = Yinelenenler sabit bağlantılarla değiştiriliyor...
 modal-processing-softlink = Yinelenenler sembolik bağlantılarla değiştiriliyor...
 
-# Gezgin Sütun Başlıkları
+# Explorer Column Headers
 explorer-hdr-name = Ad
 explorer-hdr-percentage = Yüzde
 explorer-hdr-size = Boyut
@@ -352,20 +352,20 @@ explorer-hdr-subdirs = Alt dizinler
 explorer-hdr-created = Oluşturulma
 explorer-hdr-modified = Değiştirilme
 
-# Güncelleme Denetleyicisi
+# Update Checker
 update-checking = Güncellemeler denetleniyor...
 update-available = Yeni sürüm { $version } kullanılabilir!
 update-up-to-date = Güncelsiniz
 update-failed = Güncelleme denetimi başarısız oldu: { $error }
 
-# Temalar
+# Themes
 theme = 🎨 Tema
 theme-dark = Koyu
 theme-high-contrast = Yüksek kontrast
 theme-light = Açık
 theme-system = Sistem
 
-# Yeni Tarama Seçenekleri
+# New Scan Options Modal
 modal-scan-options-title = Yeni tarama seçenekleri
 modal-scan-options-header = Yeni tarama başlat
 modal-scan-options-path-label = Taranacak dizin yolu:
