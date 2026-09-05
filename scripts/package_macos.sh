@@ -45,6 +45,7 @@ MODE="devid"
 SKIP_NOTARIZE=0
 AD_HOC=0
 ENTITLEMENTS="${ENTITLEMENTS:-}"
+NO_DEFAULT_FEATURES="${NO_DEFAULT_FEATURES:-0}"
 
 # App Store requires deployment target >= 12.0 for arm64-only builds,
 # and rustc reads this at link time
@@ -54,24 +55,28 @@ MIN_MACOS="$MACOSX_DEPLOYMENT_TARGET"
 # ---------- Args ----------
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --target)        TARGET="$2"; shift 2 ;;
-    --skip-notarize) SKIP_NOTARIZE=1; shift ;;
-    --ad-hoc)        AD_HOC=1; SKIP_NOTARIZE=1; shift ;;
-    --unsigned)      AD_HOC=1; SKIP_NOTARIZE=1; shift ;;
-    --appstore)      MODE="appstore"; shift ;;
-    --devid)         MODE="devid"; shift ;;
-    --build)         BUILD_NUMBER="$2"; shift 2 ;;
-    --entitlements)  ENTITLEMENTS="$2"; shift 2 ;;
+    --target)               TARGET="$2"; shift 2 ;;
+    --skip-notarize)        SKIP_NOTARIZE=1; shift ;;
+    --ad-hoc)               AD_HOC=1; SKIP_NOTARIZE=1; shift ;;
+    --unsigned)             AD_HOC=1; SKIP_NOTARIZE=1; shift ;;
+    --appstore)             MODE="appstore"; shift ;;
+    --devid)                MODE="devid"; shift ;;
+    --build)                BUILD_NUMBER="$2"; shift 2 ;;
+    --entitlements)         ENTITLEMENTS="$2"; shift 2 ;;
+    --no-default-features|--no-online|--offline) NO_DEFAULT_FEATURES=1; shift ;;
+    --online)               NO_DEFAULT_FEATURES=0; shift ;;
     -h|--help)
       echo "Usage: $0 [options]"
       echo "Options:"
       echo "  --target <triple>     Target triple (default: aarch64-apple-darwin)"
       echo "  --devid               Developer ID channel (itch.io/direct, unsandboxed, notarized) [default]"
-      echo "  --appstore            Mac App Store channel (sandboxed, signed .pkg)"
+      echo "  --appstore            Mac App Store channel (sandboxed, signed .pkg, no default features)"
       echo "  --ad-hoc, --unsigned  Ad-hoc sign (-), skip notarization (for local dev / CI)"
       echo "  --skip-notarize       Sign with Developer ID, skip notarytool"
       echo "  --build <num>         App Store CFBundleVersion build number (default: 1)"
       echo "  --entitlements <file> Override entitlements plist"
+      echo "  --no-default-features, --no-online"
+      echo "                        Build without default features (omits GitHub update check)"
       echo "  -h, --help            Show this help message"
       exit 0
       ;;
@@ -136,11 +141,16 @@ fi
 echo "==> Target:           $TARGET (min macOS $MIN_MACOS)"
 
 # ---------- Build ----------
-CARGO_BUILD_ARGS=()
+CARGO_BUILD_ARGS=(-p "$BINARY_NAME")
 if [[ "$MODE" == "appstore" ]]; then
-  echo "==> Configuring build for Mac App Store (sandboxed, no default features)"
+  echo "==> Configuring build for Mac App Store (sandboxed)"
   export EDIRSTAT_MACOS_APPSTORE=1
   export EDIRSTAT_APP_SANDBOX=1
+  NO_DEFAULT_FEATURES=1
+fi
+
+if [[ "$NO_DEFAULT_FEATURES" -eq 1 ]]; then
+  echo "==> Building with --no-default-features (online features disabled)"
   CARGO_BUILD_ARGS+=(--no-default-features)
 fi
 
