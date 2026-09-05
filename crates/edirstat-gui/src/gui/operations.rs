@@ -431,6 +431,33 @@ impl TableOperation for OpenFileManagerOp {
     }
 }
 
+/// Compile-time check: was this binary built for the Mac App Store / Sandboxed channel?
+pub const IS_MACOS_APPSTORE: bool = option_env!("EDIRSTAT_MACOS_APPSTORE").is_some()
+    || option_env!("EDIRSTAT_APP_SANDBOX").is_some();
+
+/// Returns true if running within a sandboxed macOS environment (detected at compile-time or runtime).
+#[must_use]
+#[allow(clippy::missing_const_for_fn)]
+pub fn is_macos_sandbox() -> bool {
+    if IS_MACOS_APPSTORE {
+        return true;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::env::var_os("APP_SANDBOX_CONTAINER_ID").is_some()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        false
+    }
+}
+
+/// Returns true if terminal launching should be disabled (e.g., in macOS Sandbox or Web/WASM).
+#[must_use]
+pub fn is_terminal_disabled() -> bool {
+    !crate::IS_NATIVE || is_macos_sandbox()
+}
+
 // --- Open Terminal Here ---
 #[derive(Debug)]
 pub struct OpenTerminalOp {
@@ -461,16 +488,21 @@ impl TableOperation for OpenTerminalOp {
         &self,
         state: &egui_table_kit::state::TableState,
     ) -> (bool, Cow<'static, str>) {
-        if crate::IS_NATIVE {
-            (state.selected_rows.len() == 1, t!("operation-one"))
-        } else {
+        if is_terminal_disabled() {
             (false, t!("web-not-available"))
+        } else {
+            (state.selected_rows.len() == 1, t!("operation-one"))
         }
     }
 
     fn exec(&mut self, ctx: &mut OperationContext<'_, '_>) -> Result<(), TableError> {
         #[cfg(not(target_family = "wasm"))]
         {
+            if is_terminal_disabled() {
+                let _ = ctx;
+                return Ok(());
+            }
+
             let snapshot = get_snapshot(&self.shared_state);
 
             if let Some(idx) = ctx.data.selected_rows.iter().next()
@@ -691,5 +723,26 @@ impl TableOperation for DeleteSelectedOp {
         let targets: Vec<u32> = ctx.data.selected_rows.iter().collect();
         let _ = self.command_tx.send(AppCommand::ShowDeleteModal(targets));
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_macos_appstore_detection() {
+        assert_eq!(
+            IS_MACOS_APPSTORE,
+            option_env!("EDIRSTAT_MACOS_APPSTORE").is_some()
+                || option_env!("EDIRSTAT_APP_SANDBOX").is_some()
+        );
+    }
+
+    #[test]
+    fn test_is_terminal_disabled() {
+        if !crate::IS_NATIVE || IS_MACOS_APPSTORE {
+            assert!(is_terminal_disabled());
+        }
     }
 }

@@ -136,7 +136,15 @@ fi
 echo "==> Target:           $TARGET (min macOS $MIN_MACOS)"
 
 # ---------- Build ----------
-cargo build --release --target "$TARGET"
+CARGO_BUILD_ARGS=()
+if [[ "$MODE" == "appstore" ]]; then
+  echo "==> Configuring build for Mac App Store (sandboxed, no default features)"
+  export EDIRSTAT_MACOS_APPSTORE=1
+  export EDIRSTAT_APP_SANDBOX=1
+  CARGO_BUILD_ARGS+=(--no-default-features)
+fi
+
+cargo build --release --target "$TARGET" "${CARGO_BUILD_ARGS[@]}"
 
 VERSION=$(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2)
 echo "==> Version: $VERSION (build $BUILD_NUMBER)"

@@ -352,17 +352,22 @@ impl GuiApp {
         let mut operations = egui_table_kit::operations::TableOperations::new().with_group(nav_ops);
 
         if crate::IS_NATIVE || !crate::HIDE_NA_UI {
-            operations = operations.with_group(vec![
+            let mut file_ops: Vec<Box<dyn egui_table_kit::operations::TableOperation>> = vec![
                 Box::new(crate::gui::operations::OpenFileOp::new(
                     shared_state.clone(),
                 )),
                 Box::new(crate::gui::operations::OpenFileManagerOp::new(
                     shared_state.clone(),
                 )),
-                Box::new(crate::gui::operations::OpenTerminalOp::new(
+            ];
+
+            if !crate::gui::operations::is_terminal_disabled() {
+                file_ops.push(Box::new(crate::gui::operations::OpenTerminalOp::new(
                     shared_state.clone(),
-                )),
-            ]);
+                )));
+            }
+
+            operations = operations.with_group(file_ops);
         }
 
         operations = operations.with_group(vec![
@@ -2774,6 +2779,12 @@ fn render_custom_op_button(
 
 #[cfg(not(target_family = "wasm"))]
 fn open_terminal_at(path: &Path) -> std::io::Result<()> {
+    if crate::gui::operations::is_terminal_disabled() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "Terminal execution is disabled in sandboxed environment",
+        ));
+    }
     let dir = if path.is_dir() {
         path
     } else {
@@ -2789,6 +2800,12 @@ fn open_terminal_at(path: &Path) -> std::io::Result<()> {
     }
     #[cfg(target_os = "macos")]
     {
+        if crate::gui::operations::IS_MACOS_APPSTORE {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Unsupported,
+                "Terminal execution is disabled in Mac App Store builds",
+            ));
+        }
         std::process::Command::new("open")
             .arg("-a")
             .arg("Terminal")

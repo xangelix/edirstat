@@ -20,6 +20,9 @@ fn main() -> std::io::Result<()> {
     .export_charset(&charset_path)
     .generate();
 
+    println!("cargo:rerun-if-env-changed=EDIRSTAT_MACOS_APPSTORE");
+    println!("cargo:rerun-if-env-changed=EDIRSTAT_APP_SANDBOX");
+
     embed_fallback_fonts(&out_dir)
 }
 
