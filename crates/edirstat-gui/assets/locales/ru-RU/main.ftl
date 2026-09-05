@@ -412,3 +412,6 @@ quick-loc-pictures = 🖼 Изображения
 search-use-regex = Использовать регулярные выражения (Regex)
 search-match-case = С учётом регистра
 dedup-pref-dir-hint = напр. /home/user/Archive
+
+file-menu-close = Закрыть сканирование
+file-menu-quit = Выйти

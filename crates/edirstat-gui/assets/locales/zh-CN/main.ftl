@@ -394,3 +394,6 @@ quick-loc-pictures = 🖼 图片
 search-use-regex = 使用正则表达式 (Regex)
 search-match-case = 区分大小写
 dedup-pref-dir-hint = 例如 /home/user/Archive
+
+file-menu-close = 关闭扫描
+file-menu-quit = 退出

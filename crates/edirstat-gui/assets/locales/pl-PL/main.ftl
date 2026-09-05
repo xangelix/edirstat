@@ -405,3 +405,6 @@ quick-loc-pictures = 🖼 Obrazy
 search-use-regex = Użyj wyrażeń regularnych (Regex)
 search-match-case = Uwzględniaj wielkość liter
 dedup-pref-dir-hint = np. /home/user/Archive
+
+file-menu-close = Zamknij skanowanie
+file-menu-quit = Zakończ

@@ -400,3 +400,6 @@ quick-loc-pictures = 🖼 Afbeeldingen
 search-use-regex = Reguliere expressie gebruiken (Regex)
 search-match-case = Hoofdlettergevoelig
 dedup-pref-dir-hint = bijv. /home/user/Archive
+
+file-menu-close = Scan sluiten
+file-menu-quit = Afsluiten

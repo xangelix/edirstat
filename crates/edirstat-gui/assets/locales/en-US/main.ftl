@@ -400,3 +400,6 @@ quick-loc-pictures = 🖼 Pictures
 search-use-regex = Use Regular Expression (Regex)
 search-match-case = Match Case (Case Sensitive)
 dedup-pref-dir-hint = e.g. /home/user/Archive
+
+file-menu-close = Close Scan
+file-menu-quit = Quit

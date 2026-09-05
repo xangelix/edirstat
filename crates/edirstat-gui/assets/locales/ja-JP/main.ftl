@@ -394,3 +394,6 @@ quick-loc-pictures = 🖼 ピクチャ
 search-use-regex = 正規表現を使用 (Regex)
 search-match-case = 大文字・小文字を区別
 dedup-pref-dir-hint = 例: /home/user/Archive
+
+file-menu-close = スキャンを閉じる
+file-menu-quit = 終了

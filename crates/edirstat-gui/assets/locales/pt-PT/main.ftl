@@ -400,3 +400,6 @@ quick-loc-pictures = 🖼 Imagens
 search-use-regex = Usar expressão regular (Regex)
 search-match-case = Sensível a maiúsculas/minúsculas
 dedup-pref-dir-hint = ex. /home/user/Archive
+
+file-menu-close = Fechar análise
+file-menu-quit = Sair

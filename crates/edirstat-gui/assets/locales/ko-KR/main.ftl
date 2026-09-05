@@ -394,3 +394,6 @@ quick-loc-pictures = 🖼 사진
 search-use-regex = 정규식 사용 (Regex)
 search-match-case = 대소문자 구분
 dedup-pref-dir-hint = 예: /home/user/Archive
+
+file-menu-close = 스캔 닫기
+file-menu-quit = 종료

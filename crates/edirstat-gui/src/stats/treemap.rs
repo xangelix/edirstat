@@ -651,7 +651,10 @@ impl StatComponent for TreemapChart {
             if ui.input(|i| i.key_pressed(eframe::egui::Key::Escape)) {
                 self.zoom_root = 0;
                 ui.ctx().request_repaint();
-            } else if ui.input(|i| i.key_pressed(eframe::egui::Key::Backspace)) {
+            } else if ui.input(|i| {
+                i.key_pressed(eframe::egui::Key::Backspace)
+                    || (i.modifiers.alt && i.key_pressed(eframe::egui::Key::ArrowUp))
+            }) {
                 let parent = snapshot
                     .nodes
                     .get(self.zoom_root as usize)

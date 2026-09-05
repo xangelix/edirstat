@@ -143,7 +143,30 @@ edirstat /path -x                            # Restrict the scan to the same fil
 7. **Personalize the View:**
    The **View** menu offers theme selection (System, Dark, Light, High Contrast), interface language, a configurable timestamp **Time Format**, and treemap border toggles. View preferences are saved automatically between sessions.
 8. **Keyboard Shortcuts:**
-   `Del` moves the selection to the trash; `Shift + Del` permanently deletes it (both support bypassing the confirmation dialog).
+   Quickly navigate, inspect, and manage files using native keyboard shortcuts (see the [complete table](#keyboard-shortcuts) below).
+
+### Keyboard Shortcuts
+
+| Action | Windows / Linux | macOS | Description |
+|---|:---:|:---:|---|
+| **New Scan…** | <kbd>Ctrl+O</kbd> | <kbd>⌘O</kbd> | Open the scan target selection dialog |
+| **Rescan** | <kbd>Ctrl+R</kbd> / <kbd>F5</kbd> | <kbd>⌘R</kbd> / <kbd>F5</kbd> | Refresh and re-scan the current root folder |
+| **Save Snapshot…** | <kbd>Ctrl+S</kbd> | <kbd>⌘S</kbd> | Export the active scan to a compressed `.edst.zst` snapshot |
+| **Search / Filter** | <kbd>Ctrl+F</kbd> | <kbd>⌘F</kbd> | Focus the directory tree filter bar |
+| **Dismiss / Clear** | <kbd>Esc</kbd> | <kbd>Esc</kbd> | Close active modal dialog or clear the search filter |
+| **Focus in Treemap** | <kbd>⏎ Enter</kbd> | <kbd>⏎ Enter</kbd> | Zoom the treemap view into the selected folder |
+| **Go Up One Level** | <kbd>Alt+↑</kbd> / <kbd>Backspace</kbd> | <kbd>⌥↑</kbd> / <kbd>⌫ Backspace</kbd> | Navigate up one directory level in the treemap |
+| **Reset Treemap Zoom** | <kbd>Esc</kbd> | <kbd>Esc</kbd> | Reset the treemap zoom back to the root directory |
+| **Toggle Left Panel** | <kbd>F9</kbd> | <kbd>F9</kbd> | Show / collapse the directory tree explorer panel |
+| **Toggle Right Panel** | <kbd>F11</kbd> | <kbd>F11</kbd> | Show / collapse the extension stats / details panel |
+| **Collapse All** | <kbd>Ctrl+Shift+C</kbd> | <kbd>⇧⌘C</kbd> | Collapse all expanded directory tree nodes |
+| **Move to Trash** | <kbd>Del</kbd> | <kbd>Del</kbd> | Send selected file or folder to the system Recycle Bin / Trash |
+| **Delete (Permanent)** | <kbd>Shift+Del</kbd> | <kbd>⇧ Del</kbd> | Permanently delete the selected item from disk |
+| **Copy File Name** | <kbd>Ctrl+C</kbd> | <kbd>⌘C</kbd> | Copy selected item's file name to clipboard |
+| **Copy Full Path** | <kbd>Ctrl+Alt+C</kbd> | <kbd>⌥⌘C</kbd> | Copy selected item's absolute path to clipboard |
+| **Close Scan** | <kbd>Ctrl+W</kbd> | <kbd>⌘W</kbd> | Close the active scan and return to the home screen |
+| **Quit** | <kbd>Ctrl+Q</kbd> | <kbd>⌘Q</kbd> | Exit eDirStat |
+| **About / Help** | <kbd>F1</kbd> | <kbd>F1</kbd> | Open the About and diagnostic dialog |
 
 ---
 

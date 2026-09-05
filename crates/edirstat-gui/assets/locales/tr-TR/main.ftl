@@ -395,3 +395,6 @@ quick-loc-pictures = 🖼 Resimler
 search-use-regex = Düzenli İfade Kullan (Regex)
 search-match-case = Büyük/Küçük Harfe Duyarlı
 dedup-pref-dir-hint = örn. /home/user/Archive
+
+file-menu-close = Taramayı Kapat
+file-menu-quit = Çıkış

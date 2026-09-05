@@ -39,6 +39,7 @@ pub mod modals;
 pub mod notifications;
 pub mod operations;
 pub mod reveal;
+pub mod shortcuts;
 pub mod theme;
 
 pub use extensions::ExtensionStat;
@@ -103,6 +104,7 @@ pub struct GuiApp {
 
     pub(crate) filter_case_sensitive: bool,
     pub(crate) filter_regex: bool,
+    pub(crate) focus_search: bool,
     pub(crate) time_format: crate::time_utils::TimeFormat,
 
     // Caching layer for tree search matches
@@ -435,6 +437,7 @@ impl GuiApp {
             right_panel_collapsed: false,
             filter_case_sensitive: false,
             filter_regex: false,
+            focus_search: false,
             time_format: prefs.time_format.clone(),
             last_saved_preferences: prefs.clone(),
             query_coordinator: crate::gui::explorer::QueryCoordinator::new(),
@@ -712,6 +715,83 @@ impl GuiApp {
         self.shared_state.extension_stats.store(Arc::new(stats));
     }
 
+    /// Opens the scan options modal, seeding it with the active or current working directory.
+    pub fn open_scan_modal(&mut self) {
+        self.active_modal = Some(ActiveModal::ScanOptions);
+        if let Some(ref path) = self.current_scan_path {
+            self.scan_path_input = path.to_string_lossy().into_owned();
+        } else {
+            self.scan_path_input = std::env::current_dir()
+                .map(|p| p.to_string_lossy().into_owned())
+                .unwrap_or_default();
+        }
+    }
+
+    /// Rescans the current scanned root directory if a scan is not already in progress.
+    pub fn rescan_current_root(&mut self) {
+        let is_scanning = self.shared_state.is_scanning.load(Ordering::SeqCst);
+        let snapshot = self.shared_state.current_snapshot.load();
+        if !is_scanning && !snapshot.nodes.is_empty() && self.scanner.is_some() {
+            self.refresh_directory_subtrees(&[0]);
+        }
+    }
+
+    /// Prompts the user to save the current tree snapshot to disk.
+    pub fn prompt_save_snapshot(&mut self, snapshot: &FileArenaSnapshot) {
+        if snapshot.nodes.is_empty() {
+            return;
+        }
+
+        #[cfg(not(target_family = "wasm"))]
+        {
+            let file_opt = FileDialog::new()
+                .add_filter("eDirStat Compressed Snapshot (*.edst.zst)", &["edst.zst"])
+                .add_filter("eDirStat Uncompressed Snapshot (*.edst)", &["edst"])
+                .save_file();
+            if let Some(path) = file_opt {
+                let compress = path
+                    .extension()
+                    .is_none_or(|ext| ext.eq_ignore_ascii_case("zst"));
+                match save_snapshot(&snapshot.nodes, &snapshot.string_pool, &path, compress) {
+                    Ok(()) => {}
+                    Err(e) => {
+                        println!("Failed to save snapshot: {e}");
+                    }
+                }
+            }
+        }
+
+        #[cfg(target_family = "wasm")]
+        {
+            let nodes = snapshot.nodes.clone();
+            let string_pool = snapshot.string_pool.clone();
+            wasm_bindgen_futures::spawn_local(async move {
+                if let Some(handle) = rfd::AsyncFileDialog::new()
+                    .add_filter("eDirStat Compressed Snapshot (*.edst.zst)", &["edst.zst"])
+                    .add_filter("eDirStat Uncompressed Snapshot (*.edst)", &["edst"])
+                    .set_file_name("snapshot.edst.zst")
+                    .save_file()
+                    .await
+                {
+                    let compress = handle.file_name().to_ascii_lowercase().ends_with(".zst");
+                    let result =
+                        crate::snapshot::save_snapshot_to_bytes(&nodes, &string_pool, compress)
+                            .map_err(|e| e.to_string());
+                    match result {
+                        Ok(bytes) => {
+                            if let Err(e) = handle.write(&bytes).await {
+                                crate::gui::toast_error(format!("Failed to save snapshot: {e}"));
+                            }
+                        }
+                        Err(e) => {
+                            crate::gui::toast_error(format!("Failed to save snapshot: {e}"));
+                        }
+                    }
+                }
+            });
+        }
+    }
+
     /// Renders the "New Scan" button (with an attention pulse while no snapshot
     /// is loaded) and handles opening the scan options modal. Only called when
     /// a native scanner backend is present.
@@ -723,6 +803,7 @@ impl GuiApp {
     ) {
         let should_pulse = !is_scanning && snapshot.nodes.is_empty();
         let scan_btn_text = t!("new-scan");
+        let sc_hint = shortcuts::format_shortcut(ui.ctx(), &shortcuts::SHORTCUT_NEW_SCAN);
         let scan_btn = if should_pulse {
             let time = ui.input(|i| i.time);
             #[allow(clippy::cast_possible_truncation)]
@@ -773,33 +854,140 @@ impl GuiApp {
             .inner
         } else {
             ui.button(scan_btn_text)
-        };
+        }
+        .on_hover_text(format!("{} ({sc_hint})", t!("new-scan")));
 
         if scan_btn.clicked() {
-            self.active_modal = Some(ActiveModal::ScanOptions);
-            if let Some(ref path) = self.current_scan_path {
-                self.scan_path_input = path.to_string_lossy().into_owned();
-            } else {
-                self.scan_path_input = std::env::current_dir()
-                    .map(|p| p.to_string_lossy().into_owned())
-                    .unwrap_or_default();
-            }
+            self.open_scan_modal();
         }
     }
 
-    /// Delegates render operations entirely to our registered `TableOperations` suite.
+    /// Delegates render operations entirely to our registered `TableOperations` suite,
+    /// complete with top-level File actions and right-aligned shortcut badges.
     pub(crate) fn draw_file_menu_contents(
         &mut self,
         ui: &mut egui::Ui,
         snapshot: &FileArenaSnapshot,
     ) {
         ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
-        ui.set_min_width(180.0);
+        ui.set_min_width(200.0);
+
+        // 1. Primary File Actions
+        if ui
+            .add(shortcuts::button_with_shortcut(
+                t!("new-scan"),
+                &shortcuts::SHORTCUT_NEW_SCAN,
+                ui.ctx(),
+            ))
+            .clicked()
+        {
+            self.open_scan_modal();
+            ui.close_kind(egui::UiKind::Menu);
+        }
+
+        let is_scanning = self.shared_state.is_scanning.load(Ordering::SeqCst);
+        let has_nodes = !snapshot.nodes.is_empty();
+
+        let can_rescan = !is_scanning && has_nodes && self.scanner.is_some();
+        let rescan_btn = ui.add_enabled_ui(can_rescan, |ui| {
+            ui.add(shortcuts::button_with_shortcut(
+                t!("op-refresh-entire-scan"),
+                &shortcuts::SHORTCUT_RESCAN,
+                ui.ctx(),
+            ))
+        });
+        if rescan_btn.inner.clicked() {
+            self.rescan_current_root();
+            ui.close_kind(egui::UiKind::Menu);
+        }
+
+        let save_btn = ui.add_enabled_ui(has_nodes, |ui| {
+            ui.add(shortcuts::button_with_shortcut(
+                t!("save-snapshot"),
+                &shortcuts::SHORTCUT_SAVE_SNAPSHOT,
+                ui.ctx(),
+            ))
+        });
+        if save_btn.inner.clicked() {
+            self.prompt_save_snapshot(snapshot);
+            ui.close_kind(egui::UiKind::Menu);
+        }
+
+        ui.separator();
+
+        // 2. Table Operations Suite with mapped shortcut badges
         let provider =
             crate::gui::explorer::TableProviderWrapper::new(snapshot, self.time_format.clone());
-        let _ = self
-            .operations
-            .gui(ui, &provider, &mut self.table_state, true);
+        let _ = self.operations.gui_custom(
+            ui,
+            &provider,
+            &mut self.table_state,
+            true,
+            |ui, op, enabled, reason, context_menu| {
+                let op_name = op.get_name(context_menu);
+                let shortcut_str = match op.name().as_ref() {
+                    name if name == t!("op-zoom-treemap") => Some("⏎ Enter"),
+                    name if name == t!("op-up-one-level") => Some("⌫ Backspace"),
+                    name if name == t!("op-move-trash") => Some("Del"),
+                    name if name == t!("op-permanently-delete") => Some("⇧ Del"),
+                    name if name == t!("op-copy-name") => {
+                        if ui.ctx().os().is_mac() {
+                            Some("⌘C")
+                        } else {
+                            Some("Ctrl+C")
+                        }
+                    }
+                    name if name == t!("op-copy-path") => {
+                        if ui.ctx().os().is_mac() {
+                            Some("⌥⌘C")
+                        } else {
+                            Some("Ctrl+Alt+C")
+                        }
+                    }
+                    _ => None,
+                };
+
+                ui.add_enabled_ui(enabled, |ui| {
+                    let btn = shortcut_str.map_or_else(
+                        || egui::Button::new(op_name.as_ref()),
+                        |sc| egui::Button::new(op_name.as_ref()).shortcut_text(sc),
+                    );
+                    let mut resp = ui.add(btn).on_hover_text(op.name());
+                    if !enabled {
+                        resp = resp.on_disabled_hover_text(format!("{}\n{reason}", op.name()));
+                    }
+                    resp
+                })
+                .inner
+            },
+        );
+
+        ui.separator();
+
+        // 3. Close Scan & Quit
+        let close_btn = ui.add_enabled_ui(has_nodes, |ui| {
+            ui.add(shortcuts::button_with_shortcut(
+                t!("file-menu-close"),
+                &shortcuts::SHORTCUT_CLOSE,
+                ui.ctx(),
+            ))
+        });
+        if close_btn.inner.clicked() {
+            self.reset_state();
+            ui.close_kind(egui::UiKind::Menu);
+        }
+
+        if ui
+            .add(shortcuts::button_with_shortcut(
+                t!("file-menu-quit"),
+                &shortcuts::SHORTCUT_QUIT,
+                ui.ctx(),
+            ))
+            .clicked()
+        {
+            ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
+            ui.close_kind(egui::UiKind::Menu);
+        }
     }
 
     fn draw_breadcrumb_item(
@@ -846,7 +1034,11 @@ impl GuiApp {
         let zoom_root = self.treemap_chart.zoom_root;
 
         if zoom_root != 0 {
-            if ui.button(t!("zoom-up")).clicked() {
+            if ui
+                .button(t!("zoom-up"))
+                .on_hover_text(format!("{} (Alt+Up / Backspace)", t!("zoom-up-level")))
+                .clicked()
+            {
                 let parent = snapshot
                     .nodes
                     .get(zoom_root as usize)
@@ -871,7 +1063,11 @@ impl GuiApp {
                 ui.ctx().request_repaint();
             }
 
-            if ui.button(t!("zoom-reset")).clicked() {
+            if ui
+                .button(t!("zoom-reset"))
+                .on_hover_text("Reset Zoom (Esc)")
+                .clicked()
+            {
                 self.treemap_chart.zoom_root = 0;
                 self.zoom_path = None;
                 ui.ctx().request_repaint();
@@ -1476,12 +1672,171 @@ impl eframe::App for GuiApp {
         // Process any deferred command line paths on the first draw pass
         self.process_pending_initial_path();
 
-        // Handle keyboard shortcuts
-        if self.layout_mode == LayoutMode::Classic && ctx.input(|i| i.key_pressed(egui::Key::F9)) {
-            self.left_panel_collapsed = !self.left_panel_collapsed;
+        // Fetch current snapshot
+        let snapshot = self.shared_state.current_snapshot.load();
+        let is_scanning = self.shared_state.is_scanning.load(Ordering::SeqCst);
+        let snapshot_ptr = std::sync::Arc::as_ptr(&snapshot.nodes) as usize;
+
+        // Escape: always allowed to dismiss active modal or clear search focus/query
+        if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+            if self.active_modal.is_some() {
+                self.active_modal = None;
+            } else if !self.search_query.is_empty() {
+                self.search_query.clear();
+                self.table_state.filter_cache_dirty = true;
+            }
         }
-        if ctx.input(|i| i.key_pressed(egui::Key::F11)) {
-            self.right_panel_collapsed = !self.right_panel_collapsed;
+
+        // Global Keyboard Shortcuts (active when not typing into text input fields)
+        if !ctx.egui_wants_keyboard_input() {
+            // New Scan (Cmd+O / Ctrl+O)
+            if ctx.input_mut(|i| i.consume_shortcut(&shortcuts::SHORTCUT_NEW_SCAN)) {
+                self.open_scan_modal();
+            }
+
+            // Rescan (Cmd+R / Ctrl+R or F5)
+            if ctx.input_mut(|i| {
+                i.consume_shortcut(&shortcuts::SHORTCUT_RESCAN)
+                    || i.consume_shortcut(&shortcuts::SHORTCUT_RESCAN_F5)
+            }) {
+                self.rescan_current_root();
+            }
+
+            // Save Snapshot (Cmd+S / Ctrl+S)
+            if ctx.input_mut(|i| i.consume_shortcut(&shortcuts::SHORTCUT_SAVE_SNAPSHOT)) {
+                self.prompt_save_snapshot(&snapshot);
+            }
+
+            // Focus Filter / Search (Cmd+F / Ctrl+F)
+            if ctx.input_mut(|i| i.consume_shortcut(&shortcuts::SHORTCUT_SEARCH)) {
+                self.focus_search = true;
+            }
+
+            // Close active modal, search, or scan (Cmd+W / Ctrl+W)
+            if ctx.input_mut(|i| i.consume_shortcut(&shortcuts::SHORTCUT_CLOSE)) {
+                if self.active_modal.is_some() {
+                    self.active_modal = None;
+                } else if !self.search_query.is_empty() {
+                    self.search_query.clear();
+                    self.table_state.filter_cache_dirty = true;
+                } else if !snapshot.nodes.is_empty() {
+                    self.reset_state();
+                }
+            }
+
+            // Quit Application (Cmd+Q / Ctrl+Q)
+            if ctx.input_mut(|i| i.consume_shortcut(&shortcuts::SHORTCUT_QUIT)) {
+                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            }
+
+            // Panel Toggles (F9 / F11)
+            if self.layout_mode == LayoutMode::Classic
+                && ctx.input_mut(|i| i.consume_shortcut(&shortcuts::SHORTCUT_TOGGLE_LEFT_PANEL))
+            {
+                self.left_panel_collapsed = !self.left_panel_collapsed;
+            }
+            if ctx.input_mut(|i| i.consume_shortcut(&shortcuts::SHORTCUT_TOGGLE_RIGHT_PANEL)) {
+                self.right_panel_collapsed = !self.right_panel_collapsed;
+            }
+
+            // Collapse All (Shift+Cmd+C / Shift+Ctrl+C)
+            if ctx.input_mut(|i| i.consume_shortcut(&shortcuts::SHORTCUT_COLLAPSE_ALL)) {
+                self.table_state.expanded_rows.clear();
+            }
+
+            // Help / About (F1)
+            if ctx.input_mut(|i| i.consume_shortcut(&shortcuts::SHORTCUT_ABOUT)) {
+                self.active_modal = Some(ActiveModal::About);
+            }
+
+            // Up One Level (Alt+Up or Backspace when treemap zoomed or table row selected)
+            if ctx.input_mut(|i| {
+                i.consume_shortcut(&shortcuts::SHORTCUT_UP_ONE_LEVEL)
+                    || i.consume_key(egui::Modifiers::NONE, egui::Key::Backspace)
+            }) {
+                if self.treemap_chart.zoom_root != 0 {
+                    let parent = snapshot
+                        .nodes
+                        .get(self.treemap_chart.zoom_root as usize)
+                        .map_or(crate::arena::NO_INDEX, |n| n.parent);
+                    self.treemap_chart.zoom_root = if parent == crate::arena::NO_INDEX {
+                        0
+                    } else {
+                        parent
+                    };
+                    self.zoom_path = if self.treemap_chart.zoom_root == 0 {
+                        None
+                    } else {
+                        Some(snapshot.get_full_path(self.treemap_chart.zoom_root))
+                    };
+                    self.table_state.selected_rows.clear();
+                    if self.treemap_chart.zoom_root != 0 {
+                        self.table_state
+                            .selected_rows
+                            .insert(self.treemap_chart.zoom_root);
+                    }
+                    self.scroll_to_selected = true;
+                    ctx.request_repaint();
+                } else if let Some(idx) = self.table_state.selected_rows.iter().next() {
+                    let parent = snapshot
+                        .nodes
+                        .get(idx as usize)
+                        .map_or(crate::arena::NO_INDEX, |n| n.parent);
+                    if parent != crate::arena::NO_INDEX {
+                        self.table_state.selected_rows.clear();
+                        self.table_state.selected_rows.insert(parent);
+                        self.scroll_to_selected = true;
+                        ctx.request_repaint();
+                    }
+                }
+            }
+
+            // Zoom Selection into Treemap (Enter)
+            if ctx.input_mut(|i| i.consume_shortcut(&shortcuts::SHORTCUT_ZOOM_SELECTION))
+                && let Some(idx) = self.table_state.selected_rows.iter().next()
+                && (idx as usize) < snapshot.nodes.len()
+            {
+                let target = if snapshot.nodes[idx as usize].is_directory() {
+                    idx
+                } else {
+                    snapshot.nodes[idx as usize].parent
+                };
+                if target != crate::arena::NO_INDEX {
+                    self.treemap_chart.zoom_root = target;
+                    self.zoom_path = if target == 0 {
+                        None
+                    } else {
+                        Some(snapshot.get_full_path(target))
+                    };
+                    ctx.request_repaint();
+                }
+            }
+
+            // Delete keyboard shortcuts (Delete / Shift + Delete)
+            if !is_scanning
+                && !self.table_state.selected_rows.is_empty()
+                && ctx.input(|i| i.key_pressed(egui::Key::Delete))
+            {
+                let shift = ctx.input(|i| i.modifiers.shift);
+                self.delete_node_indices = self.table_state.selected_rows.iter().collect();
+                if shift {
+                    if self.deletion_confirmation {
+                        self.active_modal = Some(ActiveModal::Delete);
+                        self.delete_confirm_checked = false;
+                        self.remember_confirmation = false;
+                    } else {
+                        self.execute_deletion(&self.delete_node_indices.clone(), false, &ctx);
+                        self.delete_node_indices.clear();
+                    }
+                } else if self.trash_confirmation {
+                    self.active_modal = Some(ActiveModal::Trash);
+                    self.delete_confirm_checked = false;
+                    self.remember_confirmation = false;
+                } else {
+                    self.execute_deletion(&self.delete_node_indices.clone(), true, &ctx);
+                    self.delete_node_indices.clear();
+                }
+            }
         }
 
         // Handle drag & drop of folders to scan (grants sandbox permissions automatically on macOS)
@@ -1497,11 +1852,6 @@ impl eframe::App for GuiApp {
                 }
             }
         }
-
-        // Fetch current snapshot
-        let snapshot = self.shared_state.current_snapshot.load();
-        let is_scanning = self.shared_state.is_scanning.load(Ordering::SeqCst);
-        let snapshot_ptr = std::sync::Arc::as_ptr(&snapshot.nodes) as usize;
 
         if self.last_rendered_snapshot_ptr != snapshot_ptr {
             self.table_state.filter_cache_dirty = true;
@@ -1528,35 +1878,6 @@ impl eframe::App for GuiApp {
                 }
             }
             self.last_rendered_snapshot_ptr = snapshot_ptr;
-        }
-
-        // Delete keyboard shortcuts (Delete / Shift + Delete)
-        if !is_scanning
-            && !ctx.egui_wants_keyboard_input()
-            && !self.table_state.selected_rows.is_empty()
-            && ctx.input(|i| i.key_pressed(egui::Key::Delete))
-        {
-            let shift = ctx.input(|i| i.modifiers.shift);
-            self.delete_node_indices = self.table_state.selected_rows.iter().collect();
-            if shift {
-                if self.deletion_confirmation {
-                    self.active_modal = Some(ActiveModal::Delete);
-                    self.delete_confirm_checked = false;
-                    self.remember_confirmation = false;
-                } else {
-                    self.execute_deletion(&self.delete_node_indices.clone(), false, &ctx);
-                    self.delete_node_indices.clear();
-                }
-            } else {
-                if self.trash_confirmation {
-                    self.active_modal = Some(ActiveModal::Trash);
-                    self.delete_confirm_checked = false;
-                    self.remember_confirmation = false;
-                } else {
-                    self.execute_deletion(&self.delete_node_indices.clone(), true, &ctx);
-                    self.delete_node_indices.clear();
-                }
-            }
         }
 
         // --- Handle Table commands sent from standard and context-menu operations ---
@@ -1728,7 +2049,10 @@ impl eframe::App for GuiApp {
                         let left_label = t!("toggle-left-panel", {
                             "collapsed" => self.left_panel_collapsed.to_string()
                         });
-                        if ui.button(left_label).clicked() {
+                        if ui
+                            .add(shortcuts::button_with_shortcut_str(left_label, "F9"))
+                            .clicked()
+                        {
                             self.left_panel_collapsed = !self.left_panel_collapsed;
                             ui.close_kind(egui::UiKind::Menu);
                         }
@@ -1738,21 +2062,39 @@ impl eframe::App for GuiApp {
                         "collapsed" => self.right_panel_collapsed.to_string(),
                         "is_classic" => is_classic.to_string()
                     });
-                    if ui.button(right_label).clicked() {
+                    if ui
+                        .add(shortcuts::button_with_shortcut_str(right_label, "F11"))
+                        .clicked()
+                    {
                         self.right_panel_collapsed = !self.right_panel_collapsed;
                         ui.close_kind(egui::UiKind::Menu);
                     }
 
                     ui.separator();
-                    if ui.button(t!("collapse-all")).clicked() {
+                    if ui
+                        .add(shortcuts::button_with_shortcut(
+                            t!("collapse-all"),
+                            &shortcuts::SHORTCUT_COLLAPSE_ALL,
+                            ui.ctx(),
+                        ))
+                        .clicked()
+                    {
                         self.table_state.expanded_rows.clear();
                         ui.close_kind(egui::UiKind::Menu);
                     }
                 });
                 ui.menu_button(t!("help"), |ui| {
                     ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
-                    if ui.button(t!("about")).clicked() {
+                    if ui
+                        .add(shortcuts::button_with_shortcut(
+                            t!("about"),
+                            &shortcuts::SHORTCUT_ABOUT,
+                            ui.ctx(),
+                        ))
+                        .clicked()
+                    {
                         self.active_modal = Some(ActiveModal::About);
+                        ui.close_kind(egui::UiKind::Menu);
                     }
                 });
 
@@ -1773,64 +2115,15 @@ impl eframe::App for GuiApp {
 
                 ui.add_space(10.0);
 
-                #[cfg(not(target_family = "wasm"))]
-                if ui.button(t!("save-snapshot")).clicked() && !snapshot.nodes.is_empty() {
-                    let file_opt = FileDialog::new()
-                        .add_filter("eDirStat Compressed Snapshot (*.edst.zst)", &["edst.zst"])
-                        .add_filter("eDirStat Uncompressed Snapshot (*.edst)", &["edst"])
-                        .save_file();
-                    if let Some(path) = file_opt {
-                        let compress = path
-                            .extension()
-                            .is_none_or(|ext| ext.eq_ignore_ascii_case("zst"));
-                        match save_snapshot(&snapshot.nodes, &snapshot.string_pool, &path, compress)
-                        {
-                            Ok(()) => {}
-                            Err(e) => {
-                                println!("Failed to save snapshot: {e}");
-                            }
-                        }
-                    }
-                }
-
-                #[cfg(target_family = "wasm")]
-                if ui.button(t!("save-snapshot")).clicked() && !snapshot.nodes.is_empty() {
-                    // On wasm the async save dialog yields a FileHandle we write
-                    // serialized bytes to (the browser turns it into a download).
-                    let nodes = snapshot.nodes.clone();
-                    let string_pool = snapshot.string_pool.clone();
-                    wasm_bindgen_futures::spawn_local(async move {
-                        if let Some(handle) = rfd::AsyncFileDialog::new()
-                            .add_filter("eDirStat Compressed Snapshot (*.edst.zst)", &["edst.zst"])
-                            .add_filter("eDirStat Uncompressed Snapshot (*.edst)", &["edst"])
-                            .set_file_name("snapshot.edst.zst")
-                            .save_file()
-                            .await
-                        {
-                            let compress =
-                                handle.file_name().to_ascii_lowercase().ends_with(".zst");
-                            let result = crate::snapshot::save_snapshot_to_bytes(
-                                &nodes,
-                                &string_pool,
-                                compress,
-                            )
-                            .map_err(|e| e.to_string());
-                            match result {
-                                Ok(bytes) => {
-                                    if let Err(e) = handle.write(&bytes).await {
-                                        crate::gui::toast_error(format!(
-                                            "Failed to save snapshot: {e}"
-                                        ));
-                                    }
-                                }
-                                Err(e) => {
-                                    crate::gui::toast_error(format!(
-                                        "Failed to save snapshot: {e}"
-                                    ));
-                                }
-                            }
-                        }
-                    });
+                let sc_save =
+                    shortcuts::format_shortcut(ui.ctx(), &shortcuts::SHORTCUT_SAVE_SNAPSHOT);
+                if ui
+                    .button(t!("save-snapshot"))
+                    .on_hover_text(format!("{} ({sc_save})", t!("save-snapshot")))
+                    .clicked()
+                    && !snapshot.nodes.is_empty()
+                {
+                    self.prompt_save_snapshot(&snapshot);
                 }
 
                 ui.add_space(10.0);
@@ -2135,11 +2428,20 @@ impl GuiApp {
 
                     // 4. Remaining middle-left: TextEdit box (safe, non-recursive width assignment)
                     let remaining_width = ui.available_width();
-                    ui.add(
-                        egui::TextEdit::singleline(&mut self.search_query)
-                            .id_salt("filter_text_edit")
-                            .desired_width(remaining_width.max(10.0)),
-                    );
+                    let sc_search =
+                        shortcuts::format_shortcut(ui.ctx(), &shortcuts::SHORTCUT_SEARCH);
+                    let resp = ui
+                        .add(
+                            egui::TextEdit::singleline(&mut self.search_query)
+                                .id_salt("filter_text_edit")
+                                .hint_text(format!("Filter ({sc_search})…"))
+                                .desired_width(remaining_width.max(10.0)),
+                        )
+                        .on_hover_text(format!("{} ({sc_search})", t!("search-filter-label")));
+                    if self.focus_search {
+                        resp.request_focus();
+                        self.focus_search = false;
+                    }
                 });
             });
             ui.add_space(4.0);
@@ -2458,11 +2760,20 @@ impl GuiApp {
                         }
 
                         let text_width = ui.available_width() - 8.0;
-                        ui.add(
-                            egui::TextEdit::singleline(&mut self.search_query)
-                                .id_salt("windirstat_filter_text_edit")
-                                .desired_width(text_width.max(50.0)),
-                        );
+                        let sc_search =
+                            shortcuts::format_shortcut(ui.ctx(), &shortcuts::SHORTCUT_SEARCH);
+                        let resp = ui
+                            .add(
+                                egui::TextEdit::singleline(&mut self.search_query)
+                                    .id_salt("windirstat_filter_text_edit")
+                                    .hint_text(format!("Filter ({sc_search})…"))
+                                    .desired_width(text_width.max(50.0)),
+                            )
+                            .on_hover_text(format!("{} ({sc_search})", t!("search-filter-label")));
+                        if self.focus_search {
+                            resp.request_focus();
+                            self.focus_search = false;
+                        }
                     });
                 });
                 ui.separator();
