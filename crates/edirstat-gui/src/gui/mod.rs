@@ -584,6 +584,22 @@ impl GuiApp {
         self.current_scan_path.as_deref()
     }
 
+    pub(crate) fn select_scan_path(&mut self, target_path: &std::path::Path) {
+        #[cfg(not(target_family = "wasm"))]
+        {
+            if crate::gui::operations::is_macos_sandbox() {
+                if let Some(path) = rfd::FileDialog::new()
+                    .set_directory(target_path)
+                    .pick_folder()
+                {
+                    self.scan_path_input = path.to_string_lossy().into_owned();
+                }
+                return;
+            }
+        }
+        self.scan_path_input = target_path.to_string_lossy().into_owned();
+    }
+
     pub(crate) fn start_scan(&mut self, mut path: PathBuf) {
         let Some(scanner) = self.scanner.clone() else {
             // Snapshot-viewer mode (e.g. wasm): scanning is unavailable.
@@ -1468,6 +1484,20 @@ impl eframe::App for GuiApp {
         }
         if ctx.input(|i| i.key_pressed(egui::Key::F11)) {
             self.right_panel_collapsed = !self.right_panel_collapsed;
+        }
+
+        // Handle drag & drop of folders to scan (grants sandbox permissions automatically on macOS)
+        #[cfg(not(target_family = "wasm"))]
+        {
+            let dropped_files = ctx.input(|i| i.raw.dropped_files.clone());
+            for dropped in dropped_files {
+                let path = dropped.path();
+                if path.is_dir() {
+                    self.start_scan(path.to_path_buf());
+                    self.active_modal = None;
+                    break;
+                }
+            }
         }
 
         // Fetch current snapshot

@@ -2106,7 +2106,7 @@ impl GuiApp {
                                                         });
 
                                                         if response.clicked() {
-                                                            self.scan_path_input = drive_path_str.into_owned();
+                                                            self.select_scan_path(std::path::Path::new(drive_path_str.as_ref()));
                                                         }
                                                     }
                                                     ui.add_space(4.0);
@@ -2146,7 +2146,7 @@ impl GuiApp {
                                             };
 
                                             if ui.add(chip).clicked() {
-                                                self.scan_path_input = loc_path_str.into_owned();
+                                                self.select_scan_path(&loc.path);
                                             }
                                         }
                                     });
@@ -2159,7 +2159,7 @@ impl GuiApp {
                                     egui::RichText::new(t!("modal-scan-options-path-label"))
                                         .strong()
                                         .size(13.0),
-                                );
+                                    );
                                 ui.add_space(6.0);
 
                                 ui.horizontal(|ui| {
@@ -2189,9 +2189,19 @@ impl GuiApp {
                                         .on_disabled_hover_text(t!("web-not-available"));
                                     if browse_btn.clicked() {
                                         #[cfg(not(target_family = "wasm"))]
-                                        if let Some(path) = rfd::FileDialog::new().pick_folder() {
-                                            self.scan_path_input =
-                                                path.to_string_lossy().into_owned();
+                                        {
+                                            let mut dialog = rfd::FileDialog::new();
+                                            let current_trimmed = self.scan_path_input.trim();
+                                            if !current_trimmed.is_empty() {
+                                                let current = std::path::Path::new(current_trimmed);
+                                                if current.is_dir() {
+                                                    dialog = dialog.set_directory(current);
+                                                }
+                                            }
+                                            if let Some(path) = dialog.pick_folder() {
+                                                self.scan_path_input =
+                                                    path.to_string_lossy().into_owned();
+                                            }
                                         }
                                     }
                                 });
@@ -2200,13 +2210,28 @@ impl GuiApp {
                                 ui.add_space(4.0);
                                 let current_trimmed = self.scan_path_input.trim();
                                 let path_obj = std::path::Path::new(current_trimmed);
+                                let (is_valid, is_permission_needed) = match std::fs::metadata(path_obj) {
+                                    Ok(m) => (m.is_dir(), false),
+                                    Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied && crate::gui::operations::is_macos_sandbox() => {
+                                        (true, true)
+                                    }
+                                    Err(_) => (false, false),
+                                };
+
                                 if current_trimmed.is_empty() {
                                     ui.label(
                                         egui::RichText::new("ℹ️ Select a drive above or enter a directory path.")
                                             .size(11.0)
                                             .color(ui.visuals().weak_text_color()),
                                     );
-                                } else if path_obj.is_dir() {
+                                } else if is_permission_needed {
+                                    ui.label(
+                                        egui::RichText::new("🔒 Sandbox Access Required — Click Scan to Grant Access")
+                                            .size(11.0)
+                                            .color(theme::COLOR_DUPLICATE_ORANGE)
+                                            .strong(),
+                                    );
+                                } else if is_valid {
                                     ui.label(
                                         egui::RichText::new("✅ Valid Directory — Ready to Scan")
                                             .size(11.0)
@@ -2245,7 +2270,6 @@ impl GuiApp {
 
                                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                                         let target_path = self.scan_path_input.trim();
-                                        let is_valid = std::path::Path::new(target_path).is_dir();
                                         let can_scan = is_valid && self.scanner.is_some();
                                         let res_scan = ui.add_enabled(can_scan, egui::Button::new(t!("modal-scan-options-scan-btn")));
                                         let res_scan = if self.scanner.is_none() {
@@ -2254,7 +2278,18 @@ impl GuiApp {
                                             res_scan
                                         };
                                         if res_scan.clicked() {
-                                            let path = std::path::PathBuf::from(target_path);
+                                            let mut path = std::path::PathBuf::from(target_path);
+                                            #[cfg(not(target_family = "wasm"))]
+                                            if crate::gui::operations::is_macos_sandbox() && std::fs::read_dir(&path).is_err() {
+                                                if let Some(granted) = rfd::FileDialog::new()
+                                                    .set_directory(&path)
+                                                    .pick_folder()
+                                                {
+                                                    path = granted;
+                                                } else {
+                                                    return;
+                                                }
+                                            }
                                             self.start_scan(path);
                                             self.active_modal = None;
                                         }
