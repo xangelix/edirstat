@@ -20,6 +20,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Configure Git Safe Directory
+        run: git config --global --add safe.directory "*"
+
       - name: Cache dependencies
         uses: swatinem/rust-cache@v2
 
@@ -43,7 +46,6 @@ jobs:
 
       - name: Verify licenses matching committed ones
         run: |
-          git config --global --add safe.directory "*"
           if ! command -v cargo-about &> /dev/null; then
             echo "cargo-about not found, installing..."
             pacman -Syu --noconfirm --needed cargo-about
@@ -84,6 +86,9 @@ jobs:
       - name: Checkout Source Code
         uses: actions/checkout@v7
 
+      - name: Configure Git Safe Directory
+        run: git config --global --add safe.directory "*"
+
       - name: Cache dependencies
         uses: swatinem/rust-cache@v2
 
@@ -112,6 +117,9 @@ jobs:
     steps:
       - name: Checkout Source Code
         uses: actions/checkout@v7
+
+      - name: Configure Git Safe Directory
+        run: git config --global --add safe.directory "*"
 
       - name: Cache dependencies
         uses: swatinem/rust-cache@v2

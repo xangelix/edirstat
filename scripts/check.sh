@@ -6,16 +6,19 @@
 #   ./scripts/check.sh [all|fmt|typos|shear|clippy|test|fonts]
 set -euo pipefail
 
-REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
-if [[ -z "$REPO_ROOT" ]]; then
-    SCRIPT_PATH="$(realpath "$0" 2>/dev/null || readlink -f "$0" 2>/dev/null || echo "$0")"
-    REPO_ROOT="$(cd "$(dirname "$SCRIPT_PATH")/.." && pwd -P)"
-fi
+SCRIPT_PATH="$(realpath "$0" 2>/dev/null || readlink -f "$0" 2>/dev/null || echo "$0")"
+REPO_ROOT="$(cd "$(dirname "$SCRIPT_PATH")/.." && pwd -P)"
 cd "$REPO_ROOT"
 
 is_ci() {
     [[ "${CI:-false}" == "true" ]] || [[ "${GITHUB_ACTIONS:-false}" == "true" ]]
 }
+
+# In containerized CI or Docker environments running as root over a mounted workspace,
+# git safe.directory checks will fail due to UID mismatch. Ensure safe.directory is configured.
+if is_ci || ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    git config --global --add safe.directory "$REPO_ROOT" 2>/dev/null || true
+fi
 
 group_start() {
     local title="$1"
@@ -85,7 +88,7 @@ check_fonts() {
     if is_ci || [[ -d "crates/edirstat-gui/assets/fonts/raw" ]]; then
         ./scripts/fetch_fonts.sh
         python3 scripts/subset_fonts.py
-        git diff --exit-code crates/edirstat-gui/assets/fonts/
+        git -c safe.directory=* diff --exit-code crates/edirstat-gui/assets/fonts/
     fi
     group_end
 }
@@ -98,7 +101,7 @@ check_licenses() {
         exit 1
     fi
     ./scripts/generate_licenses.sh
-    git diff --exit-code crates/edirstat-gui/assets/licenses/
+    git -c safe.directory=* diff --exit-code crates/edirstat-gui/assets/licenses/
     group_end
 }
 
