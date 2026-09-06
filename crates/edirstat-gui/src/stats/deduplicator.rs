@@ -236,8 +236,8 @@ fn calculate_hash_at_range(
     // Timestamps are stored as u32 epoch seconds, so compare the lower 32 bits.
     let metadata = std::fs::metadata(path).ok()?;
 
-    if edirstat_core::fs_utils::is_dataless_file(&metadata) {
-        return None; // dataless/cloud placeholder: do not hydrate
+    if !metadata.is_file() || edirstat_core::fs_utils::is_dataless_file(&metadata) {
+        return None; // non-regular file or dataless/cloud placeholder: do not read/hydrate
     }
 
     if let Ok(modified_time) = metadata.modified()
@@ -275,8 +275,8 @@ fn calculate_multi_range_hash(
 ) -> Option<[u8; 32]> {
     let metadata = std::fs::metadata(path).ok()?;
 
-    if edirstat_core::fs_utils::is_dataless_file(&metadata) {
-        return None; // dataless/cloud placeholder: do not hydrate
+    if !metadata.is_file() || edirstat_core::fs_utils::is_dataless_file(&metadata) {
+        return None; // non-regular file or dataless/cloud placeholder: do not read/hydrate
     }
 
     if let Ok(modified_time) = metadata.modified()
@@ -317,8 +317,8 @@ fn calculate_full_hash(
 ) -> Option<[u8; 32]> {
     let metadata = std::fs::metadata(path).ok()?;
 
-    if edirstat_core::fs_utils::is_dataless_file(&metadata) {
-        return None; // dataless/cloud placeholder: do not hydrate
+    if !metadata.is_file() || edirstat_core::fs_utils::is_dataless_file(&metadata) {
+        return None; // non-regular file or dataless/cloud placeholder: do not read/hydrate
     }
 
     if let Ok(modified_time) = metadata.modified()
