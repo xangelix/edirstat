@@ -109,7 +109,7 @@ jobs:
           rm AuthKey.p8
 
       - name: Build, Bundle, Sign & Notarize
-        run: ./scripts/package_macos.sh --target "${{ matrix.target }}"
+        run: ./scripts/package_macos.sh --target "${{ matrix.target }}" --validate
 
       - name: Store macOS Package as Private Artifact
         uses: actions/upload-artifact@v7

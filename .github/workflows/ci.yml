@@ -222,7 +222,7 @@ jobs:
           key: ${{ matrix.target }}
 
       - name: Package (ad-hoc sign)
-        run: ./scripts/package_macos.sh --target "${{ matrix.target }}" --ad-hoc
+        run: ./scripts/package_macos.sh --target "${{ matrix.target }}" --ad-hoc --validate
 
       - name: Upload Asset as Artifact
         uses: actions/upload-artifact@v7
