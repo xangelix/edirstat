@@ -19,7 +19,7 @@ compact_str = "0.10.0"
 serde = { version = "1.0.229", features = ["derive"] }
 thiserror = "2.0.20"
 xgx_intern = "0.6.4"
-zstd = "0.13.3"
+zstd = "0.14.0"
 
 # ahash's runtime-rng pulls in getrandom, which needs the wasm_js backend on
 # wasm32-unknown-unknown

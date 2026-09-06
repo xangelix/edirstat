@@ -41,7 +41,7 @@ clap = { version = "4.6.6", features = ["derive"] }
 cli-or-gui = "0.1.1"
 compact_str = "0.10.0"
 crc-fast = "1.10.0"
-crossbeam = "0.8.4"
+crossbeam = "0.8.5"
 eframe = "0.36.1"
 mimalloc-rspack = { version = "0.2.4", features = ["v3"] }
 parking_lot = { version = "0.12.5", features = ["hardware-lock-elision"] }
