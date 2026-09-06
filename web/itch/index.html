@@ -1,0 +1,144 @@
+<h1>eDirStat v2.1.0 &mdash; Modern, High-Performance Disk Analyzer</h1>
+<p>
+    eDirStat is a cross-platform disk usage analyzer built from the ground up in
+    Rust. By combining a multithreaded directory walker with a zero-copy arena
+    allocator, it scans and visualizes disk space with minimal memory and CPU
+    overhead.
+</p>
+<p>
+    Precompiled binaries for Windows and Linux are available exclusively here on
+    itch.io. They are multi-CPU binaries, that include thorough optimizations for
+    certain SIMD/SSE/AVX instructions.
+</p>
+<p>
+    <strong>Official Website:</strong>
+    <a target="_blank" href="https://edirstat.com">edirstat.com</a>
+</p>
+<div style="
+    background-color: rgba(255, 255, 255, 0.05);
+    padding: 12px;
+    border-left: 4px solid #da5b5b;
+    margin: 15px 0;
+  ">
+    <strong>Included with Purchase:</strong>
+    <ul style="margin-top: 5px; margin-bottom: 0">
+        <li>
+            <strong>Lifetime Updates:</strong> Receive all future versions and
+            optimizations at no extra cost.
+        </li>
+        <li>
+            <strong>Flexible Use:</strong> Run on unlimited personal and corporate
+            devices. (We only ask that you do not redistribute the precompiled binary
+            packages).
+        </li>
+        <li>
+            <strong>Direct Support:</strong> Get assistance directly from the creators
+            via itch.io.
+        </li>
+        <li>
+            <strong>Feature Priority:</strong> Backers receive higher priority for
+            feature requests and feedback.
+        </li>
+    </ul>
+</div>
+<hr />
+<h2>Key Features</h2>
+<ul>
+    <li>
+        <strong>Work-Stealing Directory Walker:</strong> Utilizes a lock-free
+        parallel traversal engine that distributes directory branches dynamically
+        across your CPU cores, eliminating idle thread bottlenecks.
+    </li>
+    <li>
+        <strong>Direct NTFS MFT Scanning:</strong> On Windows and Linux, eDirStat
+        can bypass standard OS filesystem APIs to parse the Master File Table (MFT)
+        directly, allowing near-instantaneous indexing.
+    </li>
+    <li>
+        <strong>7-Stage Cryptographic Deduplicator:</strong> Isolates duplicate
+        files through a tiered filtering pipeline (Size, Prefix Hash, Midpoint Hash,
+        Suffix Hash, Multi-Range Sampling, Full BLAKE3, and Timestamp Verification)
+        to identify redundant files without unnecessary read operations.
+    </li>
+    <li>
+        <strong>Dynamic Visualizations:</strong> Inspect disk space using an
+        interactive squarified treemap with breadcrumb navigation and subfolder zooming,
+        file-type composition graphs, or duplicate grouping charts.
+    </li>
+    <li>
+        <strong>Fast Compressed Snapshots:</strong> Save directory states to
+        compact, Zstd-compressed <code>.edst</code> snapshot files using a columnar
+        v3 layout that loads in milliseconds.
+    </li>
+    <li>
+        <strong>Full Localization:</strong> Community-translated interface in 14
+        languages (English, Chinese (Simplified), Chinese (Traditional), Dutch, French, German, Italian, Japanese, Korean,
+        Polish, Portuguese, Russian, Spanish, and Turkish) with a built-in language selector.
+    </li>
+    <li>
+        <strong>Theme System:</strong> System (auto-detected), Dark, Light, and High
+        Contrast themes.
+    </li>
+    <li>
+        <strong>Bulk File Actions:</strong> Queue directories or individual
+        duplicate files directly from the UI for batch trashing, permanent deletion,
+        or replacement with hardlinks.
+    </li>
+</ul>
+<hr />
+<h2>Platform Support</h2>
+<ul>
+    <li>
+        <strong>Windows:</strong> Windows 10/11 (64-bit).
+        <em>Note: Administrator privileges are required to utilize the raw NTFS MFT
+            scanning feature.</em>
+    </li>
+    <li>
+        <strong>Linux:</strong> Compatible with major distributions (Ubuntu, Fedora,
+        Arch) on standard desktop environments.
+        <em>Note: Root privileges are required to utilize the raw NTFS MFT scanning
+            feature; exported <code>$MFT</code> files can also be parsed offline on
+            any platform.</em>
+    <li>
+        <strong>macOS:</strong> macOS 12+ (Apple Silicon / aarch64).
+    </li>
+</ul>
+<hr />
+<h2>How to Use</h2>
+<ol>
+    <li>
+        <strong>Download:</strong> Grab the archive for your operating system below.
+    </li>
+    <li>
+        <strong>Extract:</strong> Unpack the executable file to any folder on your
+        machine, if you're on a portable version. If you're using the Windows
+        installer, simply click through the steps.
+    </li>
+    <li>
+        <strong>Run:</strong>
+        <ul>
+            <li>
+                On Windows, double-click <code>edirstat.exe</code> (or run as
+                administrator to enable direct MFT parsing).
+            </li>
+            <li>
+                On macOS/Linux, run <code>./edirstat</code> or launch it via your
+                terminal. You can also pass a directory path directly to target a scan
+                immediately:
+            </li>
+        </ul>
+    </li>
+</ol>
+<pre>
+<code>./edirstat /path/to/scan</code></pre>
+<hr />
+<h2>Open Source & Community</h2>
+<p>
+    eDirStat is open-source under the MIT license. If you are interested in the
+    raw implementation details, want to build the project from source using the
+    Rust compiler, or need to file a bug report, visit the official repository:
+</p>
+<p>
+    <strong>Source Code:</strong>
+    <a target="_blank" href="https://github.com/xangelix/edirstat">GitHub Repository</a>
+</p>

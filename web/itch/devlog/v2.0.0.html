@@ -1,0 +1,613 @@
+<p>
+  Version 2.0.0 focuses on performance optimizations, architectural hardening,
+  and broader platform compatibility. Key updates include the integration of a
+  Windows-native NTFS Master File Table (MFT) driver for faster scanning, a
+  classic WinDirStat-style layout option, and headless command-line snapshot
+  capabilities. Additionally, this release refactors several critical
+  paths&mdash;such as transitioning snapshot persistence to a safe,
+  Zstd-compressed format and replacing unsafe operations with compiler-optimized
+  safe Rust&mdash;to improve reliability and resource efficiency across all
+  supported operating systems.
+</p>
+<p>
+  The project also has a new website at:
+  <a href="https://edirstat.com">edirstat.com</a>!<br />
+</p>
+<h3>📦 Distribution Model & Project Support</h3>
+<p>
+  eDirStat is, and will always remain, entirely open-source and free. However,
+  to support continuous development, engineering, and maintenance costs,
+  <strong
+    >official pre-compiled binaries for Windows, macOS, and Linux are
+    distributed exclusively as a paid download via
+    <a href="https://xangelix.itch.io/edirstat"
+      >Itch.io - xangelix.itch.io/edirstat</a
+    ></strong
+  >.
+</p>
+<ul>
+  <li>
+    <strong>100% Open Source:</strong> The complete codebase is free of charge
+    and publicly available under the permissive <strong>MIT License</strong>. If
+    you prefer to build the tool yourself, you are welcome to compile the source
+    code on Windows, Linux, or macOS at no cost. Instructions are provided in
+    the <code>README.md</code>.
+  </li>
+  <li>
+    <strong>Package Managers:</strong> Package managers and their repository
+    maintainers are welcome to bundle and distribute eDirStat through their
+    respective channels at no cost, provided that it is distributed un-paid,
+    "unofficial", and under the MIT License.
+  </li>
+</ul>
+<p>
+  Purchasing precompiled packages directly funds the engineering efforts
+  required to keep eDirStat fast, secure, and compatible with the latest
+  operating systems.
+</p>
+<h2>Added</h2>
+<h4>Windows & NTFS Integration</h4>
+<ul>
+  <li>
+    <strong>🪟 Windows NTFS MFT Driver:</strong> Integrated a new Windows-native
+    NTFS driver utilizing the Master File Table (MFT) for near-instantaneous
+    drive scanning on Windows.
+  </li>
+  <li>
+    <strong>🪟 Administrator Restart Modal:</strong> Added a prompt to restart
+    the application as administrator to allow Master File Table (MFT) access on
+    Windows.
+  </li>
+  <li>
+    <strong>🪟 Windows UNC Path Stripping:</strong> Automatically strip UNC
+    volume prefixes (such as <code>\\?\</code>) from directory paths in all
+    visual components.
+  </li>
+</ul>
+<h4>GUI Enhancements & Features</h4>
+<ul>
+  <li>
+    <strong>🗂️ WinDirStat Layout Mode:</strong> Added a brand new
+    WinDirStat-style layout mode for a classic, familiar disk usage
+    visualization.
+  </li>
+  <li>
+    <strong>☑️ Multi-Select & Multi-Operations:</strong> Added support for
+    selecting multiple items and performing bulk operations in the GUI.
+  </li>
+  <li>
+    <strong>❓ "How it Works" Modal:</strong> Added an informative explanation
+    modal to help users understand the deduplication process.
+  </li>
+  <li>
+    <strong>🌳 Default Root Selection:</strong> Automatically selects the root
+    directory node upon loading, improving the initial navigation flow.
+  </li>
+  <li>
+    <strong>⏱️ Scan Stats Persistence:</strong> Retained the elapsed scan time
+    and scanning speed in the status bar even after the scan has finished.
+  </li>
+  <li>
+    <strong>⏱️ Millisecond Scan Timing:</strong> Switched the GUI elapsed scan
+    time to display millisecond-level precision.
+  </li>
+  <li>
+    <strong>📋 Clipboard Tools:</strong> Added "Copy Name" and "Copy Path" tools
+    to easily copy file metadata from the directory tree.
+  </li>
+  <li>
+    <strong>🔆 Scan Button Highlight:</strong> Added a subtle glow/highlight
+    effect to the "Scan Directory" button when no scan has been run or directory
+    data is empty.
+  </li>
+  <li>
+    <strong>📊 New Table Implementation:</strong> Switched to a robust,
+    feature-rich table view powered by <code>egui-table-kit</code>, supporting
+    horizontal scrolling and cleaner row selection/operations traits.
+  </li>
+  <li>
+    <strong>📅 Created Time Column:</strong> Added a "Created" column in the
+    directory tree/explorer view (positioned before "Modified") to view file
+    creation dates.
+  </li>
+  <li>
+    <strong>🔄 Root Refresh Support:</strong> Restored the ability to
+    refresh/rescan the root node directly in the directory explorer.
+  </li>
+  <li>
+    <strong>ℹ️ Update Checker:</strong> Added an update checker to the "About"
+    modal to easily check for new versions of the application.
+  </li>
+  <li>
+    <strong>📊 Item and Directory Count Sorting:</strong> Added full support for
+    sorting the directory explorer view by item and subdirectory counts.
+  </li>
+  <li>
+    <strong>🛡️ Restricted Permissions Handling:</strong> Added detection and
+    safe handling of folders with restricted access/permissions, marking them as
+    "No Permission" in the UI rather than failing the scan.
+  </li>
+  <li>
+    <strong>🔔 Toast Notifications:</strong> Integrated interactive toast
+    notifications (success, warning, error, info) for file manager operations,
+    terminal launching, and deduplication hardlinking/softlinking.
+  </li>
+  <li>
+    <strong>🎨 Squared Logo Asset:</strong> Created a new subtext-less squared
+    SVG logo variant for keyart and promotional purposes.
+  </li>
+  <li>
+    <strong>⚖️ Dependency Licenses Modal:</strong> Added an open source license
+    viewing modal inside the About dialog to display packaged licenses for
+    dependencies.
+  </li>
+</ul>
+<h4>CLI & Headless Tooling</h4>
+<ul>
+  <li>
+    <strong>🚀 CLI / Positional Arguments:</strong> Added support for passing a
+    directory path as a positional command-line argument to automatically start
+    scanning on startup.
+  </li>
+  <li>
+    <strong>🚀 Headless Snapshot Mode:</strong> Added a headless command-line
+    mode to run directory scans and automatically save results to a
+    <code>.edst</code> snapshot file, bypassing the GUI.
+  </li>
+</ul>
+<h4>Project Infrastructure & Packaging</h4>
+<ul>
+  <li>
+    <strong>🍏 macOS Sandboxing Entitlements:</strong> Packaged the macOS app
+    with proper sandboxing entitlements for improved security and smoother OS
+    integration.
+  </li>
+  <li>
+    <strong>📦 Windows Installer (Inno Setup):</strong> Added support for
+    building proper Windows setup/installer binaries (<code>.exe</code> via Inno
+    Setup) in the CI/CD pipeline on every commit.
+  </li>
+  <li>
+    <strong>⚙️ EditorConfig:</strong> Added an <code>.editorconfig</code> file
+    to establish and enforce consistent coding styles across different editors.
+  </li>
+  <li>
+    <strong>⚖️ MIT License:</strong> Formally initialized the repository with
+    the MIT License.
+  </li>
+  <li>
+    <strong>💖 GitHub Sponsors:</strong> Added sponsor/funding configuration
+    pointing to <code>xangelix</code> to support the project.
+  </li>
+  <li>
+    <strong>📄 Changelog:</strong> Created a clean, practical, and exciting
+    changelog documenting all previous releases.
+  </li>
+  <li>
+    <strong>📊 Benchmark & Demo Media:</strong> Added comparison benchmarks
+    against QDirStat and WinDirStat in the README, along with high-quality
+    demonstration videos (drag race, deduplicator demo, and WinDirStat layout
+    mode).
+  </li>
+  <li>
+    <strong>🛡️ Forbid Unsafe Code Directive:</strong> Added
+    <code>#![forbid(unsafe_code)]</code> at both binary and library crate entry
+    points to ensure compilation-level code safety.
+  </li>
+  <li>
+    <strong>📦 Multi-Target CPU Windows Runner:</strong> Integrated
+    <code>cargo-multivers</code> builder to compile distinct, target-CPU
+    optimized Windows binaries and package them inside a single wrapper crate
+    (<code>runner/</code>) using <code>multivers-runner</code>.
+  </li>
+  <li>
+    <strong>⚖️ Packaged License Generation:</strong> Integrated
+    <code>cargo-about</code> to generate target-specific open source license
+    lists (<code>assets/licenses/&lt;target&gt;.md</code>) and packaged them
+    into the binary using <code>include_packed</code>.
+  </li>
+</ul>
+<h4>Web App & Simulator</h4>
+<ul>
+  <li>
+    <strong>🌐 eDirStat Web V2:</strong> Redesigned and launched the official
+    product website (<code>/web</code>) featuring an interactive, live simulator
+    for the cryptographic deduplication pipeline and treemap dashboard.
+  </li>
+  <li>
+    <strong>🌐 Responsive Displays & Ratios:</strong> Expanded CSS layout grids
+    and flexbox viewport definitions to support a wide range of mobile and
+    ultra-wide monitor aspect ratios without clipping.
+  </li>
+  <li>
+    <strong>🌐 Deduplicator Simulator:</strong> Built a fully client-side
+    animated simulator of the eDirStat deduplication process, showing steps like
+    size partitioning, header hashing, midpoint/suffix matching, and BLAKE3
+    checking.
+  </li>
+  <li>
+    <strong>🌐 Speed Multipliers:</strong> Added scanning speed multipliers
+    comparison to the website simulator charts.
+  </li>
+  <li>
+    <strong>🌐 Favicon Integration:</strong> Added a website favicon referenced
+    from <code>assets/img/</code>.
+  </li>
+</ul>
+<h4>Developer Tooling & Testing</h4>
+<ul>
+  <li>
+    <strong>🛠️ Tracy Profiling:</strong> Integrated basic support for
+    Tracy-based profiling to assist in performance diagnostics.
+  </li>
+  <li>
+    <strong>🧪 Typos Check CI/CD:</strong> Initialized automated spelling/typos
+    check workflow in the CI/CD pipeline.
+  </li>
+  <li>
+    <strong>🧪 Criterion MFT Benchmarks:</strong> Added a benchmarking suite
+    using <code>criterion</code> to measure and track Master File Table (MFT)
+    parsing performance.
+  </li>
+  <li>
+    <strong>🧪 Comprehensive Test Suite:</strong> Added 55 new unit and
+    integration tests across the codebase, significantly expanding test coverage
+    for charts, model arena, persistence, and directory traversal.
+  </li>
+</ul>
+<h2>Changed</h2>
+<h4>Performance & Allocations</h4>
+<ul>
+  <li>
+    <strong>⚡ Memory & Speed Optimizations:</strong> Dramatically reduced
+    allocations across the board by adopting <code>CompactString</code> in
+    engine models, precalculating directory counts, and reducing deduplicator
+    allocations.
+  </li>
+  <li>
+    <strong>⚡ Parallel MFT Parsing & Sharded Pool:</strong> Parallelized MFT
+    record processing and introduced a sharded <code>StringPool</code> to
+    maximize multi-core CPU utilization, yielding a ~49% speedup.
+  </li>
+  <li>
+    <strong>⚡ MFT Flat Representation:</strong> Implemented a flat memory
+    representation for hierarchy resolution in the MFT driver, reducing
+    traversal times by ~9.6%.
+  </li>
+  <li>
+    <strong>⚡ Sector-Aligned DMA Reads:</strong> Implemented unbuffered,
+    sector-aligned DMA read operations in the MFT driver to bypass OS caching
+    and accelerate disk reading by ~6.9%.
+  </li>
+  <li>
+    <strong>⚡ Manual AVX2 UTF-16 Decoder:</strong> Implemented a manual
+    AVX2-optimized UTF-16 decoder for rapid MFT filename parsing, improving
+    speed by ~4.6%.
+  </li>
+  <li>
+    <strong>⚡ MFT Allocation Reduction:</strong> Replaced standard vectors with
+    stack-allocated <code>SmallVec</code> in parsed MFT models, reducing heap
+    allocations and boosting speed by ~3.7%.
+  </li>
+  <li>
+    <strong>⚡ MFT String Interning & Cache Scaling:</strong> Switched to
+    CRC32-based string interning and scaled up the L1 cache size in the MFT
+    engine for faster path/name resolutions.
+  </li>
+  <li>
+    <strong>⚡ SIMD UTF-16 Decoder SSE Fallback:</strong> Added SSE fallback
+    support to the SIMD-accelerated UTF-16 filename decoder in the MFT engine.
+  </li>
+  <li>
+    <strong>⚡ Bottom-Up Size Propagation:</strong> Optimized size calculations
+    in the engine coordinator by adopting a bottom-up propagation strategy.
+  </li>
+  <li>
+    <strong>⚡ Zero-Allocation & Branchless Search:</strong> Implemented
+    allocation-free, branchless case-insensitive search algorithms in the
+    directory explorer for faster filtering.
+  </li>
+  <li>
+    <strong>⚡ Fast Traversal & SIMD:</strong> Integrated SIMD loop
+    optimizations and switched to stack-allocated <code>SmallVec</code> for
+    tracking ancestors in deep directories.
+  </li>
+  <li>
+    <strong>⚡ Alloc-Free Treemap Rendering:</strong> Optimized the interactive
+    treemap with allocation-free file extension mapping.
+  </li>
+  <li>
+    <strong>⚡ Treemap Render Optimizations:</strong> Dramatically optimized
+    interactive treemap rendering by switching to zero-allocation draw calls,
+    discarding sub-pixel draws earlier, and adjusting the pixel precision limit
+    to <code>0.2</code> for crisper rendering.
+  </li>
+  <li>
+    <strong>⚡ Extension List Caching:</strong> Implemented a cached rendering
+    strategy for file extension statistics, reducing draw calls by up to 50%.
+  </li>
+  <li>
+    <strong>⚡ Performance Polish:</strong> Switched key hashing tables to
+    <code>ahash</code>'s <code>RandomState</code> and replaced the extension map
+    string types with <code>CompactString</code> to further minimize heap
+    allocations, and reduced load on the current snapshot mutex lock.
+  </li>
+  <li>
+    <strong>⚡ Internment Migration:</strong> Switched file name storage in the
+    arena to use <code>xgx_intern</code> for faster lookup and reduced heap
+    allocations.
+  </li>
+  <li>
+    <strong>⚡ Linux Explorer Performance:</strong> Cached file permissions
+    details and read owner UIDs/GIDs natively through <code>libc</code> to boost
+    explorer rendering speed on Linux.
+  </li>
+  <li>
+    <strong>⚡ Extension Color Caching:</strong> Cached file extension color
+    calculations in the GUI theme to reduce CPU load during rendering.
+  </li>
+  <li>
+    <strong>⚡ Mimalloc Integration:</strong> Configured
+    <code>mimalloc</code> v3 as the default global allocator to accelerate
+    memory allocations across multi-core systems.
+  </li>
+  <li>
+    <strong>⚡ Deduplicator Optimizations:</strong> Deferred path string
+    allocations in the deduplicator to minimize heap usage during search.
+  </li>
+  <li>
+    <strong>⚡ Zero-Copy Node Storage:</strong> Restored true zero-copy node
+    storage in the file arena to reduce latency and memory overhead.
+  </li>
+  <li>
+    <strong>⚡ Lowercase Extension Helper:</strong> Switched to a shared,
+    stack-allocated <code>with_lowercase_ext</code> helper for file extension
+    mappings to avoid heap allocations.
+  </li>
+  <li>
+    <strong>⚡ Zstd Compression for Persisted Snapshots:</strong> Migrated the
+    snapshot persistence format to a compressed Zstd payload, replacing unsafe
+    copy-on-write memory mapping (<code>memmap2</code>) with safe heap
+    allocations during decompression to improve file safety and reliability.
+  </li>
+  <li>
+    <strong>⚡ Safe UTF-16 Decoder Optimization:</strong> Replaced unsafe SIMD
+    AVX2/SSE implementations with safe Rust iterators and boundary checks that
+    optimize down to SIMD via LLVM.
+  </li>
+</ul>
+<h4>UI, UX & Visual Polish</h4>
+<ul>
+  <li>
+    <strong>🎨 Rebranded Visuals:</strong> Replaced existing logos and icons
+    across the GUI and documentation with modern, high-quality SVG/raster
+    variants, and added a utility script for icon generation.
+  </li>
+  <li>
+    <strong>🎨 UI & Layout Refinements:</strong> Polished the user interface by
+    organizing bottom panel controls, improving center panel padding, adjusting
+    column spacing, and enhancing modal layouts with higher contrast.
+  </li>
+  <li>
+    <strong>🧹 Deduplicator Cleanup:</strong> Disabled the file extensions panel
+    while viewing the Deduplicator tab to reduce visual clutter, and cleaned up
+    tab headings.
+  </li>
+  <li>
+    <strong>♻️ Recycle Icon:</strong> Swapped the toolbar recycle icon with a
+    larger, more visible version.
+  </li>
+  <li>
+    <strong>✏️ Explorer Column Renaming:</strong> Renamed the "Last Modified"
+    column to "Modified" for a cleaner and more compact header layout.
+  </li>
+  <li>
+    <strong>🎨 UI Enhancements:</strong> Improved the table operations buttons
+    styling (removing gray backgrounds for a cleaner look) and styled
+    warning/detail modals with stronger, higher-contrast text.
+  </li>
+  <li>
+    <strong>🎨 Treemap Coloring:</strong> Switched to gamma multiplication for
+    interactive treemap color scaling, yielding smoother visual gradients.
+  </li>
+  <li>
+    <strong>📄 Zero-Copy Documentation:</strong> Updated website templates,
+    README, and GUI about modals to reflect the migration from zero-copy memory
+    mapping to safe Zstd-compressed snapshots.
+  </li>
+  <li>
+    <strong>🌐 Web Disk Simulator Polish:</strong> Cleaned up disk names and
+    models in the website simulator.
+  </li>
+</ul>
+<h4>Platform Compatibility & Hardening</h4>
+<ul>
+  <li>
+    <strong>🛡️ Persistence Hardening:</strong> Improved overflow protection for
+    memory-mapped persistence files.
+  </li>
+  <li>
+    <strong>🗂️ Platform-Native Path Slashes:</strong> Improved cross-platform
+    path slash handling to ensure correct directory traversal and
+    representation.
+  </li>
+  <li>
+    <strong>🛡️ Treemap Bounds Protection:</strong> Added robust bounds checks
+    and protections when selecting the root node in the interactive treemap.
+  </li>
+  <li>
+    <strong>🛡️ NTFS MFT Driver Hardening:</strong> Significantly hardened the
+    Windows-native NTFS MFT driver with extra safety checks and bounds
+    validation.
+  </li>
+  <li>
+    <strong>🛡️ MFT Cross-Platform Separation:</strong> Separated
+    Windows-specific MFT APIs from non-Windows target modules to keep the core
+    engine portable and clean.
+  </li>
+  <li>
+    <strong>🪟 MFT Ingestion Refactoring:</strong> Consolidated the Master File
+    Table (MFT) ingestion loop into a dedicated helper function for cleaner,
+    more maintainable code.
+  </li>
+  <li>
+    <strong>🧹 Walk Context Refactoring:</strong> Refactored the recursive
+    directory scanner context into a unified <code>WalkCtx</code> struct for
+    cleaner and safer code.
+  </li>
+  <li>
+    <strong>🐧 Unix Root Scanning Improvements:</strong> Enhanced traversal of
+    the system root on Unix/Linux by automatically filtering out virtual/system
+    directories (such as <code>/proc</code>, <code>/sys</code>,
+    <code>/dev</code>, etc.) and allowing local partition crossing.
+  </li>
+  <li>
+    <strong>🛡️ Safe User & Group Resolution:</strong> Replaced unsafe
+    <code>libc</code> calls for retrieving Unix usernames and group names with
+    safe APIs from the <code>uzers</code> crate.
+  </li>
+  <li>
+    <strong>🛡️ Windows Subsystem Execution:</strong> Adopted the
+    <code>cli-or-gui</code> crate to dynamically check privileges and run
+    commands, replacing custom platform-specific elevation blocks.
+  </li>
+  <li>
+    <strong>🛡️ Elevation Helpers Refactoring:</strong> Cleaned up custom Windows
+    elevation and admin restart APIs by adopting a unified implementation from
+    the <code>cli-or-gui</code> crate.
+  </li>
+  <li>
+    <strong>🛡️ Safe MFT Chunk Ingestion:</strong> Refactored the MFT ingestion
+    Rayon thread boundaries to split mutable slices safely, completely avoiding
+    unsafe raw pointer calls to <code>from_raw_parts_mut</code>.
+  </li>
+  <li>
+    <strong>🛡️ Safe Windows FS Type Check:</strong> Replaced unsafe Win32 calls
+    to <code>GetVolumeInformationW</code> with safe cross-platform drive
+    inspection APIs from the <code>sysinfo</code> crate.
+  </li>
+</ul>
+<h4>Project Maintenance & Build Configuration</h4>
+<ul>
+  <li>
+    <strong>📦 Dependency Updates:</strong> Bumped project dependencies to their
+    latest versions for improved security and stability.
+  </li>
+  <li>
+    <strong>💾 Persistence Format V2:</strong> Bumped the snapshot persistence
+    header to <code>v2</code> to support new metadata features.
+  </li>
+  <li>
+    <strong>📦 Dependency Upgrades:</strong> Upgraded underlying project
+    dependencies, including updating <code>egui-table-kit</code> to version
+    <code>0.2.1</code> and integrating <code>egui-notify</code>.
+  </li>
+  <li>
+    <strong>🪟 Console-Free Windows Executable:</strong> Configured the
+    application so that the console command window does not spawn when launching
+    the GUI on Windows.
+  </li>
+  <li>
+    <strong>📦 Release Build Optimizations:</strong> Enabled Link-Time
+    Optimization (LTO thin), symbol stripping, and restricted codegen-units to 1
+    for release binaries to minimize executable size and improve performance.
+  </li>
+  <li>
+    <strong>📄 Documentation & Benchmarks:</strong> Updated the README to list
+    speedup results for WinDirStat, include new context menu options, document
+    positional arguments, refresh performance comparison benchmarks, clean up
+    key feature wording, and link the license locally.
+  </li>
+  <li>
+    <strong>⚙️ Toolchain Update:</strong> Updated the local Rust compiler
+    toolchain to <code>nightly-2026-06-13</code>.
+  </li>
+  <li>
+    <strong>⚙️ Safe Exit Flow:</strong> Avoided calls to
+    <code>std::process::exit()</code> in the binary to ensure standard library
+    destructors run cleanly on exit.
+  </li>
+  <li>
+    <strong>📄 README Visual Updates:</strong> Combined primary logo images,
+    added a treemap screenshot under the logo, switched to a cleaner treemap-b
+    variant logo, and replaced the drag race video with a first-frame
+    thumbnailed version to speed up page load.
+  </li>
+  <li>
+    <strong>⚙️ Toolchain Update:</strong> Updated Rust nightly compiler
+    toolchain to <code>nightly-2026-06-15</code>.
+  </li>
+  <li>
+    <strong>📦 Dependency Cleanup:</strong> Removed the direct dependency on
+    <code>libc</code> as it is no longer required.
+  </li>
+  <li>
+    <strong>📦 Dependency Upgrades:</strong> Upgraded underlying project
+    dependencies, including bumping <code>bytes</code> and
+    <code>wayland-protocols</code> to their latest versions.
+  </li>
+  <li>
+    <strong>📦 Dependency Upgrades:</strong> Upgraded <code>arrayvec</code> to
+    <code>0.7.7</code>, <code>sysinfo</code> to <code>0.39.4</code>, and
+    <code>log</code> to <code>0.4.33</code>.
+  </li>
+  <li>
+    <strong>📄 README Benchmarks Update:</strong> Updated README benchmarks with
+    program versions, a WizTree drag race video comparison, and updated
+    WinDirStat speed multipliers.
+  </li>
+  <li>
+    <strong>📄 Benchmark Disclaimers:</strong> Added program versions and
+    benchmark methodology disclaimers to the README and website.
+  </li>
+  <li>
+    <strong>📦 Minimum Cargo Package Files:</strong> Add <code>include</code> to
+    <code>Cargo.toml</code> to include only necessary files in the package.
+  </li>
+</ul>
+<h2>Fixed</h2>
+<h4>GUI & Interactive Elements</h4>
+<ul>
+  <li>
+    <strong>🖱️ Selection Behavior:</strong> Restored the ability to de-select
+    nodes in both the directory explorer and the interactive treemap.
+  </li>
+  <li>
+    <strong>🔘 Dropdown Interactivity:</strong> Fixed the click hitbox for
+    dropdown buttons in the directory explorer.
+  </li>
+  <li>
+    <strong>🖱️ Treemap & Scatter Plot Bugfixes:</strong> Truncated treemap depth
+    past a set limit to prevent rendering overflows, resolved a block selection
+    issue in the treemap, and improved hover text wrapping on plots.
+  </li>
+  <li>
+    <strong>♻️ Cache Clearing on Refresh:</strong> Fixed a bug where cached GUI
+    elements were not cleared during a directory refresh or rescan.
+  </li>
+  <li>
+    <strong>🌐 Web Layout Clipping:</strong> Fixed layout clipping bugs on thin
+    displays and small viewports by setting appropriate
+    <code>overflow-x</code> properties and max-widths.
+  </li>
+  <li>
+    <strong>🌐 WizTree Speed Metrics:</strong> Corrected the WizTree benchmark
+    time representation on the website simulator from 4.41s to 4.38s.
+  </li>
+</ul>
+<h4>Cross-Platform & Windows MFT</h4>
+<ul>
+  <li>
+    <strong>🪟 Windows Ancestor Traversal:</strong> Resolved a bug in the
+    directory traverser that caused incorrect ancestor resolution on Windows.
+  </li>
+  <li>
+    <strong>🪟 Windows Drive Resolution:</strong> Fixed a path-resolution issue
+    for Windows root drives in the directory allocator arena.
+  </li>
+  <li>
+    <strong>📦 Cross-Platform Compilation:</strong> Fixed build configurations
+    so that the <code>windows</code> crate dependency is only compiled on
+    Windows targets an
+  </li>
+</ul>
