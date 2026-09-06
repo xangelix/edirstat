@@ -212,6 +212,7 @@ pub struct GuiApp {
 pub enum Locale {
     #[default]
     EnUs,
+    ArSa,
     BnBd,
     DeDe,
     EsEs,
@@ -234,6 +235,7 @@ impl std::fmt::Display for Locale {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::EnUs => write!(f, "en-US"),
+            Self::ArSa => write!(f, "ar-SA"),
             Self::BnBd => write!(f, "bn-BD"),
             Self::DeDe => write!(f, "de-DE"),
             Self::EsEs => write!(f, "es-ES"),
@@ -259,6 +261,7 @@ impl Locale {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::EnUs => "en-US",
+            Self::ArSa => "ar-SA",
             Self::BnBd => "bn-BD",
             Self::DeDe => "de-DE",
             Self::EsEs => "es-ES",
@@ -3287,6 +3290,9 @@ mod tests {
         assert_eq!(Locale::from_bcp47("zh-Hant"), Some(Locale::ZhHk));
         assert_eq!(Locale::from_bcp47("zh-TW"), Some(Locale::ZhHk));
         assert_eq!(Locale::from_bcp47("zh-SG"), Some(Locale::ZhCn));
+        assert_eq!(Locale::from_bcp47("ar-SA"), Some(Locale::ArSa));
+        assert_eq!(Locale::from_bcp47("ar_EG.UTF-8"), Some(Locale::ArSa));
+        assert_eq!(Locale::from_bcp47("ar"), Some(Locale::ArSa));
         assert_eq!(Locale::from_bcp47("bn-BD"), Some(Locale::BnBd));
         assert_eq!(Locale::from_bcp47("bn_IN"), Some(Locale::BnBd));
         assert_eq!(Locale::from_bcp47("hi-IN"), Some(Locale::HiIn));
@@ -3295,7 +3301,7 @@ mod tests {
         assert_eq!(Locale::from_bcp47("vi_VN.UTF-8"), Some(Locale::ViVn));
 
         // Unsupported / invalid
-        assert_eq!(Locale::from_bcp47("ar-SA"), None);
+        assert_eq!(Locale::from_bcp47("fa-IR"), None);
         assert_eq!(Locale::from_bcp47(""), None);
     }
 }

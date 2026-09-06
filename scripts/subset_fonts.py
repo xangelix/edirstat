@@ -31,6 +31,7 @@ FONTS = [
     "NotoSansKR-Regular.otf",
     "NotoSansBengali-Regular.ttf",
     "NotoSansDevanagari-Regular.ttf",
+    "NotoSansArabic-Regular.ttf",
     "NotoSansSymbols2-Regular.ttf",
 ]
 
