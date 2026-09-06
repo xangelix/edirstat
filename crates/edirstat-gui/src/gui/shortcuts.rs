@@ -112,18 +112,32 @@ mod tests {
         assert_eq!(SHORTCUT_ZOOM_SELECTION.logical_key, Key::Enter);
     }
 
+    fn test_context() -> egui::Context {
+        let ctx = egui::Context::default();
+        let mut output = ctx.run_ui(egui::RawInput::default(), |_| {});
+        output.textures_delta.clear();
+        ctx
+    }
+
     #[test]
     fn test_format_shortcut_context() {
-        let ctx = egui::Context::default();
+        let ctx = test_context();
         let formatted = format_shortcut(&ctx, &SHORTCUT_NEW_SCAN);
         assert!(!formatted.is_empty());
         assert!(formatted.contains('O') || formatted.contains('o'));
+
+        ctx.set_os(egui::os::OperatingSystem::Mac);
+        let formatted_mac = format_shortcut(&ctx, &SHORTCUT_NEW_SCAN);
+        assert!(!formatted_mac.is_empty());
     }
 
     #[test]
     fn test_button_builders() {
-        let ctx = egui::Context::default();
+        let ctx = test_context();
         let _btn = button_with_shortcut("Scan", &SHORTCUT_NEW_SCAN, &ctx);
         let _btn_str = button_with_shortcut_str("Toggle", "F9");
+
+        ctx.set_os(egui::os::OperatingSystem::Mac);
+        let _btn_mac = button_with_shortcut("Scan", &SHORTCUT_NEW_SCAN, &ctx);
     }
 }
