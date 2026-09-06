@@ -491,29 +491,40 @@ impl GuiApp {
             let mut failures = Vec::new();
 
             for (idx, path) in targets {
-                if path.exists() {
-                    let result = if to_trash {
-                        delete_to_trash(&path)
-                    } else if path.is_dir() {
-                        std::fs::remove_dir_all(&path)
-                            .map_err(|e| (e.to_string(), is_permission_denied_io(&e)))
-                    } else {
-                        std::fs::remove_file(&path)
-                            .map_err(|e| (e.to_string(), is_permission_denied_io(&e)))
-                    };
+                match path.symlink_metadata() {
+                    Ok(meta) => {
+                        let result = if to_trash {
+                            delete_to_trash(&path)
+                        } else if meta.is_dir() {
+                            std::fs::remove_dir_all(&path)
+                                .map_err(|e| (e.to_string(), is_permission_denied_io(&e)))
+                        } else {
+                            std::fs::remove_file(&path)
+                                .map_err(|e| (e.to_string(), is_permission_denied_io(&e)))
+                        };
 
-                    if let Err((err_msg, is_perm)) = result {
-                        println!(
-                            "Failed to delete/trash path {}: {}",
-                            path.display(),
-                            err_msg
-                        );
-                        failures.push((path.to_string_lossy().into_owned(), err_msg, is_perm));
-                    } else {
+                        if let Err((err_msg, is_perm)) = result {
+                            println!(
+                                "Failed to delete/trash path {}: {}",
+                                path.display(),
+                                err_msg
+                            );
+                            failures.push((path.to_string_lossy().into_owned(), err_msg, is_perm));
+                        } else {
+                            successfully_deleted.push(idx);
+                        }
+                    }
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                         successfully_deleted.push(idx);
                     }
-                } else {
-                    successfully_deleted.push(idx);
+                    Err(e) => {
+                        let is_perm = is_permission_denied_io(&e);
+                        failures.push((
+                            path.to_string_lossy().into_owned(),
+                            e.to_string(),
+                            is_perm,
+                        ));
+                    }
                 }
             }
 
@@ -1105,7 +1116,11 @@ impl GuiApp {
                                         ),
                                         _ => cfg.paths[0].clone(),
                                     };
-                                    std::path::Path::new(&raw_path).exists()
+                                    if crate::IS_NATIVE {
+                                        std::path::Path::new(&raw_path).symlink_metadata().is_ok()
+                                    } else {
+                                        true
+                                    }
                                 } else {
                                     true
                                 };
@@ -2921,6 +2936,109 @@ mod tests {
             text.contains("MIT"),
             "license bundle should list the MIT license"
         );
+        Ok(())
+    }
+
+    #[test]
+    #[cfg(not(target_family = "wasm"))]
+    fn test_execute_deletion_handles_broken_symlinks_and_dir_symlinks()
+    -> Result<(), crate::EdirstatError> {
+        let temp_dir = std::env::current_dir()?
+            .join("target")
+            .join("test_gui_deletion_symlinks");
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        std::fs::create_dir_all(&temp_dir)?;
+
+        let target_dir = temp_dir.join("real_dir");
+        std::fs::create_dir_all(&target_dir)?;
+        let keep_file = target_dir.join("keep.txt");
+        std::fs::write(&keep_file, b"do not delete")?;
+
+        let regular_file = temp_dir.join("regular.txt");
+        std::fs::write(&regular_file, b"delete me")?;
+
+        #[cfg(unix)]
+        let (broken_symlink, dir_symlink) = {
+            let broken = temp_dir.join("broken_link.txt");
+            std::os::unix::fs::symlink(temp_dir.join("nonexistent_target.txt"), &broken)?;
+            let dir_link = temp_dir.join("dir_link");
+            std::os::unix::fs::symlink(&target_dir, &dir_link)?;
+            (broken, dir_link)
+        };
+
+        let mut pool = StringPool::new();
+        let root_id = pool.get_or_insert(temp_dir.to_string_lossy().as_bytes());
+        let reg_id = pool.get_or_insert(b"regular.txt");
+
+        #[cfg(unix)]
+        let (broken_id, dir_sym_id) = (
+            pool.get_or_insert(b"broken_link.txt"),
+            pool.get_or_insert(b"dir_link"),
+        );
+
+        let mut nodes = vec![
+            FileNode::new(root_id, None, true, false, 0, 0),
+            FileNode::new(reg_id, Some(0), false, false, 0, 0),
+        ];
+
+        #[cfg(unix)]
+        {
+            nodes.push(FileNode::new(broken_id, Some(0), false, true, 0, 0));
+            nodes.push(FileNode::new(dir_sym_id, Some(0), false, true, 0, 0));
+        }
+
+        let dir_counts = crate::arena::precompute_dir_counts(&nodes);
+        let shared_state = Arc::new(SharedState::new());
+        shared_state.store_snapshot(FileArenaSnapshot {
+            nodes: Arc::new(crate::arena::NodeStorage::Owned(nodes)),
+            string_pool: Arc::new(pool),
+            dir_counts: Arc::new(dir_counts),
+        });
+
+        let mut app = GuiApp::new(shared_state, None, None, false);
+
+        #[cfg(not(unix))]
+        let delete_indices = vec![1];
+        #[cfg(unix)]
+        let delete_indices = vec![1, 2, 3];
+
+        app.execute_deletion(&delete_indices, false, &egui::Context::default());
+
+        let command = app.command_rx.recv().map_err(|_e| {
+            crate::EdirstatError::OutOfRange("Failed to receive completed command")
+        })?;
+
+        match command {
+            crate::gui::operations::AppCommand::BackgroundOpCompleted(
+                crate::gui::operations::BackgroundOpResult::Deletion {
+                    successfully_deleted,
+                    failures,
+                    ..
+                },
+            ) => {
+                assert!(failures.is_empty(), "Deletion failures: {failures:?}");
+                assert_eq!(successfully_deleted.len(), delete_indices.len());
+            }
+            other => panic!("Unexpected command: {other:?}"),
+        }
+
+        // Verify regular file is deleted
+        assert!(!regular_file.exists());
+
+        #[cfg(unix)]
+        {
+            // Verify broken symlink entry was deleted from disk
+            assert!(broken_symlink.symlink_metadata().is_err());
+
+            // Verify dir symlink was unlinked from disk
+            assert!(dir_symlink.symlink_metadata().is_err());
+
+            // CRITICAL: verify the target directory and its contents were NOT deleted!
+            assert!(target_dir.exists());
+            assert!(keep_file.exists());
+        }
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
         Ok(())
     }
 }
