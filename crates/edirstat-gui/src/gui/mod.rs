@@ -212,6 +212,7 @@ pub struct GuiApp {
 pub enum Locale {
     #[default]
     EnUs,
+    BnBd,
     DeDe,
     EsEs,
     FrFr,
@@ -231,6 +232,7 @@ impl std::fmt::Display for Locale {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::EnUs => write!(f, "en-US"),
+            Self::BnBd => write!(f, "bn-BD"),
             Self::DeDe => write!(f, "de-DE"),
             Self::EsEs => write!(f, "es-ES"),
             Self::FrFr => write!(f, "fr-FR"),
@@ -253,6 +255,7 @@ impl Locale {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::EnUs => "en-US",
+            Self::BnBd => "bn-BD",
             Self::DeDe => "de-DE",
             Self::EsEs => "es-ES",
             Self::FrFr => "fr-FR",
@@ -3278,6 +3281,8 @@ mod tests {
         assert_eq!(Locale::from_bcp47("zh-Hant"), Some(Locale::ZhHk));
         assert_eq!(Locale::from_bcp47("zh-TW"), Some(Locale::ZhHk));
         assert_eq!(Locale::from_bcp47("zh-SG"), Some(Locale::ZhCn));
+        assert_eq!(Locale::from_bcp47("bn-BD"), Some(Locale::BnBd));
+        assert_eq!(Locale::from_bcp47("bn_IN"), Some(Locale::BnBd));
 
         // Unsupported / invalid
         assert_eq!(Locale::from_bcp47("ar-SA"), None);

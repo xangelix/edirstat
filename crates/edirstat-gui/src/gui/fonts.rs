@@ -77,6 +77,12 @@ mod tests {
     /// by egui default fonts combined with the installed Noto fallback subsets.
     /// If a PR adds new characters to translations without updating the font subsets,
     /// this test will fail.
+    ///
+    /// A char counts as covered when *either* probe succeeds, because each has a
+    /// blind spot: `glyph_width` is 0 for legitimately zero-advance combining
+    /// marks (Arabic harakat, Indic viramas/vowel signs), while `has_glyph`
+    /// false-negatives for chars owned by the family's replacement face itself
+    /// (egui quirk, e.g. `ℹ` in the primary face).
     #[test]
     fn install_fonts_covers_fluent_corpus() {
         let ctx = egui::Context::default();
@@ -89,7 +95,7 @@ mod tests {
             let font_id = egui::FontId::proportional(14.0);
             for c in crate::CHARSET.chars().filter(|c| !c.is_whitespace()) {
                 assert!(
-                    fonts.glyph_width(&font_id, c) > 0.0,
+                    fonts.has_glyph(&font_id, c) || fonts.glyph_width(&font_id, c) > 0.0,
                     "Missing glyph in installed fonts for char {c:?} (U+{:04X}) from Fluent corpus! Run scripts/update_fonts.sh to update font subsets.",
                     c as u32
                 );
