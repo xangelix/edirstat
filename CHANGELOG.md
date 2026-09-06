@@ -2,9 +2,9 @@
 
 ---
 
-## [Unreleased]
+## [v2.2.0] - 2026-09-06
 
-**eDirStat's upcoming release brings interactive treemap zoom with breadcrumb navigation, ten new languages (now 18 total) with automatic system locale detection, native file manager revealing, visual badges for cloud placeholders and special files, full Mac App Store / Apple App Sandbox packaging, a privacy policy with in-app legal notices, and hardened filesystem deletion and deduplication.**
+**eDirStat 2.2.0 brings interactive treemap zoom with breadcrumb navigation, ten new languages (now 18 total) with automatic system locale detection, native file manager revealing, visual badges for cloud placeholders and special files, full Mac App Store / Apple App Sandbox packaging, a privacy policy with in-app legal notices, and hardened filesystem deletion and deduplication.**
 
 > **✨ Highlights**
 >
