@@ -384,10 +384,13 @@ cat > "$APP_DIR/Contents/Info.plist" <<EOF
     <key>CFBundleDevelopmentRegion</key>  <string>en</string>
     <key>CFBundleLocalizations</key>
     <array>
-        <string>de</string>
         <string>en</string>
+        <string>ar</string>
+        <string>bn</string>
+        <string>de</string>
         <string>es</string>
         <string>fr</string>
+        <string>hi</string>
         <string>it</string>
         <string>ja</string>
         <string>ko</string>
@@ -396,6 +399,7 @@ cat > "$APP_DIR/Contents/Info.plist" <<EOF
         <string>pt</string>
         <string>ru</string>
         <string>tr</string>
+        <string>vi</string>
         <string>zh-Hans</string>
         <string>zh-Hant</string>
     </array>
