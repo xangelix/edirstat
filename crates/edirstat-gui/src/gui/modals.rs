@@ -2284,18 +2284,22 @@ impl GuiApp {
                                             res_scan
                                         };
                                         if res_scan.clicked() {
-                                            let mut path = std::path::PathBuf::from(target_path);
+                                            let path = std::path::PathBuf::from(target_path);
                                             #[cfg(not(target_family = "wasm"))]
-                                            if crate::gui::operations::is_macos_sandbox() && std::fs::read_dir(&path).is_err() {
+                                            let path = if crate::gui::operations::is_macos_sandbox()
+                                                && std::fs::read_dir(&path).is_err()
+                                            {
                                                 if let Some(granted) = rfd::FileDialog::new()
                                                     .set_directory(&path)
                                                     .pick_folder()
                                                 {
-                                                    path = granted;
+                                                    granted
                                                 } else {
                                                     return;
                                                 }
-                                            }
+                                            } else {
+                                                path
+                                            };
                                             self.start_scan(path);
                                             self.active_modal = None;
                                         }

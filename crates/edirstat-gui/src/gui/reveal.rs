@@ -146,7 +146,10 @@ fn reveal_linux(path: &Path) -> std::io::Result<()> {
     reveal_fallback(path)
 }
 
-#[cfg(not(target_family = "wasm"))]
+#[cfg(all(
+    not(target_family = "wasm"),
+    not(any(target_os = "macos", target_os = "windows"))
+))]
 fn reveal_fallback(path: &Path) -> std::io::Result<()> {
     let dir = if path.is_dir() {
         path
