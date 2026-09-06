@@ -6,12 +6,15 @@
 #   --skip-notarize      Developer ID, sign only          (quick local iteration)
 #   --ad-hoc / --unsigned Ad-hoc sign (-), skip notary    (dev / CI without secrets)
 #   --appstore           App Store / TestFlight → .pkg    (sandboxed, signed for Transporter)
+#   --validate [path]    Pre-flight validation on bundle/package (or test an existing target)
 #
 # Examples:
 #   ./scripts/package_macos.sh                          # production itch.io release build
 #   ./scripts/package_macos.sh --skip-notarize          # local signed test (skip notarize wait)
 #   ./scripts/package_macos.sh --ad-hoc                 # local dev or CI build (no secrets needed)
 #   ./scripts/package_macos.sh --appstore --build 3     # Mac App Store upload (.pkg)
+#   ./scripts/package_macos.sh --appstore --validate    # build App Store .pkg and run validation
+#   ./scripts/package_macos.sh --validate staging/eDirStat.app # validate existing .app bundle
 #
 # One-time prereqs:
 #   xcode-select --install
@@ -46,6 +49,8 @@ SKIP_NOTARIZE=0
 AD_HOC=0
 ENTITLEMENTS="${ENTITLEMENTS:-}"
 NO_DEFAULT_FEATURES="${NO_DEFAULT_FEATURES:-0}"
+VALIDATE=0
+VALIDATE_TARGET=""
 
 # App Store requires deployment target >= 12.0 for arm64-only builds,
 # and rustc reads this at link time
@@ -65,6 +70,15 @@ while [[ $# -gt 0 ]]; do
     --entitlements)         ENTITLEMENTS="$2"; shift 2 ;;
     --no-default-features|--no-online|--offline) NO_DEFAULT_FEATURES=1; shift ;;
     --online)               NO_DEFAULT_FEATURES=0; shift ;;
+    --validate)
+      VALIDATE=1
+      if [[ $# -ge 2 && "$2" != --* ]]; then
+        VALIDATE_TARGET="$2"
+        shift 2
+      else
+        shift
+      fi
+      ;;
     -h|--help)
       echo "Usage: $0 [options]"
       echo "Options:"
@@ -77,12 +91,176 @@ while [[ $# -gt 0 ]]; do
       echo "  --entitlements <file> Override entitlements plist"
       echo "  --no-default-features, --no-online"
       echo "                        Build without default features (omits GitHub update check)"
+      echo "  --validate [path]     Run pre-flight validation checks (on built output or specified target)"
       echo "  -h, --help            Show this help message"
       exit 0
       ;;
     *) echo "Unknown argument: $1" >&2; exit 2 ;;
   esac
 done
+
+# ---------- Validation functions ----------
+validate_bundle() {
+  local target_app="$1"
+  echo "==> [Validate] Inspecting application bundle: $target_app"
+
+  if [[ ! -d "$target_app" ]]; then
+    echo "ERROR: Bundle not found at $target_app" >&2
+    return 1
+  fi
+
+  # 1. Info.plist structure & syntax
+  local plist_path="$target_app/Contents/Info.plist"
+  if [[ -f "$plist_path" ]]; then
+    if command -v plutil >/dev/null 2>&1; then
+      echo "  ✓ Checking Info.plist syntax (plutil)..."
+      plutil -lint "$plist_path" >/dev/null || {
+        echo "ERROR: Info.plist failed plutil lint check." >&2
+        return 1
+      }
+    else
+      echo "  ✓ Info.plist exists."
+    fi
+  else
+    echo "ERROR: Info.plist is missing from $target_app" >&2
+    return 1
+  fi
+
+  # 2. Main Mach-O binary check
+  local bin_path="$target_app/Contents/MacOS/$BINARY_NAME"
+  if [[ ! -f "$bin_path" ]]; then
+    bin_path="$(find "$target_app/Contents/MacOS" -type f 2>/dev/null | head -1 || true)"
+  fi
+  if [[ -z "$bin_path" || ! -f "$bin_path" ]]; then
+    echo "ERROR: Missing executable in $target_app/Contents/MacOS" >&2
+    return 1
+  fi
+  if [[ ! -x "$bin_path" ]]; then
+    echo "ERROR: Binary at $bin_path is not executable" >&2
+    return 1
+  fi
+  if command -v file >/dev/null 2>&1; then
+    echo "  ✓ Binary format: $(file -b "$bin_path")"
+  fi
+
+  # 3. Codesign deep & strict verification
+  if command -v codesign >/dev/null 2>&1; then
+    echo "  ✓ Verifying code signature (deep, strict)..."
+    codesign --verify --deep --strict --verbose=2 "$target_app" 2>&1 | sed 's/^/    /' || {
+      echo "ERROR: Code signature verification failed on $target_app" >&2
+      return 1
+    }
+
+    # 4. Entitlements inspection
+    echo "  ✓ Inspecting embedded entitlements..."
+    local ent_dump
+    ent_dump="$(codesign -d --entitlements :- "$target_app" 2>/dev/null || true)"
+    if [[ "$MODE" == "appstore" ]] || echo "$ent_dump" | grep -q "com.apple.security.app-sandbox"; then
+      echo "$ent_dump" | grep -q "com.apple.security.app-sandbox" || {
+        echo "ERROR: Missing com.apple.security.app-sandbox entitlement for sandboxed build." >&2
+        return 1
+      }
+      echo "$ent_dump" | grep -q "com.apple.application-identifier" || {
+        echo "ERROR: Missing com.apple.application-identifier entitlement (required for App Store / TestFlight)." >&2
+        return 1
+      }
+      echo "  ✓ Sandboxing & application-identifier verified."
+      if [[ ! -s "$target_app/Contents/embedded.provisionprofile" ]]; then
+        echo "  ! Note: Contents/embedded.provisionprofile is empty or not present."
+      else
+        echo "  ✓ Embedded provisioning profile present."
+      fi
+    fi
+  fi
+
+  # 5. Gatekeeper assessment
+  if command -v spctl >/dev/null 2>&1; then
+    echo "  ✓ Checking Gatekeeper assessment (spctl)..."
+    if [[ "$AD_HOC" -eq 1 ]]; then
+      echo "    (Ad-hoc signed builds are bypassed from Gatekeeper assessment)"
+    else
+      spctl --assess --type exec --verbose "$target_app" 2>&1 | sed 's/^/    /' || {
+        if [[ "$SKIP_NOTARIZE" -eq 1 ]]; then
+          echo "    (Gatekeeper assessment reported un-notarized as expected for --skip-notarize)"
+        else
+          echo "WARNING: Gatekeeper assessment reported issues for $target_app" >&2
+        fi
+      }
+    fi
+  fi
+
+  echo "==> [Validate] Application bundle validation passed: $target_app"
+}
+
+validate_pkg() {
+  local target_pkg="$1"
+  echo "==> [Validate] Inspecting installer package: $target_pkg"
+
+  if [[ ! -f "$target_pkg" ]]; then
+    echo "ERROR: Package file not found: $target_pkg" >&2
+    return 1
+  fi
+
+  # 1. Package signature check
+  if command -v pkgutil >/dev/null 2>&1; then
+    echo "  ✓ Checking package signature (pkgutil)..."
+    pkgutil --check-signature "$target_pkg" 2>&1 | sed 's/^/    /' || {
+      echo "ERROR: Package signature check failed on $target_pkg" >&2
+      return 1
+    }
+  fi
+
+  # 2. Gatekeeper install check
+  if command -v spctl >/dev/null 2>&1; then
+    echo "  ✓ Checking installer Gatekeeper assessment (spctl)..."
+    spctl --assess --type install --verbose "$target_pkg" 2>&1 | sed 's/^/    /' || {
+      echo "WARNING: Gatekeeper install assessment reported issues for $target_pkg" >&2
+    }
+  fi
+
+  # 3. Remote App Store Connect pre-flight validation (xcrun altool)
+  if command -v xcrun >/dev/null 2>&1; then
+    local altool_ran=0
+    local api_key="${ALTOOL_KEY_ID:-${ALTOOL_API_KEY:-}}"
+    local api_issuer="${ALTOOL_ISSUER_ID:-${ALTOOL_API_ISSUER:-}}"
+    local altool_user="${ALTOOL_USER:-${APPLE_ID:-}}"
+    local altool_password="${ALTOOL_PASSWORD:-${APPLE_PASSWORD:-}}"
+
+    if [[ -n "$api_key" && -n "$api_issuer" ]]; then
+      echo "  ✓ Running App Store Connect validation via xcrun altool (API Key)..."
+      xcrun altool --validate-app -f "$target_pkg" -t osx \
+        --apiKey "$api_key" --apiIssuer "$api_issuer"
+      altool_ran=1
+    elif [[ -n "$altool_user" && -n "$altool_password" ]]; then
+      echo "  ✓ Running App Store Connect validation via xcrun altool (Credentials)..."
+      xcrun altool --validate-app -f "$target_pkg" -t osx \
+        -u "$altool_user" -p "$altool_password"
+      altool_ran=1
+    fi
+
+    if [[ "$altool_ran" -eq 0 ]]; then
+      echo "  ℹ Note: Remote App Store Connect validation skipped."
+      echo "    To enable remote pre-flight validation against App Store Connect, set:"
+      echo "    ALTOOL_KEY_ID + ALTOOL_ISSUER_ID (App Store Connect API key), or"
+      echo "    ALTOOL_USER + ALTOOL_PASSWORD (Apple ID credentials)."
+    fi
+  fi
+
+  echo "==> [Validate] Package validation passed: $target_pkg"
+}
+
+# ---------- Standalone validation dispatch ----------
+if [[ -n "$VALIDATE_TARGET" ]]; then
+  if [[ "$VALIDATE_TARGET" == *.pkg ]]; then
+    validate_pkg "$VALIDATE_TARGET"
+  elif [[ "$VALIDATE_TARGET" == *.app || -d "$VALIDATE_TARGET/Contents" ]]; then
+    validate_bundle "$VALIDATE_TARGET"
+  else
+    echo "ERROR: Unrecognized target to validate: $VALIDATE_TARGET (expected .app or .pkg)" >&2
+    exit 1
+  fi
+  exit 0
+fi
 
 # ---------- Select identities ----------
 find_identity() {  # $1 = grep pattern, $2 = policy flags
@@ -236,6 +414,12 @@ if [[ "$MODE" == "appstore" ]]; then
     --sign "$INSTALLER_IDENTITY" \
     "$PKG"
   pkgutil --check-signature "$PKG"
+
+  if [[ "$VALIDATE" -eq 1 ]]; then
+    validate_bundle "$APP_DIR"
+    validate_pkg "$PKG"
+  fi
+
   echo "==> Done: $PKG  → drag into Transporter (build $BUILD_NUMBER must be unique per upload)"
   exit 0
 fi
@@ -245,6 +429,9 @@ OUT_ZIP="${BINARY_NAME}-macos-${TARGET%%-*}-${VERSION}.zip"
 
 if [[ "$AD_HOC" -eq 1 ]]; then
   ditto -c -k --keepParent "$APP_DIR" "$OUT_ZIP"
+  if [[ "$VALIDATE" -eq 1 ]]; then
+    validate_bundle "$APP_DIR"
+  fi
   echo "==> Done (ad-hoc, for development/CI): $OUT_ZIP"
   exit 0
 fi
@@ -252,6 +439,9 @@ fi
 if [[ "$SKIP_NOTARIZE" -eq 1 ]]; then
   echo "==> Skipping notarization (--skip-notarize)"
   ditto -c -k --keepParent "$APP_DIR" "$OUT_ZIP"
+  if [[ "$VALIDATE" -eq 1 ]]; then
+    validate_bundle "$APP_DIR"
+  fi
   echo "==> Done (signed, NOT notarized): $OUT_ZIP"
   exit 0
 fi
@@ -272,5 +462,9 @@ ditto -c -k --keepParent "$APP_DIR" "$OUT_ZIP"
 # ---------- Verify ----------
 echo "==> Gatekeeper check:"
 spctl -a -vvv "$APP_DIR"
+
+if [[ "$VALIDATE" -eq 1 ]]; then
+  validate_bundle "$APP_DIR"
+fi
 
 echo "==> Done: $OUT_ZIP"
