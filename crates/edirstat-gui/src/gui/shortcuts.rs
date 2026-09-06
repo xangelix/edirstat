@@ -140,4 +140,76 @@ mod tests {
         ctx.set_os(egui::os::OperatingSystem::Mac);
         let _btn_mac = button_with_shortcut("Scan", &SHORTCUT_NEW_SCAN, &ctx);
     }
+
+    #[test]
+    fn test_all_shortcut_glyphs_supported_in_egui() {
+        let ctx = egui::Context::default();
+        crate::gui::fonts::install_fonts(&ctx);
+        let mut output = ctx.run_ui(egui::RawInput::default(), |_ui| {});
+        output.textures_delta.clear();
+
+        let shortcuts = [
+            &SHORTCUT_NEW_SCAN,
+            &SHORTCUT_RESCAN,
+            &SHORTCUT_RESCAN_F5,
+            &SHORTCUT_SAVE_SNAPSHOT,
+            &SHORTCUT_SEARCH,
+            &SHORTCUT_CLOSE,
+            &SHORTCUT_QUIT,
+            &SHORTCUT_TOGGLE_LEFT_PANEL,
+            &SHORTCUT_TOGGLE_RIGHT_PANEL,
+            &SHORTCUT_COLLAPSE_ALL,
+            &SHORTCUT_TRASH,
+            &SHORTCUT_DELETE,
+            &SHORTCUT_UP_ONE_LEVEL,
+            &SHORTCUT_ZOOM_SELECTION,
+            &SHORTCUT_ABOUT,
+        ];
+
+        let formatted_texts: Vec<String> =
+            shortcuts.iter().map(|sc| ctx.format_shortcut(sc)).collect();
+
+        let op_shortcuts = [
+            "⏎ Enter",
+            "⌫ Backspace",
+            "Del",
+            "⇧ Del",
+            "⌘C",
+            "⌥⌘C",
+            "Ctrl+C",
+            "Ctrl+Alt+C",
+        ];
+
+        ctx.fonts_mut(|fonts| {
+            let font_id = egui::FontId::proportional(14.0);
+            for text in &formatted_texts {
+                for ch in text.chars() {
+                    assert!(
+                        fonts.glyph_width(&font_id, ch) > 0.0,
+                        "Shortcut '{text}' contains unsupported glyph '{ch}' (U+{:04X}) in egui fonts!",
+                        ch as u32
+                    );
+                }
+            }
+
+            for text in op_shortcuts {
+                for ch in text.chars() {
+                    assert!(
+                        fonts.glyph_width(&font_id, ch) > 0.0,
+                        "Operation shortcut '{text}' contains unsupported glyph '{ch}' (U+{:04X}) in egui fonts!",
+                        ch as u32
+                    );
+                }
+            }
+
+            for ch in ['⌥', '⌫', '⏎', '⇧', '⌘', '☁', '🔒', '⛓', '⮡', '⚡', '🛠'] {
+                let w = fonts.glyph_width(&font_id, ch);
+                assert!(
+                    w > 0.0,
+                    "Official symbol '{ch}' (U+{:04X}) must have width > 0!",
+                    ch as u32
+                );
+            }
+        });
+    }
 }
