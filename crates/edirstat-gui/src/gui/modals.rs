@@ -1546,9 +1546,18 @@ impl GuiApp {
 
                                 ui.add_space(16.0);
 
-                                if ui.button(t!("modal-about-licenses-btn")).clicked() {
-                                    self.show_licenses = true;
-                                }
+                                ui.horizontal(|ui| {
+                                    if ui.button(t!("modal-about-licenses-btn")).clicked() {
+                                        self.show_licenses = true;
+                                    }
+                                    ui.add_space(8.0);
+                                    ui.hyperlink_to("edirstat.com", "https://edirstat.com");
+                                    ui.add_space(8.0);
+                                    ui.hyperlink_to(
+                                        "Privacy Policy",
+                                        "https://raw.githubusercontent.com/xangelix/edirstat/main/PRIVACY.md",
+                                    );
+                                });
                             });
                         });
                 });
