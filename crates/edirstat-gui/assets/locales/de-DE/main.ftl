@@ -403,3 +403,8 @@ dedup-pref-dir-hint = z. B. /home/user/Archive
 
 file-menu-close = Scan schließen
 file-menu-quit = Beenden
+
+badge-dataless-cloud = Cloud- / Dataless-Datei
+badge-symlink = Symbolischer Link
+badge-special-file = Spezialdatei (Pipe / Socket / Gerät)
+badge-permission-denied = Zugriff verweigert

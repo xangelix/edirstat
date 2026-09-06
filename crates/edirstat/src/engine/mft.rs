@@ -1129,6 +1129,8 @@ fn process_mft_chunks(
                         name: CompactString::new(name_str),
                         size: actual_size,
                         is_symlink: entry.flags & 2 != 0,
+                        is_dataless: false,
+                        is_special: false,
                         modified_timestamp: entry.modified_timestamp,
                         created_timestamp: entry.created_timestamp,
                         no_permission: false,

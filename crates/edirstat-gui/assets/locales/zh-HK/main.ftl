@@ -397,3 +397,8 @@ dedup-pref-dir-hint = 例如 /home/user/Archive
 
 file-menu-close = 關閉掃描
 file-menu-quit = 結束
+
+badge-dataless-cloud = 雲端 / 無本機數據檔案
+badge-symlink = 符號連結
+badge-special-file = 特殊檔案 (管道 / 套接字 / 裝置)
+badge-permission-denied = 存取被拒絕

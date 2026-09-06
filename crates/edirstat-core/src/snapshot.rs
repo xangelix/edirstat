@@ -247,7 +247,7 @@ pub fn save_snapshot_to_bytes(
         let mod_eq_parent = node.parent != crate::arena::NO_INDEX && mod_delta == 0;
         let cre_eq_mod = cre_delta == 0;
 
-        // 1. Pack directory, symlink, and permission flags into the control byte
+        // 1. Pack directory, symlink, permission, dataless, and special flags into the control byte
         let mut control = 0u8;
         if node.is_directory() {
             control |= FileNode::FLAG_DIRECTORY;
@@ -257,6 +257,12 @@ pub fn save_snapshot_to_bytes(
         }
         if node.has_no_permission() {
             control |= FileNode::FLAG_NO_PERMISSION;
+        }
+        if node.is_dataless() {
+            control |= FileNode::FLAG_DATALESS;
+        }
+        if node.is_special() {
+            control |= FileNode::FLAG_SPECIAL;
         }
         if mod_eq_parent {
             control |= FLAG_MODIFIED_EQ_PARENT;
@@ -668,6 +674,8 @@ pub fn load_snapshot_from_bytes(
             let is_dir = (control & FileNode::FLAG_DIRECTORY) != 0;
             let is_symlink = (control & FileNode::FLAG_SYMLINK) != 0;
             let no_permission = (control & FileNode::FLAG_NO_PERMISSION) != 0;
+            let is_dataless = (control & FileNode::FLAG_DATALESS) != 0;
+            let is_special = (control & FileNode::FLAG_SPECIAL) != 0;
             let mod_eq_parent = (control & FLAG_MODIFIED_EQ_PARENT) != 0;
             let cre_eq_mod = (control & FLAG_CREATED_EQ_MODIFIED) != 0;
 
@@ -725,6 +733,12 @@ pub fn load_snapshot_from_bytes(
             node.file_count = file_count;
             if no_permission {
                 node.flags |= FileNode::FLAG_NO_PERMISSION;
+            }
+            if is_dataless {
+                node.flags |= FileNode::FLAG_DATALESS;
+            }
+            if is_special {
+                node.flags |= FileNode::FLAG_SPECIAL;
             }
 
             decoded[idx] = node;
@@ -1646,6 +1660,57 @@ mod tests {
         assert!(frame.starts_with(&[0x28, 0xB5, 0x2F, 0xFD]));
         let res = load_snapshot_from_bytes(&frame);
         assert!(matches!(res, Err(crate::EdirstatError::InvalidMagic)));
+        Ok(())
+    }
+
+    #[test]
+    fn test_snapshot_roundtrip_with_dataless_and_special_flags() -> Result<(), crate::EdirstatError>
+    {
+        let mut pool = StringPool::new();
+        let root_id = pool.get_or_insert(b"root");
+        let cloud_id = pool.get_or_insert(b"cloud_placeholder.mov");
+        let fifo_id = pool.get_or_insert(b"stream.pipe");
+        let regular_id = pool.get_or_insert(b"standard.txt");
+
+        let mut nodes = vec![
+            FileNode::new(root_id, None, true, false, 100, 100),
+            FileNode::new(cloud_id, Some(0), false, false, 200, 200),
+            FileNode::new(fifo_id, Some(0), false, false, 300, 300),
+            FileNode::new(regular_id, Some(0), false, false, 400, 400),
+        ];
+        nodes[0].first_child = 1;
+        nodes[1].next_sibling = 2;
+        nodes[2].next_sibling = 3;
+
+        nodes[1].flags |= FileNode::FLAG_DATALESS;
+        nodes[1].size = 50_000_000_000; // 50 GB cloud file
+        nodes[2].flags |= FileNode::FLAG_SPECIAL;
+        nodes[2].size = 0; // FIFO pipe
+        nodes[3].size = 1024; // regular file
+
+        let bytes = save_snapshot_to_bytes(&nodes, &pool, false)?;
+        let (arena, pool_loaded) = load_snapshot_from_bytes(&bytes)?;
+        let loaded = arena.nodes();
+
+        assert_eq!(loaded.len(), 4);
+        assert!(loaded[1].is_dataless());
+        assert!(!loaded[1].is_special());
+        assert_eq!(loaded[1].size, 50_000_000_000);
+        assert_eq!(
+            pool_loaded.get(loaded[1].name_id),
+            Some("cloud_placeholder.mov")
+        );
+
+        assert!(!loaded[2].is_dataless());
+        assert!(loaded[2].is_special());
+        assert_eq!(loaded[2].size, 0);
+        assert_eq!(pool_loaded.get(loaded[2].name_id), Some("stream.pipe"));
+
+        assert!(!loaded[3].is_dataless());
+        assert!(!loaded[3].is_special());
+        assert_eq!(loaded[3].size, 1024);
+        assert_eq!(pool_loaded.get(loaded[3].name_id), Some("standard.txt"));
+
         Ok(())
     }
 }

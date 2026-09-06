@@ -31,7 +31,10 @@ FONTS = [
     "NotoSansKR-Regular.otf",
     "NotoSansBengali-Regular.ttf",
     "NotoSansDevanagari-Regular.ttf",
+    "NotoSansSymbols2-Regular.ttf",
 ]
+
+KEYBOARD_SYMBOLS = "⌥⌫⏎⇧⌘⎋⬅⬆⮨☁🔒⛓⮡⚡🛠"
 
 
 def human_size(num_bytes: int) -> str:
@@ -44,15 +47,26 @@ def human_size(num_bytes: int) -> str:
 
 def subset_font(corpus: Path, src: Path, dst: Path) -> tuple[int, int]:
     """Subset src onto the corpus codepoints; return (codepoints, glyphs) kept."""
-    subset.main(
-        [
-            str(src),
-            f"--text-file={corpus}",
-            f"--output-file={dst}",
-            # Keep shaping tables for the retained glyphs (Indic conjuncts).
-            "--layout-features=*",
-        ]
-    )
+    import tempfile
+
+    corpus_text = corpus.read_text(encoding="utf-8") + KEYBOARD_SYMBOLS
+    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", delete=False) as tf:
+        tf.write(corpus_text)
+        temp_corpus = tf.name
+
+    try:
+        subset.main(
+            [
+                str(src),
+                f"--text-file={temp_corpus}",
+                f"--output-file={dst}",
+                # Keep shaping tables for the retained glyphs (Indic conjuncts).
+                "--layout-features=*",
+            ]
+        )
+    finally:
+        Path(temp_corpus).unlink(missing_ok=True)
+
     font = TTFont(dst)
     codepoints = len(font.getBestCmap())
     glyphs = font["maxp"].numGlyphs

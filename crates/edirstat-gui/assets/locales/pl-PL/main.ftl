@@ -408,3 +408,8 @@ dedup-pref-dir-hint = np. /home/user/Archive
 
 file-menu-close = Zamknij skanowanie
 file-menu-quit = Zakończ
+
+badge-dataless-cloud = Plik w chmurze / bez danych lokalnych
+badge-symlink = Dowiązanie symboliczne
+badge-special-file = Plik specjalny (Potok / Gniazdo / Urządzenie)
+badge-permission-denied = Odmowa dostępu

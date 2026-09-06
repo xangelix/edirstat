@@ -415,3 +415,8 @@ dedup-pref-dir-hint = напр. /home/user/Archive
 
 file-menu-close = Закрыть сканирование
 file-menu-quit = Выйти
+
+badge-dataless-cloud = Облачный файл / без локальных данных
+badge-symlink = Символическая ссылка
+badge-special-file = Специальный файл (Канал / Сокет / Устройство)
+badge-permission-denied = В доступе отказано

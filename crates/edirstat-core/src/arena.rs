@@ -49,6 +49,8 @@ impl FileNode {
     pub const FLAG_DIRECTORY: u8 = 1 << 0;
     pub const FLAG_SYMLINK: u8 = 1 << 1;
     pub const FLAG_NO_PERMISSION: u8 = 1 << 2;
+    pub const FLAG_DATALESS: u8 = 1 << 5;
+    pub const FLAG_SPECIAL: u8 = 1 << 6;
 
     #[must_use]
     #[inline]
@@ -101,6 +103,18 @@ impl FileNode {
 
     #[must_use]
     #[inline]
+    pub const fn is_dataless(&self) -> bool {
+        (self.flags & Self::FLAG_DATALESS) != 0
+    }
+
+    #[must_use]
+    #[inline]
+    pub const fn is_special(&self) -> bool {
+        (self.flags & Self::FLAG_SPECIAL) != 0
+    }
+
+    #[must_use]
+    #[inline]
     pub const fn parent_opt(&self) -> Option<u32> {
         if self.parent == NO_INDEX {
             None
@@ -142,6 +156,12 @@ impl FileNode {
         );
         if meta.no_permission {
             node.flags |= Self::FLAG_NO_PERMISSION;
+        }
+        if meta.is_dataless {
+            node.flags |= Self::FLAG_DATALESS;
+        }
+        if meta.is_special {
+            node.flags |= Self::FLAG_SPECIAL;
         }
         if !meta.is_dir {
             node.size = meta.len;
@@ -650,6 +670,8 @@ mod tests {
             name: "test.txt".into(),
             is_dir: false,
             is_symlink: true,
+            is_dataless: false,
+            is_special: false,
             len: 12345,
             modified_timestamp: 10,
             created_timestamp: 20,
@@ -661,6 +683,8 @@ mod tests {
         assert_eq!(node.parent, 3);
         assert!(!node.is_directory());
         assert!(node.is_symlink());
+        assert!(!node.is_dataless());
+        assert!(!node.is_special());
         assert_eq!(node.size, 12345);
         assert_eq!(node.modified_timestamp, 10);
     }
@@ -921,6 +945,8 @@ mod tests {
             name: "noperm".into(),
             is_dir: true,
             is_symlink: false,
+            is_dataless: false,
+            is_special: false,
             len: 999,
             modified_timestamp: 10,
             created_timestamp: 20,
@@ -937,6 +963,8 @@ mod tests {
             name: "file.bin".into(),
             is_dir: false,
             is_symlink: false,
+            is_dataless: false,
+            is_special: false,
             len: 999,
             modified_timestamp: 10,
             created_timestamp: 20,
@@ -1030,10 +1058,13 @@ mod tests {
 }
 
 #[derive(Debug, Clone)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct EntryMetadata {
     pub name: CompactString,
     pub is_dir: bool,
     pub is_symlink: bool,
+    pub is_dataless: bool,
+    pub is_special: bool,
     pub len: u64,
     pub modified_timestamp: u32,
     pub created_timestamp: u32,
@@ -1050,6 +1081,17 @@ impl EntryMetadata {
             Ok(metadata) => {
                 let is_dir = metadata.is_dir();
                 let is_symlink = metadata.is_symlink();
+                let is_dataless = crate::fs_utils::is_dataless_file(&metadata);
+
+                #[cfg(unix)]
+                let is_special = {
+                    use std::os::unix::fs::FileTypeExt as _;
+                    let ft = metadata.file_type();
+                    ft.is_fifo() || ft.is_socket() || ft.is_block_device() || ft.is_char_device()
+                };
+                #[cfg(not(unix))]
+                let is_special = false;
+
                 let len = metadata.len();
 
                 let modified_timestamp = metadata
@@ -1065,6 +1107,8 @@ impl EntryMetadata {
                     name,
                     is_dir,
                     is_symlink,
+                    is_dataless,
+                    is_special,
                     len,
                     modified_timestamp,
                     created_timestamp,
@@ -1082,6 +1126,8 @@ impl EntryMetadata {
                     name,
                     is_dir,
                     is_symlink,
+                    is_dataless: false,
+                    is_special: false,
                     len: 0,
                     modified_timestamp: 0,
                     created_timestamp: 0,

@@ -13,9 +13,29 @@ use smallvec::SmallVec;
 
 use super::{ActiveModal, GuiApp, theme};
 use crate::{
-    arena::{FileArenaSnapshot, NO_INDEX},
+    arena::{FileArenaSnapshot, FileNode, NO_INDEX},
     colors::{AppTheme, get_current_theme},
 };
+
+/// Resolves the primary icon badge and localized tooltip for a file node.
+#[must_use]
+pub(crate) fn node_badge(
+    node: &FileNode,
+) -> (&'static str, Option<std::borrow::Cow<'static, str>>) {
+    if node.has_no_permission() {
+        ("🔒", Some(t!("badge-permission-denied")))
+    } else if node.is_dataless() {
+        ("☁", Some(t!("badge-dataless-cloud")))
+    } else if node.is_symlink() {
+        ("🔗", Some(t!("badge-symlink")))
+    } else if node.is_special() {
+        ("⚙", Some(t!("badge-special-file")))
+    } else if node.is_directory() {
+        ("📁", None)
+    } else {
+        ("📄", None)
+    }
+}
 
 pub struct TableProviderWrapper<'a> {
     snapshot: &'a FileArenaSnapshot,
@@ -651,13 +671,7 @@ impl GuiApp {
             ui.add_space(indent_level as f32 * 22.0);
 
             // Icon & Expand Arrow
-            let icon_text = if node.is_symlink() {
-                "🔗"
-            } else if node.is_directory() {
-                "📁"
-            } else {
-                "📄"
-            };
+            let (icon_text, badge_tooltip) = node_badge(node);
 
             ui.scope(|ui| {
                 ui.spacing_mut().interact_size.x = 0.0;
@@ -713,7 +727,10 @@ impl GuiApp {
                 }
             });
 
-            ui.label(icon_text);
+            let icon_label = ui.label(icon_text);
+            if let Some(tooltip) = badge_tooltip {
+                icon_label.on_hover_text(tooltip);
+            }
 
             // Node Name / Label with automatic left-aligned truncation
             let cleaned_name = if node.parent_opt().is_none() {
@@ -1010,13 +1027,7 @@ impl GuiApp {
                         highlight_duplicates && selected_duplicates.contains(&(row_idx as u32));
                     let is_selected = selected_rows.contains(row_idx as u32);
 
-                    let icon_text = if node.is_symlink() {
-                        "🔗"
-                    } else if node.is_directory() {
-                        "📁"
-                    } else {
-                        "📄"
-                    };
+                    let (icon_text, badge_tooltip) = node_badge(node);
 
                     let cleaned_name = if node.parent_opt().is_none() {
                         crate::arena::clean_unc_path(name)
@@ -1031,12 +1042,17 @@ impl GuiApp {
                         rich_name = rich_name.strong().color(text_color);
                     } else if is_duplicate {
                         rich_name = rich_name.color(theme::GLOW_INNER_CORE);
+                    } else if node.is_dataless() {
+                        rich_name = rich_name.color(ui.visuals().weak_text_color());
                     }
 
                     let response = ui
                         .horizontal(|ui| {
                             ui.spacing_mut().item_spacing.x = 4.0;
-                            ui.label(icon_text);
+                            let icon_label = ui.label(icon_text);
+                            if let Some(tooltip) = badge_tooltip {
+                                icon_label.on_hover_text(tooltip);
+                            }
                             let name_width = ui.available_width().max(50.0);
                             ui.allocate_ui(
                                 egui::vec2(name_width, ui.spacing().interact_size.y),
@@ -1505,14 +1521,11 @@ impl GuiApp {
                 ui.vertical(|ui| {
                     // Large Icon and Name
                     ui.horizontal(|ui| {
-                        let icon = if is_sym {
-                            "🔗"
-                        } else if is_dir {
-                            "📁"
-                        } else {
-                            "📄"
-                        };
-                        ui.label(egui::RichText::new(icon).size(24.0));
+                        let (icon, badge_tooltip) = node_badge(node);
+                        let icon_label = ui.label(egui::RichText::new(icon).size(24.0));
+                        if let Some(tooltip) = badge_tooltip {
+                            icon_label.on_hover_text(tooltip);
+                        }
                         ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
                         ui.label(egui::RichText::new(&*cleaned_name).strong().size(14.0));
                     });
@@ -1534,8 +1547,14 @@ impl GuiApp {
                         .show(ui, |ui| {
                             // Type field
                             ui.weak(t!("explorer-grid-type"));
-                            let type_str = if is_sym {
+                            let type_str = if node.has_no_permission() {
+                                t!("badge-permission-denied")
+                            } else if node.is_dataless() {
+                                t!("badge-dataless-cloud")
+                            } else if is_sym {
                                 t!("type-symlink")
+                            } else if node.is_special() {
+                                t!("badge-special-file")
                             } else if is_dir {
                                 t!("type-directory")
                             } else {
@@ -1870,6 +1889,26 @@ fn get_unix_metadata(path_str: &str) -> Option<(String, String, String)> {
         |g| g.name().to_string_lossy().into_owned(),
     );
 
+    #[cfg(unix)]
+    let file_type_char = {
+        use std::os::unix::fs::FileTypeExt as _;
+        if metadata.is_dir() {
+            'd'
+        } else if metadata.file_type().is_symlink() {
+            'l'
+        } else if metadata.file_type().is_fifo() {
+            'p'
+        } else if metadata.file_type().is_socket() {
+            's'
+        } else if metadata.file_type().is_block_device() {
+            'b'
+        } else if metadata.file_type().is_char_device() {
+            'c'
+        } else {
+            '-'
+        }
+    };
+    #[cfg(not(unix))]
     let file_type_char = if metadata.is_dir() {
         'd'
     } else if metadata.file_type().is_symlink() {
@@ -2058,7 +2097,7 @@ pub fn compare_nodes_by_column(
 mod tests {
     use std::{cmp::Ordering, sync::Arc};
 
-    use super::compare_nodes_by_column;
+    use super::{compare_nodes_by_column, node_badge};
     use crate::arena::{FileArenaSnapshot, FileNode, NodeStorage, StringPool};
 
     #[test]
@@ -2129,5 +2168,36 @@ mod tests {
             compare_nodes_by_column(&snapshot, 99, 2, 1),
             Ordering::Greater
         );
+    }
+
+    #[test]
+    fn test_node_badge_resolution() {
+        let regular = FileNode::new(crate::arena::StringId(0), None, false, false, 0, 0);
+        let dir = FileNode::new(crate::arena::StringId(0), None, true, false, 0, 0);
+        let symlink = FileNode::new(crate::arena::StringId(0), None, false, true, 0, 0);
+        let mut dataless = FileNode::new(crate::arena::StringId(0), None, false, false, 0, 0);
+        dataless.flags |= FileNode::FLAG_DATALESS;
+        let mut special = FileNode::new(crate::arena::StringId(0), None, false, false, 0, 0);
+        special.flags |= FileNode::FLAG_SPECIAL;
+        let mut noperm = FileNode::new(crate::arena::StringId(0), None, false, false, 0, 0);
+        noperm.flags |= FileNode::FLAG_NO_PERMISSION;
+
+        assert_eq!(node_badge(&regular).0, "📄");
+        assert_eq!(node_badge(&regular).1, None);
+
+        assert_eq!(node_badge(&dir).0, "📁");
+        assert_eq!(node_badge(&dir).1, None);
+
+        assert_eq!(node_badge(&symlink).0, "🔗");
+        assert!(node_badge(&symlink).1.is_some());
+
+        assert_eq!(node_badge(&dataless).0, "☁");
+        assert!(node_badge(&dataless).1.is_some());
+
+        assert_eq!(node_badge(&special).0, "⚙");
+        assert!(node_badge(&special).1.is_some());
+
+        assert_eq!(node_badge(&noperm).0, "🔒");
+        assert!(node_badge(&noperm).1.is_some());
     }
 }

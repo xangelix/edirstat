@@ -403,3 +403,8 @@ dedup-pref-dir-hint = bijv. /home/user/Archive
 
 file-menu-close = Scan sluiten
 file-menu-quit = Afsluiten
+
+badge-dataless-cloud = Cloud- / gegevensloos bestand
+badge-symlink = Symbolische koppeling
+badge-special-file = Speciaal bestand (Pijp / Socket / Apparaat)
+badge-permission-denied = Toegang geweigerd

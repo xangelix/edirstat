@@ -117,6 +117,8 @@ impl Coordinator {
                         name,
                         size,
                         is_symlink,
+                        is_dataless,
+                        is_special,
                         modified_timestamp,
                         created_timestamp,
                         no_permission,
@@ -145,6 +147,12 @@ impl Coordinator {
                             file_node.size = size;
                             if no_permission {
                                 file_node.flags |= FileNode::FLAG_NO_PERMISSION;
+                            }
+                            if is_dataless {
+                                file_node.flags |= FileNode::FLAG_DATALESS;
+                            }
+                            if is_special {
+                                file_node.flags |= FileNode::FLAG_SPECIAL;
                             }
                             arena.push(file_node);
                             last_child_map.push(NO_INDEX);
@@ -399,6 +407,8 @@ mod tests {
             name: CompactString::new("x"),
             size: 10,
             is_symlink: false,
+            is_dataless: false,
+            is_special: false,
             modified_timestamp: 0,
             created_timestamp: 0,
             no_permission: false,
@@ -428,6 +438,8 @@ mod tests {
             name: CompactString::default(),
             size: 0,
             is_symlink: false,
+            is_dataless: false,
+            is_special: false,
             modified_timestamp: 0,
             created_timestamp: 0,
             no_permission: false,
@@ -503,6 +515,8 @@ mod tests {
                 name: CompactString::new("f1"),
                 size: 64,
                 is_symlink: false,
+                is_dataless: false,
+                is_special: false,
                 modified_timestamp: 0,
                 created_timestamp: 0,
                 no_permission: false,
@@ -513,6 +527,8 @@ mod tests {
                 name: CompactString::new("f2"),
                 size: 36,
                 is_symlink: false,
+                is_dataless: false,
+                is_special: false,
                 modified_timestamp: 0,
                 created_timestamp: 0,
                 no_permission: false,
@@ -569,6 +585,8 @@ mod tests {
                 name: CompactString::new("A.TXT"),
                 size: 10,
                 is_symlink: false,
+                is_dataless: false,
+                is_special: false,
                 modified_timestamp: 0,
                 created_timestamp: 0,
                 no_permission: false,
@@ -579,6 +597,8 @@ mod tests {
                 name: CompactString::new("b.txt"),
                 size: 20,
                 is_symlink: false,
+                is_dataless: false,
+                is_special: false,
                 modified_timestamp: 0,
                 created_timestamp: 0,
                 no_permission: false,
@@ -595,6 +615,65 @@ mod tests {
         assert_eq!(stats[0].0.as_str(), "txt");
         assert_eq!(stats[0].1, 30);
         assert_eq!(stats[0].2, 2);
+        Ok(())
+    }
+
+    #[test]
+    fn test_coordinator_populates_dataless_and_special_flags() -> Result<(), crate::EdirstatError> {
+        let shared = Arc::new(SharedState::new());
+        let (tx, rx) = crossbeam::channel::unbounded();
+
+        tx.send(vec![
+            ScanEvent::FileDiscovered {
+                parent_worker_id: 0,
+                local_parent_id: LocalId(0),
+                name: CompactString::new("cloud.mp4"),
+                size: 1_000_000,
+                is_symlink: false,
+                is_dataless: true,
+                is_special: false,
+                modified_timestamp: 0,
+                created_timestamp: 0,
+                no_permission: false,
+            },
+            ScanEvent::FileDiscovered {
+                parent_worker_id: 0,
+                local_parent_id: LocalId(0),
+                name: CompactString::new("ipc.sock"),
+                size: 0,
+                is_symlink: false,
+                is_dataless: false,
+                is_special: true,
+                modified_timestamp: 0,
+                created_timestamp: 0,
+                no_permission: false,
+            },
+        ])
+        .map_err(std::io::Error::other)?;
+        drop(tx);
+
+        let mut coordinator = Coordinator::new(rx, shared.clone());
+        coordinator.run_coordinator_loop("/root");
+
+        let snapshot = shared.current_snapshot.load();
+        assert_eq!(snapshot.nodes.len(), 3);
+
+        let cloud_node = &snapshot.nodes[1];
+        assert_eq!(
+            snapshot.string_pool.get(cloud_node.name_id),
+            Some("cloud.mp4")
+        );
+        assert!(cloud_node.is_dataless());
+        assert!(!cloud_node.is_special());
+
+        let special_node = &snapshot.nodes[2];
+        assert_eq!(
+            snapshot.string_pool.get(special_node.name_id),
+            Some("ipc.sock")
+        );
+        assert!(!special_node.is_dataless());
+        assert!(special_node.is_special());
+
         Ok(())
     }
 }

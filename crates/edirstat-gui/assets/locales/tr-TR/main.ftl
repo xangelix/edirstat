@@ -398,3 +398,8 @@ dedup-pref-dir-hint = örn. /home/user/Archive
 
 file-menu-close = Taramayı Kapat
 file-menu-quit = Çıkış
+
+badge-dataless-cloud = Bulut / Verisiz Dosya
+badge-symlink = Sembolik Bağlantı
+badge-special-file = Özel Dosya (Kanal / Soket / Aygıt)
+badge-permission-denied = Erişim Engellendi

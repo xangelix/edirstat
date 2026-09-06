@@ -397,3 +397,8 @@ dedup-pref-dir-hint = 예: /home/user/Archive
 
 file-menu-close = 스캔 닫기
 file-menu-quit = 종료
+
+badge-dataless-cloud = 클라우드 / 데이터리스 파일
+badge-symlink = 심볼릭 링크
+badge-special-file = 특수 파일 (파이프 / 소켓 / 디바이스)
+badge-permission-denied = 액세스 거부됨

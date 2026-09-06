@@ -397,3 +397,8 @@ dedup-pref-dir-hint = 例: /home/user/Archive
 
 file-menu-close = スキャンを閉じる
 file-menu-quit = 終了
+
+badge-dataless-cloud = クラウド / データレスファイル
+badge-symlink = シンボリックリンク
+badge-special-file = 特殊ファイル (パイプ / ソケット / デバイス)
+badge-permission-denied = アクセスが拒否されました

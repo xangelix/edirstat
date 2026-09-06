@@ -403,3 +403,8 @@ dedup-pref-dir-hint = p. ex. /home/user/Archive
 
 file-menu-close = Fermer l'analyse
 file-menu-quit = Quitter
+
+badge-dataless-cloud = Fichier cloud / sans données locales
+badge-symlink = Lien symbolique
+badge-special-file = Fichier spécial (Tube / Socket / Périphérique)
+badge-permission-denied = Accès refusé

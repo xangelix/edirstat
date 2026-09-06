@@ -32,6 +32,7 @@ FONTS=(
     "NotoSansKR-Regular.otf|$CJK_BASE/KR/NotoSansKR-Regular.otf|69975a0ac8472717870aefeab0a4d52739308d90856b9955313b2ad5e0148d68"
     "NotoSansBengali-Regular.ttf|$GFONTS_BASE/notosansbengali/NotoSansBengali%5Bwdth,wght%5D.ttf|dcd42978094e584a849c84a51450eeac40c8826057d566ea6d4b9627a403a05a"
     "NotoSansDevanagari-Regular.ttf|$GFONTS_BASE/notosansdevanagari/NotoSansDevanagari%5Bwdth,wght%5D.ttf|9ce7b04f60e363d8870e5997744cf85cf69d38a4d7d129d364d92a3b14b461d7"
+    "NotoSansSymbols2-Regular.ttf|$GFONTS_BASE/notosanssymbols2/NotoSansSymbols2-Regular.ttf|7d5fb73b7ca67a6798101741f5d280a3d016a56a197afcd4199dbb57b4b82a21"
 )
 
 for entry in "${FONTS[@]}"; do
