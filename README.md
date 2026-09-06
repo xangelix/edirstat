@@ -60,16 +60,29 @@ Purchasing precompiled packages directly funds the engineering efforts required 
 
 - ⚡ **Work-Stealing Multi-threading:** Powered by a lock-free task injector queue that keeps all CPU cores saturated during scanning-- inspired by `ripgrep`.
 - 🪟 **NTFS MFT Scanner (Windows & Linux):** Accesses raw NTFS volumes to parse the Master File Table directly, bypassing OS filesystem bottlenecks for near-instantaneous drive indexing (requires administrative/root privileges). Exported `$MFT` files can also be parsed offline on any platform.
-- 👥 **7-Stage Deduplication Engine:** Safely identifies byte-for-byte identical files using cryptographically secure BLAKE3 hashing. It is hardlink-aware to protect shared filesystem links.
-- 🌍 **Full Localization:** Community-translated interface in 14 languages (English, Chinese (Simplified), Chinese (Traditional), Dutch, French, German, Italian, Japanese, Korean, Polish, Portuguese, Russian, Spanish, and Turkish) with embedded fallback fonts and a built-in language selector.
+- 👥 **7-Stage Deduplication Engine:** Safely identifies byte-for-byte identical files using cryptographically secure BLAKE3 hashing. It is hardlink-aware to protect shared filesystem links and automatically filters out dataless cloud placeholders, special devices, and restricted entries.
+- 🌍 **Full Localization:** Community-translated interface in 18 languages (English, Arabic, Bengali, Chinese (Simplified), Chinese (Traditional), Dutch, French, German, Hindi, Italian, Japanese, Korean, Polish, Portuguese, Russian, Spanish, Turkish, and Vietnamese) with automatic system language detection and dedicated Google Noto font subsets.
 - 🎨 **Theme System:** System (auto-detected), Dark, Light, and High Contrast themes.
 - ⏹️ **Scan Control:** Cancel in-progress scans at any time, and restrict scans to a single filesystem (`-x`).
 - 🌐 **Browser Snapshot Viewer:** Explore saved `.edst` snapshots in the browser via the wasm build on [edirstat.com](https://edirstat.com).
 - 📦 **Fast Compressed Snapshots:** Writes structured tree snapshots to disk with Zstd compression in a compact columnar layout (v3) that decodes in milliseconds; legacy v2 snapshots remain readable. Cross-compatible on all little-endian platforms.
-- 📊 **Dynamic Treemap Visualization:** Features a responsive layout canvas with smooth HSL gradient scaling based on file extensions.
+- 📊 **Dynamic Treemap Visualization:** Features a responsive layout canvas with smooth HSL gradient scaling based on file extensions, interactive subtree zoom navigation with directory breadcrumbs, and right-click folder focusing.
+- ☁️ **Cloud & Special File Badges:** Instantly identifies cloud placeholders (`☁` iCloud, OneDrive, Dropbox dataless files), symbolic links (`🔗`), Unix devices (`⚙` FIFOs, sockets, block/char devices), and permission restrictions (`🔒`) with localized tooltips across the tree, table, and details panels.
+- 🗁 **Native File Manager Reveal:** Highlight and select files natively in macOS Finder, Windows File Explorer, and Linux file managers, or launch terminal sessions directly at any folder.
 - 🗂️ **Layout Modes and Plots:** Choose between the different layout modes, both featuring data visualizations that can be cycled between.
 - 📋 **Bulk Operations & Multi-Select:** Select multiple rows in the directory tree or deduplicator to execute batch trashing, deletion, or linking.
-- 🛡️ **Safe & Native:** Built completely in safe, pure Rust with immediate-mode UI rendering and cross-platform support.
+- 🛡️ **Safe & Native:** Built completely in safe, pure Rust with immediate-mode UI rendering and cross-platform support. macOS App Store releases run under Apple's App Sandbox with zero networking, zero telemetry, and 100% local processing.
+
+---
+
+## 🔒 Privacy & Local-First Design
+
+`eDirStat` is engineered as a private, local-first utility:
+
+- **100% Local Filesystem Analysis:** Scans, metadata traversal, and analytics are performed entirely in local memory on your CPU. No file names, contents, paths, or disk metrics are ever uploaded to external servers.
+- **Zero Telemetry:** No analytics beacons, tracking cookies, advertising SDKs, or background crash reporters are included.
+- **App Sandbox Hardening:** The official macOS App Store release runs strictly within Apple's App Sandbox without network entitlements.
+- For complete legal details, see our [Privacy Policy](PRIVACY.md).
 
 ---
 
@@ -123,25 +136,29 @@ edirstat /path -x                            # Restrict the scan to the same fil
 ### Navigating the User Interface
 
 1. **Scan a Directory:**
-   Click the **📁 Scan Directory** button in the top menu bar to open the scan dialog, which lists detected drives and mount points for quick selection (or type a path directly). Scans can be cancelled while running.
+   Click the **📁 Scan Directory** button in the top menu bar (or press <kbd>Ctrl+O</kbd> / <kbd>⌘O</kbd>) to open the scan dialog, which lists detected drives and mount points for quick selection (or type a path directly). You can also drag and drop any directory directly onto the window. Scans can be cancelled at any time while running.
 2. **Explore the Tree:**
-   The left-hand panel displays a hierarchical directory explorer. You can expand/collapse folders using the `[+]`/`[-]` toggles. Use the **🔍 Filter** input bar to narrow down the view to matching folders or files.
+   The left-hand panel displays a hierarchical directory explorer with informative file badges (`☁` cloud placeholder, `🔗` symlink, `⚙` special file, `🔒` permission denied). You can expand/collapse folders using the `[+]`/`[-]` toggles. Use the **🔍 Filter** input bar (<kbd>Ctrl+F</kbd> / <kbd>⌘F</kbd>) to narrow down the view to matching folders or files with case-sensitive and regular expression matching modes.
 3. **Interact with the Treemap:**
    The central panel displays a visual representation of your disk space. Larger rectangles correspond to larger files or directories.
    - **Hovering:** Move your cursor over a block to view its full path and size in a tooltip.
    - **Clicking:** Click on a block to automatically select it in the directory tree on the left.
+   - **Zooming & Breadcrumbs:** Double-click or right-click any directory block (or choose **Focus in Treemap**) to zoom the treemap visualization into that subfolder. Use the interactive breadcrumb trail or the **⬆ Up** button above the treemap to navigate back up through the folder hierarchy.
 4. **Inspect File Extensions:**
    The right panel displays a sorted list of file extensions detected during the scan, complete with color-coded markers.
 5. **Deduplicate Your Drive:**
-   Switch to the **👥 Deduplicator** tab to search for duplicate files on your scanned filesystem. Custom selection helpers allow you to automatically select duplicates while preserving the oldest, newest, or shortest-path file.
+   Switch to the **👥 Deduplicator** tab to search for duplicate files on your scanned filesystem. Custom selection helpers allow you to automatically select duplicates while preserving the oldest, newest, or shortest-path file. Easily replace duplicate files with hardlinks or softlinks to reclaim disk space.
 6. **Context Actions:**
-   Right-click any item in the left-hand explorer to open a context menu.
-   - **Open in File Manager:** Launches your operating system's default file browser (Explorer, Finder, or Files) at the selected path.
+   Right-click any item in the left-hand explorer or treemap to open a context menu:
+   - **Focus in Treemap:** Zooms the treemap visualization into the selected directory.
+   - **Open in File Manager:** Launches your operating system's default file browser (Explorer, Finder, or Files) and reveals/selects the highlighted item.
+   - **Open Terminal Here:** Launches your preferred terminal emulator navigated directly to the selected directory.
    - **Copy Name:** Copies the name of the selected folder or file to the system clipboard.
    - **Copy Path:** Copies the absolute path of the selected folder or file to the system clipboard.
+   - **Move to Trash:** Sends the selected items to your system's Recycle Bin / Trash.
    - **Delete (Permanent):** Opens a safety dialog to permanently delete the target path from your disk.
 7. **Personalize the View:**
-   The **View** menu offers theme selection (System, Dark, Light, High Contrast), interface language, a configurable timestamp **Time Format**, and treemap border toggles. View preferences are saved automatically between sessions.
+   The **View** menu offers theme selection (System, Dark, Light, High Contrast), interface language (18 languages with automatic system detection), a configurable timestamp **Time Format**, and treemap border toggles. View preferences are saved automatically between sessions.
 8. **Keyboard Shortcuts:**
    Quickly navigate, inspect, and manage files using native keyboard shortcuts (see the [complete table](#keyboard-shortcuts) below).
 
@@ -155,7 +172,7 @@ edirstat /path -x                            # Restrict the scan to the same fil
 | **Search / Filter** | <kbd>Ctrl+F</kbd> | <kbd>⌘F</kbd> | Focus the directory tree filter bar |
 | **Dismiss / Clear** | <kbd>Esc</kbd> | <kbd>Esc</kbd> | Close active modal dialog or clear the search filter |
 | **Focus in Treemap** | <kbd>⏎ Enter</kbd> | <kbd>⏎ Enter</kbd> | Zoom the treemap view into the selected folder |
-| **Go Up One Level** | <kbd>Alt+↑</kbd> / <kbd>Backspace</kbd> | <kbd>⌥↑</kbd> / <kbd>⌫ Backspace</kbd> | Navigate up one directory level in the treemap |
+| **Go Up One Level** | <kbd>Alt+↑</kbd> | <kbd>⌥↑</kbd> | Navigate up one directory level in the treemap |
 | **Reset Treemap Zoom** | <kbd>Esc</kbd> | <kbd>Esc</kbd> | Reset the treemap zoom back to the root directory |
 | **Toggle Left Panel** | <kbd>F9</kbd> | <kbd>F9</kbd> | Show / collapse the directory tree explorer panel |
 | **Toggle Right Panel** | <kbd>F11</kbd> | <kbd>F11</kbd> | Show / collapse the extension stats / details panel |
@@ -166,7 +183,7 @@ edirstat /path -x                            # Restrict the scan to the same fil
 | **Copy Full Path** | <kbd>Ctrl+Alt+C</kbd> | <kbd>⌥⌘C</kbd> | Copy selected item's absolute path to clipboard |
 | **Close Scan** | <kbd>Ctrl+W</kbd> | <kbd>⌘W</kbd> | Close the active scan and return to the home screen |
 | **Quit** | <kbd>Ctrl+Q</kbd> | <kbd>⌘Q</kbd> | Exit eDirStat |
-| **About / Help** | <kbd>F1</kbd> | <kbd>F1</kbd> | Open the About and diagnostic dialog |
+| **About / Help** | <kbd>F1</kbd> | <kbd>F1</kbd> | Open the About dialog, license viewer, and Privacy Policy |
 
 ---
 
@@ -237,7 +254,7 @@ The current (v3) `.edst` snapshot layout stores the arena as compact columnar da
 ```
 
 - **Zstd Compression:** Minimizes the disk storage footprint of snapshot files while maintaining high read/write speeds; the container is detected and unwrapped transparently on load. `--no-compression` writes a raw `.edst` without the wrapper.
-- **Columnar Varint Encoding:** Nodes are serialized field-by-field as LEB128 varint columns with zigzag delta-compressed timestamps, making snapshots significantly smaller and faster to encode/decode than the legacy flat-binary (v2) layout, which remains readable for backward compatibility.
+- **Columnar Varint Encoding:** Nodes are serialized field-by-field as LEB128 varint columns with zigzag delta-compressed timestamps. The control bytes bit-pack dataless cloud flags (`FLAG_DATALESS`) and special file flags (`FLAG_SPECIAL`) in addition to directory and symlink states, making snapshots significantly smaller and richer to decode than the legacy flat-binary (v2) layout, which remains readable for backward compatibility.
 - **Cross-Platform Little-Endian:** All multi-byte fields are serialized little-endian, keeping snapshots portable across little-endian platforms.
 
 ### 5. Multi-Stage Deduplication Engine (`crates/edirstat-gui/src/stats/deduplicator.rs`)
@@ -246,13 +263,13 @@ The current (v3) `.edst` snapshot layout stores the arena as compact columnar da
 
 The deduplication module detects byte-for-byte identical files with minimal disk I/O. Candidate duplicate groups are identified and isolated through a 7-stage pipeline:
 
-1. **Size Partitioning:** Scanned files are grouped by identical byte counts. Singleton sizes are discarded immediately.
+1. **Size Partitioning:** Scanned files are grouped by identical byte counts. Special devices (FIFOs, sockets), dataless cloud placeholders, and permission-restricted files are automatically excluded, and singleton sizes are discarded immediately.
 2. **Prefix Hashing:** Worker threads read and hash the first 4KB of files to filter out non-matching formats.
 3. **Midpoint Hashing:** Computes a hash around the center of the remaining files to detect differences inside similar files.
 4. **Suffix Hashing:** Hashes the last 4KB of file data, which often contains unique trailing metadata.
 5. **Multi-Range Hashing:** Performs periodic block sampling (every 100MB) across large files to ensure long-distance uniformity without scanning entire gigabyte-scale structures.
 6. **Full Cryptographic Hashing:** Executes a full BLAKE3 cryptographic hash only over candidates that successfully cleared the previous five stages.
-7. **Real-time Validation:** Performs timestamp checking on disk immediately before grouping and action triggers to protect you against modifying files changed since snapshot generation.
+7. **Real-time Validation:** Performs timestamp checking and `is_file()` validation on disk immediately before grouping and hashing to protect against modifying files changed since snapshot generation.
 
 The engine remains hardlink-aware, allowing it to accurately differentiate between physical duplicate copies and single-inode hardlinks, which consume no additional storage.
 
@@ -468,6 +485,7 @@ Speedup (QDirStat / eDirStat): 6.60x
 
 - **[@Lej77](https://github.com/Lej77)** — NTFS `$MFT` fixes and improvements, including Master File Table scanning of NTFS drives on Linux (#14) and MFT extension record support (#15).
 - **[@AlexanderSchuetz97](https://github.com/AlexanderSchuetz97)** — many feature requests, German translation review, and extensive bug testing.
+- **[@hollmmes](https://github.com/hollmmes)** — Turkish (`tr-TR`) localization support (#17).
 
 ---
 

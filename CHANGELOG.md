@@ -2,6 +2,124 @@
 
 ---
 
+## [Unreleased]
+
+**eDirStat's upcoming release brings interactive treemap zoom with breadcrumb navigation, ten new languages (now 18 total) with automatic system locale detection, native file manager revealing, visual badges for cloud placeholders and special files, full Mac App Store / Apple App Sandbox packaging, a privacy policy with in-app legal notices, and hardened filesystem deletion and deduplication.**
+
+> **✨ Highlights**
+>
+> - 🔍 **Treemap zoom & breadcrumbs** — Double-click any folder to zoom into its subtree and navigate back via interactive breadcrumbs
+> - 🌍 **Now in 18 languages** — Available in 18 languages (English, Arabic, Bengali, Chinese (Simplified), Chinese (Traditional), Dutch, French, German, Hindi, Italian, Japanese, Korean, Polish, Portuguese, Russian, Spanish, Turkish, and Vietnamese) with automatic system language detection
+> - 🗁 **Native file manager reveal** — Reveal and highlight selected files directly in macOS Finder, Windows File Explorer, and Linux file managers
+> - ☁️ **Cloud & special file badges** — Visual indicators and tooltips for dataless cloud placeholders (iCloud, OneDrive), symlinks, and Unix special devices
+> - 🍏 **Mac App Store ready** — Full Apple App Sandbox compliance, `.pkg` packaging with notarization & validation, and in-app permission dialogs
+> - 📜 **Privacy policy & in-app disclosures** — Embedded offline open source license viewer and privacy policy covering no-network builds
+> - 🗑️ **Hardened deletion pipeline** — Safely delete broken symlinks and directory symlinks without risking target directory contents
+> - ⌨️ **Refreshed keyboard shortcuts** — Streamlined shortcuts with official glyphs (`⌥`, `⌫`, `⏎`, `⇧`, `⌘`) backed by dedicated font subsets
+
+**🔧 Under the hood:** automated font subsetting pipeline for Google Noto fonts (`scripts/fetch_fonts.sh`, `scripts/subset_fonts.py`) · bit-packed dataless/special flags into v3 columnar snapshots with zero format overhead · centralized pre-commit and CI/CD dispatcher (`./scripts/check.sh all`) · deterministic `cargo-about` license generation with `max-depth = 1` · deduplicator hardened against dataless, special, and altered files · subvolume traversal fixes on Linux and macOS.
+
+### Added
+
+#### Treemap & Visualization
+
+- **🔍 Treemap Subtree Zoom:** Added interactive subtree zooming to the treemap visualization. Double-clicking a directory or selecting the Zoom Treemap operation zooms into that folder's contents.
+- **🧭 Interactive Breadcrumb Trail:** Added a breadcrumb trail bar above the treemap showing the hierarchical path from root to the focused subtree, with clickable path segments to navigate back to any ancestor.
+- **⏶ Up One Level Navigation:** Added an "Up One Level" table operation and `Alt+Up` keyboard shortcut to step up one directory tier in the treemap and explorer.
+
+#### Localization & Internationalization
+
+- **🌍 Ten New Languages (18 Total):** Expanded language support from 8 to 18 languages worldwide (English, Arabic, Bengali, Chinese (Simplified), Chinese (Traditional), Dutch, French, German, Hindi, Italian, Japanese, Korean, Polish, Portuguese, Russian, Spanish, Turkish, and Vietnamese), adding ten new localizations:
+  - Arabic (`ar-SA`) — with full CLDR plural-category coverage (zero/one/two/few/many/other).
+  - Bengali (`bn-BD`).
+  - Chinese (Simplified) (`zh-CN`).
+  - Chinese (Traditional) (`zh-HK`).
+  - Hindi (`hi-IN`).
+  - Japanese (`ja-JP`).
+  - Korean (`ko-KR`).
+  - Russian (`ru-RU`).
+  - Turkish (`tr-TR`) — contributed by [@hollmmes](https://github.com/hollmmes) (#17).
+  - Vietnamese (`vi-VN`).
+- **🌐 Automatic System Locale Detection:** Automatically detects the operating system language on first launch via `sys-locale`, defaulting to the user's preferred language.
+- **🇨🇳 Chinese Script & Regional Fallbacks:** Added intelligent BCP-47 fallback routing for Chinese locales, routing `zh-Hans`, `zh-CN`, and `zh-SG` to Simplified Chinese, and `zh-Hant`, `zh-TW`, and `zh-MO` to Traditional Chinese.
+- **💾 Locale Selection Persistence:** User-selected language overrides are now persisted across application restarts in `UserPreferences`.
+- **🔤 Automated Font Subsetting Pipeline:** Integrated Google Noto CJK (SC, TC, JP, KR), Bengali, Devanagari, Arabic, and Symbols fonts into an automated download and subsetting pipeline (`scripts/fetch_fonts.sh`, `scripts/subset_fonts.py`), shrinking font assets by >90% while guaranteeing 100% glyph coverage.
+
+#### File Classification & Badges
+
+- **☁️ Cloud Placeholder Badges:** Added a `☁` badge and localized tooltip for dataless cloud files evicted to remote storage, detecting APFS `UF_DATALESS` on macOS (iCloud Drive, OneDrive, Dropbox) and `FILE_ATTRIBUTE_RECALL_ON_OPEN` / `FILE_ATTRIBUTE_OFFLINE` on Windows.
+- **🔗 Symlink Badges:** Added a `🔗` badge and tooltip for symbolic links pointing to external file or directory targets.
+- **⚙️ Unix Special File Badges:** Added a `⚙` badge and detailed permission string indicators (`'p'`, `'s'`, `'b'`, `'c'`) for FIFOs / named pipes, UNIX domain sockets, block devices, and character devices.
+- **🔒 Permission-Denied Badges:** Added a `🔒` badge for restricted or inaccessible directory entries.
+- **💾 Snapshot Control Byte Bit-Packing:** Extended the columnar v3 snapshot format to store `FLAG_DATALESS` (bit 5) and `FLAG_SPECIAL` (bit 6) in the control byte with zero storage overhead and full backward compatibility.
+
+#### Native System Integration & Open Operations
+
+- **🗁 Reveal in Native File Manager:** Added `reveal_in_file_manager` to highlight and select files directly in macOS Finder (`/usr/bin/open -R`), Windows File Explorer (`explorer.exe /select`), and Linux file managers via FreeDesktop `FileManager1` D-Bus, Dolphin `--select`, and Nautilus `--select`.
+- **📂 Native File Opening:** Replaced basic open calls with a unified cross-platform `open_file` helper.
+- **💻 Open Terminal at File Location:** Updated the "Open Terminal Here" operation to resolve the enclosing parent directory when a file is selected instead of doing nothing.
+
+#### macOS App Store & Sandbox Support
+
+- **🍏 App Sandbox Architecture:** Added full support for macOS App Sandbox security constraints, detecting sandbox containers at runtime and compile-time (`is_macos_sandbox()`).
+- **📦 Comprehensive macOS Packaging Script:** Added `scripts/package_macos.sh` supporting Developer ID (itch.io direct distribution) and Mac App Store (`--appstore`) channels with codesigning, hardened runtime, provisioning profile embedding, `.pkg` generation, and pre-flight validation.
+- **🔒 Sandbox File Access & Drag-and-Drop:** Native Cocoa `NSOpenPanel` folder dialogs automatically trigger when selecting drives or Quick Access shortcuts under the sandbox, and dragging-and-dropping directories onto the window automatically grants security-scoped scan permissions.
+- **🛡️ Sandbox Terminal Lockdown:** Automatically omitted terminal operations from context menus and disabled terminal execution in sandboxed distributions to satisfy App Store Review guidelines.
+- **🌐 Bundle Localization Metadata:** Declared `CFBundleDevelopmentRegion` and supported languages in `CFBundleLocalizations` in `Info.plist`.
+
+#### Legal & Transparency
+
+- **📜 Privacy Policy:** Added `PRIVACY.md` specifying zero data collection, zero telemetry, and 100% local processing for distributions compiled with `--no-default-features` (including the Mac App Store edition).
+- **ℹ️ In-App Legal Notices Access:** Added direct in-app links in the About modal (`F1`) to open the latest online Privacy Policy and view offline embedded third-party open source licenses (`cargo about`).
+
+#### Keyboard Shortcuts & UI
+
+- **⌨️ Standardized Keyboard Shortcuts:** Modernized the application shortcut catalog (`F1` About, `⌘O` New Scan, `⌘R` / `F5` Rescan, `⌘S` Save Snapshot, `⌘F` Filter, `⌘W` Close, `⌘Q` Quit, `F9` Toggle Left Panel, `F11` Toggle Right Panel, `⇧⌘C` Collapse All, `Del` Trash, `⇧Del` Delete, `Alt+Up` Up Level, `Enter` Zoom).
+- **🔣 Official Modifier Glyphs:** Embedded `NotoSansSymbols2` fallback font to render official platform symbols (`⌥`, `⌫`, `⏎`, `⇧`, `⌘`) without missing-glyph tofu boxes.
+- **🔌 Top Panel UI Prefix Closure:** Added `top_panel_prefix` closure hook enabling host applications to inject custom UI elements into the top navigation bar.
+
+#### Developer Tooling & Verification
+
+- **🧪 Unified Quality Dispatcher:** Created `scripts/check.sh` unifying `cargo fmt`, `typos`, `cargo shear`, `cargo clippy`, `cargo nextest`, `cargo test --doc`, font subset diff checks, and third-party license verification into a single dispatcher shared between pre-commit hooks and CI/CD.
+- **🚀 macOS itch.io Release Pipeline:** Added automated CI/CD workflow to notarize, package, and publish macOS release builds to itch.io.
+- **✅ Packaging Pre-Flight Validation:** Added automated signature and structure validation for built `.app` bundles and `.pkg` installers.
+
+### Changed
+
+#### Traversal Engine & Filesystem Handling
+
+- **🗃️ Subvolume & Mount Traversal:** Traversal engine now properly crosses and traverses btrfs subvolumes and APFS volume groups when `same_filesystem` is disabled (`false`).
+- **🛡️ Root Skip Protection:** Improved root path skipping logic to prevent skipping legitimate nested mount points and root directories on macOS and Linux.
+
+#### Build Configuration & Dependencies
+
+- **📦 No-Default-Features Gating:** Supported building with `--no-default-features` to cleanly strip HTTP client libraries (`reqwest`) and online update checking for sandbox and air-gapped distributions.
+- **📦 Dependency Updates:** Upgraded workspace dependencies across core and GUI crates.
+
+### Fixed
+
+#### Filesystem Deletion & Operations
+
+- **🗑️ Broken Symlink Deletion:** Fixed an issue where broken symlinks (pointing to deleted targets) could not be deleted from the UI and were skipped during deletion because `path.exists()` followed symlinks and returned `false`.
+- **📁 Directory Symlink Safety:** Switched deletion checks to `path.symlink_metadata()`, ensuring directory symlinks are safely unlinked via `remove_file` without attempting `remove_dir_all` or putting target directory contents at risk.
+- **🛡️ Deletion Error Visibility:** Resolved an issue where I/O errors (e.g. permission denied) during existence checks were masked as successful deletions.
+
+#### Deduplicator Engine
+
+- **🧮 Special & Cloud File Deduplication Filtering:** Deduplication Phase 1 grouping now strictly ignores dataless/cloud placeholders, Unix special files (FIFOs, sockets, device nodes), and permission-denied files to avoid attempting invalid read operations.
+- **🛡️ Hash Calculation TOCTOU Defense:** Verified `metadata.is_file()` across all range-based and full-hash calculation functions to defend against files changing type post-scan.
+
+#### Licensing & Verification
+
+- **📋 Deterministic License Generation:** Fixed non-deterministic `cargo-about` license output between local filesystems and Docker CI runners by configuring `max-depth = 1` in `about.toml`.
+- **🧪 Shortcut Glyphs Test Runner Fonts:** Initialized egui font definitions in test contexts, resolving headless runner test panics on macOS CI.
+
+### 💖 Contributors & Thanks
+
+- **[@hollmmes](https://github.com/hollmmes)** — for contributing Turkish (`tr-TR`) localization support (#17).
+
+---
+
 ## [v2.1.0] - 2026-08-17
 
 **eDirStat 2.1.0 is our biggest quality-of-life release yet — eight languages, four themes, a browser-based snapshot viewer, NTFS MFT scanning on Linux, and a faster v3 snapshot format, all backed by 100+ new tests.**
