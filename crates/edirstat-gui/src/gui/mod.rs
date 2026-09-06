@@ -295,7 +295,16 @@ impl Locale {
             return Some(locale);
         }
 
-        // 2. Base language prefix match (e.g. "de" for "de-AT" or "de_DE")
+        // 2. Chinese script and regional matching (distinguish Traditional vs Simplified)
+        if clean.starts_with("zh-hant") || clean == "zh-tw" || clean == "zh-hk" || clean == "zh-mo"
+        {
+            return Some(Self::ZhHk);
+        }
+        if clean.starts_with("zh-hans") || clean == "zh-cn" || clean == "zh-sg" {
+            return Some(Self::ZhCn);
+        }
+
+        // 3. Base language prefix match (e.g. "de" for "de-AT" or "de_DE")
         let lang_code = clean.split('-').next()?;
         if lang_code.is_empty() {
             return None;
@@ -3265,6 +3274,10 @@ mod tests {
         assert_eq!(Locale::from_bcp47("zh-HK"), Some(Locale::ZhHk));
         assert_eq!(Locale::from_bcp47("zh_HK.UTF-8"), Some(Locale::ZhHk));
         assert_eq!(Locale::from_bcp47("zh-Hans-CN"), Some(Locale::ZhCn));
+        assert_eq!(Locale::from_bcp47("zh-Hant-HK"), Some(Locale::ZhHk));
+        assert_eq!(Locale::from_bcp47("zh-Hant"), Some(Locale::ZhHk));
+        assert_eq!(Locale::from_bcp47("zh-TW"), Some(Locale::ZhHk));
+        assert_eq!(Locale::from_bcp47("zh-SG"), Some(Locale::ZhCn));
 
         // Unsupported / invalid
         assert_eq!(Locale::from_bcp47("ar-SA"), None);
