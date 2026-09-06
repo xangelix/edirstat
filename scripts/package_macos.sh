@@ -381,6 +381,24 @@ cat > "$APP_DIR/Contents/Info.plist" <<EOF
     <key>LSMinimumSystemVersion</key>      <string>$MIN_MACOS</string>
     <key>LSApplicationCategoryType</key>   <string>$CATEGORY</string>
     <key>ITSAppUsesNonExemptEncryption</key> <false/>
+    <key>CFBundleDevelopmentRegion</key>  <string>en</string>
+    <key>CFBundleLocalizations</key>
+    <array>
+        <string>de</string>
+        <string>en</string>
+        <string>es</string>
+        <string>fr</string>
+        <string>it</string>
+        <string>ja</string>
+        <string>ko</string>
+        <string>nl</string>
+        <string>pl</string>
+        <string>pt</string>
+        <string>ru</string>
+        <string>tr</string>
+        <string>zh-Hans</string>
+        <string>zh-Hant</string>
+    </array>
 </dict>
 </plist>
 EOF
