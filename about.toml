@@ -19,3 +19,8 @@ accepted = [
 ignore-build-dependencies = true
 ignore-dev-dependencies = true
 ignore-transitive-dependencies = false
+
+# Limit directory traversal to crate root to avoid non-deterministic ties
+# caused by readdir order across filesystems (ext4 vs btrfs vs overlayfs)
+max-depth = 1
+
