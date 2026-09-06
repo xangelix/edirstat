@@ -395,7 +395,12 @@ pub fn run_deduplication(
             break;
         }
 
-        if node.is_directory() || node.is_symlink() {
+        if node.is_directory()
+            || node.is_symlink()
+            || node.is_special()
+            || node.is_dataless()
+            || node.has_no_permission()
+        {
             continue;
         }
 
@@ -1240,6 +1245,61 @@ mod tests {
         assert!(groups_is_empty);
 
         // Clean up
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        Ok(())
+    }
+
+    #[test]
+    fn test_deduplication_ignores_special_dataless_and_no_permission_files()
+    -> Result<(), crate::EdirstatError> {
+        let temp_dir = std::env::current_dir()?
+            .join("target")
+            .join("test_deduplicator_special_dataless");
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        std::fs::create_dir_all(&temp_dir)?;
+
+        let content = vec![0xEF_u8; 2048];
+        std::fs::write(temp_dir.join("valid_a.bin"), &content)?;
+        std::fs::write(temp_dir.join("cloud_b.bin"), &content)?;
+        std::fs::write(temp_dir.join("special_c.bin"), &content)?;
+        std::fs::write(temp_dir.join("no_perm_d.bin"), &content)?;
+
+        let shared_state = Arc::new(SharedState::new());
+        let mut snap = dir_snapshot(
+            &temp_dir,
+            &[
+                ("valid_a.bin", 2048),
+                ("cloud_b.bin", 2048),
+                ("special_c.bin", 2048),
+                ("no_perm_d.bin", 2048),
+            ],
+        );
+
+        let mut nodes = snap.nodes.to_vec();
+        nodes[2].flags |= FileNode::FLAG_DATALESS;
+        nodes[3].flags |= FileNode::FLAG_SPECIAL;
+        nodes[4].flags |= FileNode::FLAG_NO_PERMISSION;
+        snap.nodes = std::sync::Arc::new(NodeStorage::Owned(nodes));
+
+        shared_state.store_snapshot(snap);
+        let snapshot = shared_state.current_snapshot.load();
+
+        let results = Arc::new(RwLock::new(DeduplicationResults::default()));
+        let cancel = Arc::new(AtomicBool::new(false));
+        let progress = atomic_progress::Progress::new_spinner("Deduplicator");
+        let config = DeduplicatorConfig {
+            min_size: 1024,
+            ignore_system: false,
+            ignore_hidden: false,
+        };
+
+        run_deduplication(snapshot.clone(), progress, results.clone(), cancel, config);
+
+        let results_guard = results.read();
+        let groups_is_empty = results_guard.groups.is_empty();
+        drop(results_guard);
+        assert!(groups_is_empty);
+
         let _ = std::fs::remove_dir_all(&temp_dir);
         Ok(())
     }
