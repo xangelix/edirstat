@@ -56,6 +56,7 @@ jobs:
       APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
       APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
       APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+      APPSTORE_PROVISIONPROFILE: ${{ secrets.APPSTORE_PROVISIONPROFILE }}
 
     steps:
       - name: Checkout Source Code
@@ -119,6 +120,22 @@ jobs:
             edirstat-macos-*.dmg
             edirstat-macos-*.zip
 
+      - name: Build & Package Mac App Store .pkg (aarch64)
+        if: matrix.target == 'aarch64-apple-darwin' && env.APPSTORE_PROVISIONPROFILE != ''
+        run: |
+          set -euo pipefail
+          umask 077
+          echo "$APPSTORE_PROVISIONPROFILE" | base64 -d > appstore.provisionprofile
+          ./scripts/package_macos.sh --target aarch64-apple-darwin --appstore --build "${{ github.run_number }}" --validate
+          rm -f appstore.provisionprofile
+
+      - name: Store Mac App Store .pkg as Private Artifact
+        if: matrix.target == 'aarch64-apple-darwin' && env.APPSTORE_PROVISIONPROFILE != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: edirstat-appstore-pkg
+          path: edirstat-appstore-*.pkg
+
       # - name: Upload Asset to GitHub Release
       #   uses: softprops/action-gh-release@v3
       #   with:
@@ -128,9 +145,11 @@ jobs:
       #   env:
       #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Cleanup keychain
+      - name: Cleanup keychain & sensitive files
         if: always()
-        run: security delete-keychain edirstat-ci.keychain-db || true
+        run: |
+          security delete-keychain edirstat-ci.keychain-db 2>/dev/null || true
+          rm -f appstore.provisionprofile signing.p12 AuthKey.p8 2>/dev/null || true
 
   # One parallel leg per (target, CPU) pair: each builds a single optimized
   # variant binary. combine-multivers merges them into the multivers wrappers.
@@ -400,3 +419,37 @@ jobs:
           butler push staging-linux/ xangelix/edirstat:linux-portable --userversion "$VERSION"
           butler push staging-linux-installer/ xangelix/edirstat:linux-setup --userversion "$VERSION"
           butler push staging-osx/ xangelix/edirstat:osx-arm64 --userversion "$VERSION"
+
+  deliver-appstore:
+    name: Deliver Mac App Store & Submit for Review
+    runs-on: macos-latest
+    needs: [build-macos]
+    environment: appstore
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v7
+
+      - name: Download Mac App Store Package Artifact
+        uses: actions/download-artifact@v8
+        id: download-pkg
+        continue-on-error: true
+        with:
+          name: edirstat-appstore-pkg
+          path: staging-appstore
+
+      - name: Deliver and Submit to App Store Connect
+        if: steps.download-pkg.outcome == 'success'
+        env:
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          set -euo pipefail
+          PKG="$(find staging-appstore -type f -name "edirstat-appstore-*.pkg" 2>/dev/null | head -1 || true)"
+          if [ -z "$PKG" ]; then
+            echo "::warning::No Mac App Store package artifact found to deliver."
+            exit 0
+          fi
+          echo "==> Delivering $PKG to Mac App Store..."
+          ./scripts/deliver_macos.sh --pkg "$PKG"
+
