@@ -33,7 +33,7 @@ pub fn get_file_id(meta: &fs::Metadata) -> (u64, u64) {
 /// to `(0, 0)` on platforms without a native identifier (e.g. wasm).
 #[cfg(not(any(unix, windows)))]
 #[must_use]
-pub fn get_file_id(_meta: &fs::Metadata) -> (u64, u64) {
+pub const fn get_file_id(_meta: &fs::Metadata) -> (u64, u64) {
     (0, 0)
 }
 

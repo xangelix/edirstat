@@ -789,6 +789,7 @@ impl GuiApp {
     /// - If the path ends with `.edst.zst`, compression is enabled (`compress = true`).
     /// - If the path ends with `.zst`, it is normalized to `.edst.zst` and compression is enabled.
     /// - Otherwise (e.g. extension omitted or generic), `.edst.zst` is appended and compression is enabled.
+    #[cfg(any(not(target_family = "wasm"), test))]
     pub(crate) fn resolve_snapshot_save_path(path: &std::path::Path) -> (std::path::PathBuf, bool) {
         let is_edst = path
             .extension()

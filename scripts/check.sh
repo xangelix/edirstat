@@ -63,7 +63,10 @@ check_shear() {
 
 check_clippy() {
     group_start "Checking lints (cargo clippy)"
-    cargo clippy --workspace --all-targets
+    cargo clippy --workspace --all-targets -- -D warnings
+    if rustup target list --installed 2>/dev/null | grep -q "^wasm32-unknown-unknown$"; then
+        RUSTFLAGS="${RUSTFLAGS:-} -D warnings" cargo check -p edirstat-gui --bin edirstat-web --target wasm32-unknown-unknown --release
+    fi
     group_end
 }
 

@@ -26,7 +26,7 @@ WASM_OPT_FEATURES=(
 )
 
 echo "==> Building $BIN_NAME (release, wasm32-unknown-unknown)"
-cargo build -p edirstat-gui --bin "$BIN_NAME" --target wasm32-unknown-unknown --release
+RUSTFLAGS="${RUSTFLAGS:-} -D warnings" cargo build -p edirstat-gui --bin "$BIN_NAME" --target wasm32-unknown-unknown --release
 
 echo "==> Running wasm-bindgen"
 rm -rf "$DIST"
