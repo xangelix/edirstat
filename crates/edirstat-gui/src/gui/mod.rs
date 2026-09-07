@@ -790,22 +790,30 @@ impl GuiApp {
     /// - If the path ends with `.zst`, it is normalized to `.edst.zst` and compression is enabled.
     /// - Otherwise (e.g. extension omitted or generic), `.edst.zst` is appended and compression is enabled.
     pub(crate) fn resolve_snapshot_save_path(path: &std::path::Path) -> (std::path::PathBuf, bool) {
-        let path_str = path.to_string_lossy();
-        let lower = path_str.to_ascii_lowercase();
+        let is_edst = path
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("edst"));
 
-        if lower.ends_with(".edst") {
+        if is_edst {
             (path.to_path_buf(), false)
-        } else if lower.ends_with(".edst.zst") {
-            (path.to_path_buf(), true)
-        } else if lower.ends_with(".zst") {
-            let base = &path_str[..path_str.len() - 4];
-            let normalized = if base.to_ascii_lowercase().ends_with(".edst") {
-                path.to_path_buf()
+        } else if path
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("zst"))
+        {
+            let stem_is_edst = path
+                .file_stem()
+                .and_then(|stem| std::path::Path::new(stem).extension())
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("edst"));
+
+            if stem_is_edst {
+                (path.to_path_buf(), true)
             } else {
-                std::path::PathBuf::from(format!("{base}.edst.zst"))
-            };
-            (normalized, true)
+                let path_str = path.to_string_lossy();
+                let base = &path_str[..path_str.len().saturating_sub(4)];
+                (std::path::PathBuf::from(format!("{base}.edst.zst")), true)
+            }
         } else {
+            let path_str = path.to_string_lossy();
             (
                 std::path::PathBuf::from(format!("{path_str}.edst.zst")),
                 true,
@@ -872,8 +880,9 @@ impl GuiApp {
                     .await
                 {
                     let file_name = handle.file_name();
-                    let lower = file_name.to_ascii_lowercase();
-                    let compress = !lower.ends_with(".edst");
+                    let compress = !std::path::Path::new(&file_name)
+                        .extension()
+                        .is_some_and(|ext| ext.eq_ignore_ascii_case("edst"));
                     let result =
                         crate::snapshot::save_snapshot_to_bytes(&nodes, &string_pool, compress)
                             .map_err(|e| e.to_string());
