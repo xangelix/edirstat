@@ -218,7 +218,7 @@ jobs:
           cache-on-failure: true
 
       - name: Install Packaging Dependencies
-        run: pacman -Syu --noconfirm --needed mingw-w64-gcc pacman-contrib dpkg
+        run: pacman -Syu --noconfirm --needed mingw-w64-gcc pacman-contrib dpkg rpm-tools
 
       - name: Configure safe directory for Git
         run: git config --global --add safe.directory "*"
@@ -244,6 +244,10 @@ jobs:
       - name: Build Debian (.deb) Package
         run: |
           ./scripts/package_deb.sh --binary target/x86_64-unknown-linux-gnu/release/edirstat_multivers --out-dir staging-linux-installer
+
+      - name: Build Red Hat / Fedora (.rpm) Package
+        run: |
+          ./scripts/package_rpm.sh --binary target/x86_64-unknown-linux-gnu/release/edirstat_multivers --out-dir staging-linux-installer
 
       - name: Build Arch Linux Pacman Package as tux user
         run: |
@@ -377,11 +381,11 @@ jobs:
           name: multivers-linux
           path: dl-multivers-linux
 
-      - name: Download Pacman Package
+      - name: Download Linux Packages (Debian, RPM, Pacman)
         uses: actions/download-artifact@v8
         with:
           name: edirstat-pacman-pkg
-          path: staging-linux-installer
+          path: dl-linux-packages
 
       - name: Download macOS aarch64 Production Artifact
         uses: actions/download-artifact@v8
@@ -394,11 +398,22 @@ jobs:
           # Versioned filenames become the download names shown on itch.io
           VERSION="${{ github.event.release.tag_name }}"
           VERSION="${VERSION#v}"
-          mkdir -p staging-windows staging-linux staging-osx
+          mkdir -p staging-windows staging-osx
+          mkdir -p staging-linux-portable staging-linux-deb staging-linux-rpm staging-linux-pacman
+
+          # Windows
           cp dl-multivers-windows/edirstat_multivers.exe "staging-windows/edirstat-$VERSION-portable-x86_64.exe"
-          cp dl-multivers-linux/edirstat_multivers "staging-linux/edirstat-$VERSION-portable-x86_64"
-          chmod +x "staging-linux/edirstat-$VERSION-portable-x86_64"
+
+          # macOS
           cp dl-macos-aarch64/edirstat-macos-aarch64-*.dmg "staging-osx/edirstat-$VERSION-macos-aarch64.dmg"
+
+          # Linux Distros (Dedicated standalone files per channel)
+          cp dl-multivers-linux/edirstat_multivers "staging-linux-portable/edirstat-$VERSION-portable-x86_64"
+          chmod +x "staging-linux-portable/edirstat-$VERSION-portable-x86_64"
+
+          cp dl-linux-packages/edirstat_*.deb staging-linux-deb/
+          cp dl-linux-packages/edirstat-*.rpm staging-linux-rpm/
+          cp dl-linux-packages/edirstat-bin-*.pkg.tar.zst staging-linux-pacman/
 
       - name: Push to itch.io
         env:
@@ -417,12 +432,21 @@ jobs:
             rm butler.zip
           fi
 
-          # Push all packages to itch.io
+          # Push Windows packages
           butler push staging-windows/ xangelix/edirstat:windows-portable --userversion "$VERSION"
           butler push staging-windows-installer/ xangelix/edirstat:windows-setup --userversion "$VERSION"
-          butler push staging-linux/ xangelix/edirstat:linux-portable --userversion "$VERSION"
-          butler push staging-linux-installer/ xangelix/edirstat:linux-setup --userversion "$VERSION"
+
+          # Push macOS package
           butler push staging-osx/ xangelix/edirstat:osx-arm64 --userversion "$VERSION"
+
+          # Push dedicated Linux channels (each contains a single uncompressed file)
+          butler push staging-linux-portable/ xangelix/edirstat:linux-portable --userversion "$VERSION"
+          butler push staging-linux-deb/ xangelix/edirstat:linux-deb --userversion "$VERSION"
+          butler push staging-linux-rpm/ xangelix/edirstat:linux-rpm --userversion "$VERSION"
+          butler push staging-linux-pacman/ xangelix/edirstat:linux-pacman --userversion "$VERSION"
+
+          # Legacy alias channel (points to deb package)
+          butler push staging-linux-deb/ xangelix/edirstat:linux-setup --userversion "$VERSION"
 
   deliver-appstore:
     name: Deliver Mac App Store & Submit for Review
