@@ -2,11 +2,11 @@
 # package_macos.sh — build, bundle, sign, and package eDirStat for macOS.
 #
 # Channels:
-#   (default) / --devid  Developer ID → notarize → zip    (itch.io / direct download, unsandboxed)
+#   (default) / --devid  Developer ID → notarize → .dmg & .zip (itch.io / direct download, unsandboxed)
 #   --skip-notarize      Developer ID, sign only          (quick local iteration)
 #   --ad-hoc / --unsigned Ad-hoc sign (-), skip notary    (dev / CI without secrets)
 #   --appstore           App Store / TestFlight → .pkg    (sandboxed, signed for Transporter)
-#   --validate [path]    Pre-flight validation on bundle/package (or test an existing target)
+#   --validate [path]    Pre-flight validation on bundle/package/dmg (or test an existing target)
 #
 # Examples:
 #   ./scripts/package_macos.sh                          # production itch.io release build
@@ -249,14 +249,57 @@ validate_pkg() {
   echo "==> [Validate] Package validation passed: $target_pkg"
 }
 
+validate_dmg() {
+  local target_dmg="$1"
+  echo "==> [Validate] Inspecting disk image: $target_dmg"
+
+  if [[ ! -f "$target_dmg" ]]; then
+    echo "ERROR: Disk image not found: $target_dmg" >&2
+    return 1
+  fi
+
+  # 1. Codesign check on the DMG
+  if command -v codesign >/dev/null 2>&1; then
+    echo "  ✓ Verifying disk image signature (codesign)..."
+    codesign --verify --verbose=2 "$target_dmg" 2>&1 | sed 's/^/    /' || {
+      if [[ "$AD_HOC" -eq 1 ]]; then
+        echo "    (Ad-hoc signed DMG)"
+      else
+        echo "ERROR: Disk image signature verification failed on $target_dmg" >&2
+        return 1
+      fi
+    }
+  fi
+
+  # 2. Gatekeeper assessment on the DMG
+  if command -v spctl >/dev/null 2>&1; then
+    echo "  ✓ Checking disk image Gatekeeper assessment (spctl)..."
+    if [[ "$AD_HOC" -eq 1 ]]; then
+      echo "    (Ad-hoc signed builds are bypassed from Gatekeeper assessment)"
+    else
+      spctl -a -t open --context context:primary-signature -v "$target_dmg" 2>&1 | sed 's/^/    /' || {
+        if [[ "$SKIP_NOTARIZE" -eq 1 ]]; then
+          echo "    (Gatekeeper assessment reported un-notarized as expected for --skip-notarize)"
+        else
+          echo "WARNING: Gatekeeper assessment reported issues for $target_dmg" >&2
+        fi
+      }
+    fi
+  fi
+
+  echo "==> [Validate] Disk image validation passed: $target_dmg"
+}
+
 # ---------- Standalone validation dispatch ----------
 if [[ -n "$VALIDATE_TARGET" ]]; then
   if [[ "$VALIDATE_TARGET" == *.pkg ]]; then
     validate_pkg "$VALIDATE_TARGET"
+  elif [[ "$VALIDATE_TARGET" == *.dmg ]]; then
+    validate_dmg "$VALIDATE_TARGET"
   elif [[ "$VALIDATE_TARGET" == *.app || -d "$VALIDATE_TARGET/Contents" ]]; then
     validate_bundle "$VALIDATE_TARGET"
   else
-    echo "ERROR: Unrecognized target to validate: $VALIDATE_TARGET (expected .app or .pkg)" >&2
+    echo "ERROR: Unrecognized target to validate: $VALIDATE_TARGET (expected .app, .pkg, or .dmg)" >&2
     exit 1
   fi
   exit 0
@@ -447,46 +490,76 @@ if [[ "$MODE" == "appstore" ]]; then
 fi
 
 # ---------- Developer ID & Ad-Hoc channels ----------
+OUT_DMG="${BINARY_NAME}-macos-${TARGET%%-*}-${VERSION}.dmg"
 OUT_ZIP="${BINARY_NAME}-macos-${TARGET%%-*}-${VERSION}.zip"
 
+create_dmg() {
+  local staging_dir="staging-dmg-$TARGET"
+  rm -rf "$staging_dir" "$OUT_DMG"
+  mkdir -p "$staging_dir"
+  cp -R "$APP_DIR" "$staging_dir/"
+  ln -s /Applications "$staging_dir/Applications"
+
+  echo "==> Creating disk image (.dmg): $OUT_DMG"
+  hdiutil create \
+    -volname "$APP_NAME" \
+    -srcfolder "$staging_dir" \
+    -ov -format UDZO \
+    "$OUT_DMG"
+  rm -rf "$staging_dir"
+}
+
 if [[ "$AD_HOC" -eq 1 ]]; then
+  create_dmg
+  codesign --force --sign - "$OUT_DMG" 2>/dev/null || true
   ditto -c -k --keepParent "$APP_DIR" "$OUT_ZIP"
   if [[ "$VALIDATE" -eq 1 ]]; then
     validate_bundle "$APP_DIR"
+    validate_dmg "$OUT_DMG"
   fi
-  echo "==> Done (ad-hoc, for development/CI): $OUT_ZIP"
+  echo "==> Done (ad-hoc, for development/CI): $OUT_DMG, $OUT_ZIP"
   exit 0
 fi
 
 if [[ "$SKIP_NOTARIZE" -eq 1 ]]; then
   echo "==> Skipping notarization (--skip-notarize)"
+  create_dmg
+  codesign --force --timestamp --sign "$CODESIGN_IDENTITY" "$OUT_DMG"
   ditto -c -k --keepParent "$APP_DIR" "$OUT_ZIP"
   if [[ "$VALIDATE" -eq 1 ]]; then
     validate_bundle "$APP_DIR"
+    validate_dmg "$OUT_DMG"
   fi
-  echo "==> Done (signed, NOT notarized): $OUT_ZIP"
+  echo "==> Done (signed, NOT notarized): $OUT_DMG, $OUT_ZIP"
   exit 0
 fi
 
 # ---------- Notarize ----------
+create_dmg
+echo "==> Signing disk image: $OUT_DMG"
+codesign --force --timestamp --sign "$CODESIGN_IDENTITY" "$OUT_DMG"
+
 echo "==> notarytool submit (profile: $NOTARY_PROFILE)"
-rm -f submission.zip
-ditto -c -k --keepParent "$APP_DIR" submission.zip
-xcrun notarytool submit submission.zip --keychain-profile "$NOTARY_PROFILE" --wait
-rm -f submission.zip
+xcrun notarytool submit "$OUT_DMG" --keychain-profile "$NOTARY_PROFILE" --wait
 
 # ---------- Staple + final package ----------
-echo "==> stapling ticket"
-xcrun stapler staple "$APP_DIR"
+echo "==> stapling ticket to disk image"
+xcrun stapler staple "$OUT_DMG"
+
+echo "==> stapling ticket to application bundle"
+xcrun stapler staple "$APP_DIR" 2>/dev/null || true
 
 ditto -c -k --keepParent "$APP_DIR" "$OUT_ZIP"
 
 # ---------- Verify ----------
 echo "==> Gatekeeper check:"
-spctl -a -vvv "$APP_DIR"
+spctl -a -t open --context context:primary-signature -v "$OUT_DMG" 2>&1 | sed 's/^/    /' || true
+spctl -a -vvv "$APP_DIR" 2>&1 | sed 's/^/    /' || true
 
 if [[ "$VALIDATE" -eq 1 ]]; then
   validate_bundle "$APP_DIR"
+  validate_dmg "$OUT_DMG"
 fi
 
+echo "==> Done: $OUT_DMG"
 echo "==> Done: $OUT_ZIP"

@@ -228,7 +228,9 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: edirstat-macos-${{ matrix.target }}
-          path: edirstat-macos-*.zip
+          path: |
+            edirstat-macos-*.dmg
+            edirstat-macos-*.zip
 
   deploy-web:
     name: Deploy Web (Arch Container)

@@ -115,12 +115,16 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: edirstat-macos-${{ matrix.target }}
-          path: edirstat-macos-*.zip
+          path: |
+            edirstat-macos-*.dmg
+            edirstat-macos-*.zip
 
       # - name: Upload Asset to GitHub Release
       #   uses: softprops/action-gh-release@v3
       #   with:
-      #     files: edirstat-macos-*.zip
+      #     files: |
+      #       edirstat-macos-*.dmg
+      #       edirstat-macos-*.zip
       #   env:
       #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -371,7 +375,7 @@ jobs:
           cp dl-multivers-windows/edirstat_multivers.exe "staging-windows/edirstat-$VERSION-portable-x86_64.exe"
           cp dl-multivers-linux/edirstat_multivers "staging-linux/edirstat-$VERSION-portable-x86_64"
           chmod +x "staging-linux/edirstat-$VERSION-portable-x86_64"
-          cp dl-macos-aarch64/edirstat-macos-aarch64-*.zip "staging-osx/edirstat-$VERSION-macos-aarch64.zip"
+          cp dl-macos-aarch64/edirstat-macos-aarch64-*.dmg "staging-osx/edirstat-$VERSION-macos-aarch64.dmg"
 
       - name: Push to itch.io
         env:
