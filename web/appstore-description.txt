@@ -1,0 +1,43 @@
+eDirStat is a modern, high-performance disk usage analyzer that turns "what is eating my storage?" into an instant, ten-second answer.
+
+Whether your drive is choking on hidden caches, 4K video exports, container layers, or bloated build folders, eDirStat scans through millions of files in seconds and exposes space hogs with stunning visual clarity.
+
+SCAN AT FULL SPEED — UP TO 9.6× FASTER
+Traditional disk crawlers crawl folders sequentially. eDirStat is built for modern multi-core silicon:
+• Work-Stealing Traversal: Inspired by ripgrep, a lock-free queue dynamically balances directory branches across all CPU cores - keeping hardware 100% saturated.
+• Raw NTFS MFT Indexing: Bypasses filesystem overhead on Windows and Linux to index Master File Tables directly for near-instant results on huge drives.
+• Zero-Copy Arena Allocator: Compact string pooling and contiguous memory hold millions of files with negligible RAM overhead.
+• Stutter-Free UI: Traversal and GUI rendering are decoupled via atomic snapshots - the interface never freezes during active scans.
+• Real-World Benchmarks: Up to 9.6× faster than QDirStat, 2.8x faster than WinDirStat, and 2.5x faster than WizTree.
+
+SEE YOUR STORAGE COME TO LIFE
+Numbers alone don't tell the full story. eDirStat renders your filesystem as a living visual landscape:
+• Dynamic Treemap: The bigger the block, the bigger the file. Extension-based HSL colors make file types recognizable at a glance.
+• Subtree Zoom & Breadcrumbs: Double-click any folder block to zoom straight into its contents, and use interactive path breadcrumbs to step back out.
+• Analytical Plots: Explore File Size Distribution histograms, File Age vs. Size scatterplots, Directory Composition breakdowns, and Duplicate Waste charts.
+• Live Filter: Zero in on matching paths with real-time case-sensitive and regex search.
+
+SURGICAL 7-STAGE DEDUPLICATION
+Most duplicate finders thrash your drive reading every file from start to finish. eDirStat uses a 7-stage pipeline (Size Partitioning, Prefix, Midpoint, Suffix, Multi-Range Sampling, Full BLAKE3, and Timestamp Validation) to verify identical files with minimal disk I/O.
+• Hardlink-Aware: Shared filesystem links are never mistaken for duplicate waste.
+• Batch Reclaim: Send duplicates to trash, delete permanently, or replace them with hardlinks in one click.
+
+WORK OFFLINE WITH SNAPSHOTS
+• Compact v3 Snapshots: Save scans to Zstd-compressed columnar files (.edst.zst) that load in milliseconds — perfect for auditing remote or offline machines.
+• WebAssembly Viewer: Explore saved snapshots in your browser at edirstat.com with zero installation.
+
+POWER USER DESKTOP WORKFLOW
+• Native Reveal: Highlight files directly in macOS Finder, Windows File Explorer, or Linux file managers.
+• Open Terminal Here: Launch your terminal emulator directly at any folder.
+• Cloud & Special Badges: Indicators for dataless cloud files (iCloud, OneDrive, Dropbox), symlinks, Unix devices, and restricted paths.
+• Total Scan Control: Cancel scans at any time, or restrict traversal to a single filesystem (-x).
+• Shortcuts & Drag-and-Drop: Fast keyboard navigation (⌘O/Ctrl+O, ⌘F/Ctrl+F, ⌥↑, ⏎ Zoom, Del) and drag-and-drop folder scanning.
+
+18 LANGUAGES & 3 SLEEK THEMES
+• 18 Languages: English, Arabic, Bengali, Chinese (Simplified), Chinese (Traditional), Dutch, French, German, Hindi, Italian, Japanese, Korean, Polish, Portuguese, Russian, Spanish, Turkish, and Vietnamese with auto-detection.
+• 3 Themes: Dark Mode, Light Mode, and High Contrast.
+
+100% PRIVATE, LOCAL-FIRST, SAFE RUST
+• Zero Telemetry: No tracking, no ads, no analytics, no accounts required.
+• Local Processing: All scanning and hashing runs strictly in local CPU memory.
+• Sandboxed & Open Source: Hardened under Apple's App Sandbox and 100% open source under the MIT License.
