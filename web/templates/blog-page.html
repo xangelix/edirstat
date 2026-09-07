@@ -1,0 +1,286 @@
+{% extends "base.html" %}
+
+{% block title %}{{ page.title }} — {{ config.title }}{% endblock title %}
+{% block description %}{{ page.description }}{% endblock description %}
+{% block keywords %}{{ page.extra.version | default(value="") }} release notes, edirstat changelog, disk usage analyzer, windirstat alternative, macos disk analyzer, linux disk usage, duplicate file finder, treemap zoom, rust disk analyzer{% endblock keywords %}
+
+{% block og_tags %}
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="{{ config.title }}">
+<meta property="og:url" content="{{ page.permalink | safe }}">
+<meta property="og:title" content="{{ page.title }}">
+<meta property="og:description" content="{{ page.description }}">
+<meta property="og:image" content="{{ config.base_url | safe }}/{{ config.extra.og_image | safe }}">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="{{ page.title }}">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="{{ page.date }}T00:00:00Z">
+<meta property="article:modified_time" content="{{ page.date }}T00:00:00Z">
+<meta property="article:author" content="https://github.com/xangelix">
+<meta property="article:section" content="Software Release Notes">
+<meta property="article:tag" content="Disk Usage">
+<meta property="article:tag" content="WinDirStat Alternative">
+<meta property="article:tag" content="Rust">
+{% endblock og_tags %}
+
+{% block twitter_tags %}
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="{{ page.title }}">
+<meta name="twitter:description" content="{{ page.description }}">
+<meta name="twitter:image" content="{{ config.base_url | safe }}/{{ config.extra.og_image | safe }}">
+<meta name="twitter:image:alt" content="{{ page.title }}">
+{% endblock twitter_tags %}
+
+{% block structured_data %}
+<script type="application/ld+json">
+{
+    "@context": "https://schema.org",
+    "@type": "BlogPosting",
+    "headline": {{ page.title | json_encode | safe }},
+    "description": {{ page.description | json_encode | safe }},
+    "datePublished": "{{ page.date }}T00:00:00Z",
+    "dateModified": "{{ page.date }}T00:00:00Z",
+    "mainEntityOfPage": {
+        "@type": "WebPage",
+        "@id": "{{ page.permalink | safe }}"
+    },
+    "author": {
+        "@type": "Person",
+        "name": "{{ config.extra.author | default(value="xangelix") }}",
+        "url": "{{ config.extra.github_url | safe }}"
+    },
+    "publisher": {
+        "@type": "Organization",
+        "name": "{{ config.title }}",
+        "url": "{{ config.base_url | safe }}",
+        "logo": {
+            "@type": "ImageObject",
+            "url": "{{ config.base_url | safe }}/assets/logo-nosubtext-transparent.svg"
+        }
+    },
+    "image": "{{ config.base_url | safe }}/{{ config.extra.og_image | safe }}",
+    "keywords": "disk usage analyzer, windirstat alternative, macos disk analyzer, linux disk usage, rust, duplicate file finder"
+}
+</script>
+<script type="application/ld+json">
+{
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+        {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "Home",
+            "item": "{{ config.base_url | safe }}/"
+        },
+        {
+            "@type": "ListItem",
+            "position": 2,
+            "name": "Blog",
+            "item": "{{ config.base_url | safe }}/blog/"
+        },
+        {
+            "@type": "ListItem",
+            "position": 3,
+            "name": {{ page.title | json_encode | safe }},
+            "item": "{{ page.permalink | safe }}"
+        }
+    ]
+}
+</script>
+{% endblock structured_data %}
+
+{% block content %}
+<!-- Grid Background -->
+<div class="grid-bg"></div>
+
+<!-- Header -->
+<header class="header">
+    <div class="header-container">
+        <a href="/" class="logo">
+            <img src="{{ get_url(path="assets/logo-nosubtext-transparent.svg") | safe }}" alt="eDirStat Logo" class="logo-img" width="160" height="40">
+        </a>
+        <nav class="nav">
+            <a href="/#features" class="nav-link">Features</a>
+            <a href="/#simulator" class="nav-link">Simulator</a>
+            <a href="/#benchmarks" class="nav-link">Benchmarks</a>
+            <a href="/#drag-races" class="nav-link">Videos</a>
+            <a href="/#guide" class="nav-link">Guide</a>
+            <a href="/blog/" class="nav-link active">Blog</a>
+        </nav>
+        <div class="header-actions">
+            <a href="{{ config.extra.github_url }}" target="_blank" class="btn btn-secondary btn-icon" aria-label="GitHub">
+                <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"></path><path d="M9 18c-4.51 2-5-2-7-2"></path></svg>
+            </a>
+            <a href="/app/" class="btn btn-secondary">
+                <i data-lucide="layout"></i>
+                <span>Web Viewer</span>
+            </a>
+            <a href="{{ config.extra.itch_io_url }}" target="_blank" class="btn btn-primary btn-glow">
+                <i data-lucide="download"></i>
+                <span>Download</span>
+            </a>
+        </div>
+    </div>
+</header>
+
+<!-- Main Container -->
+<main class="main-content blog-post-main">
+    <div class="blog-post-container">
+        
+        <!-- Breadcrumbs -->
+        <nav class="blog-breadcrumbs" aria-label="Breadcrumb">
+            <a href="/" class="breadcrumb-item">Home</a>
+            <span class="breadcrumb-separator">/</span>
+            <a href="/blog/" class="breadcrumb-item">Blog</a>
+            <span class="breadcrumb-separator">/</span>
+            <span class="breadcrumb-item active">{{ page.extra.version | default(value=page.title) }}</span>
+        </nav>
+
+        <!-- Article -->
+        <article class="blog-article glass-card">
+            
+            <!-- Article Header -->
+            <header class="article-header">
+                <div class="article-meta">
+                    <span class="blog-badge">{{ page.extra.badge | default(value="Release") }} {{ page.extra.version | default(value="") }}</span>
+                    <time class="blog-date" datetime="{{ page.date }}">{{ page.date | date(format="%B %d, %Y") }}</time>
+                    <span class="blog-reading-time">{{ page.reading_time }} min read</span>
+                </div>
+
+                <h1 class="article-title">{{ page.title }}</h1>
+                
+                {% if page.description %}
+                <p class="article-lead">{{ page.description }}</p>
+                {% endif %}
+            </header>
+
+            <hr class="article-divider">
+
+            <!-- Article Content -->
+            <div class="article-content">
+                {{ page.content | safe }}
+            </div>
+
+            <hr class="article-divider">
+
+            <!-- Related Features & Resources (Internal SEO Linking) -->
+            <div class="article-resources">
+                <h3 class="resources-title">Explore eDirStat Features &amp; Tools</h3>
+                <div class="resources-grid">
+                    <a href="/#simulator" class="resource-card glass-card">
+                        <i data-lucide="pie-chart" class="resource-icon"></i>
+                        <div class="resource-info">
+                            <span class="resource-name">Interactive Treemap Simulator</span>
+                            <span class="resource-desc">Test interactive treemap zoom and file distribution directly in your browser.</span>
+                        </div>
+                    </a>
+                    <a href="/#benchmarks" class="resource-card glass-card">
+                        <i data-lucide="zap" class="resource-icon"></i>
+                        <div class="resource-info">
+                            <span class="resource-name">Speed Benchmarks</span>
+                            <span class="resource-desc">Side-by-side traversal speed tests vs WinDirStat, WizTree, and QDirStat.</span>
+                        </div>
+                    </a>
+                    <a href="/app/" class="resource-card glass-card">
+                        <i data-lucide="layout" class="resource-icon"></i>
+                        <div class="resource-info">
+                            <span class="resource-name">Browser Snapshot Viewer</span>
+                            <span class="resource-desc">Inspect and query saved <code>.edst</code> disk snapshots with zero installation.</span>
+                        </div>
+                    </a>
+                    <a href="/#features" class="resource-card glass-card">
+                        <i data-lucide="copy" class="resource-icon"></i>
+                        <div class="resource-info">
+                            <span class="resource-name">7-Stage Deduplication</span>
+                            <span class="resource-desc">Learn how eDirStat identifies duplicate files with zero memory copies.</span>
+                        </div>
+                    </a>
+                </div>
+            </div>
+
+            <hr class="article-divider">
+
+            <!-- Article Footer CTA -->
+            <div class="article-cta">
+                <div class="article-cta-content">
+                    <h3>Get eDirStat v{{ page.extra.version | default(value=config.extra.version) }}</h3>
+                    <p>Official pre-compiled binaries are available exclusively on itch.io, funding open-source development.</p>
+                </div>
+                <div class="article-cta-actions">
+                    <a href="{{ config.extra.itch_io_url }}" target="_blank" class="btn btn-primary btn-glow">
+                        <i data-lucide="download"></i>
+                        <span>Get on itch.io</span>
+                    </a>
+                    <a href="{{ config.extra.github_url }}" target="_blank" class="btn btn-secondary">
+                        <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px;"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"></path><path d="M9 18c-4.51 2-5-2-7-2"></path></svg>
+                        <span>GitHub</span>
+                    </a>
+                </div>
+            </div>
+
+            <!-- Prev / Next Navigation -->
+            <nav class="post-nav">
+                {% if page.lower %}
+                <a href="{{ page.lower.permalink | safe }}" class="post-nav-item post-nav-prev">
+                    <span class="post-nav-label">← Previous Post</span>
+                    <span class="post-nav-title">{{ page.lower.title }}</span>
+                </a>
+                {% else %}
+                <div class="post-nav-placeholder"></div>
+                {% endif %}
+
+                {% if page.higher %}
+                <a href="{{ page.higher.permalink | safe }}" class="post-nav-item post-nav-next">
+                    <span class="post-nav-label">Next Post →</span>
+                    <span class="post-nav-title">{{ page.higher.title }}</span>
+                </a>
+                {% else %}
+                <div class="post-nav-placeholder"></div>
+                {% endif %}
+            </nav>
+
+        </article>
+
+        <!-- Back to Blog Link -->
+        <div class="back-to-blog">
+            <a href="/blog/" class="btn btn-secondary">
+                <i data-lucide="arrow-left"></i>
+                <span>Back to All Devlogs</span>
+            </a>
+        </div>
+
+    </div>
+</main>
+
+<!-- Footer -->
+<footer class="footer">
+    <div class="footer-container">
+        <div class="footer-left">
+            <div class="logo">
+                <img src="{{ get_url(path="assets/logo-nosubtext-transparent.svg") | safe }}" alt="eDirStat Logo" class="logo-img" width="160" height="40">
+            </div>
+            <p class="footer-desc">Fast, modern disk usage analyzer built in safe, native Rust.</p>
+        </div>
+        <div class="footer-right">
+            <div class="footer-links">
+                <a href="/blog/" class="footer-link">Blog &amp; Devlog</a>
+                <a href="{{ config.extra.github_url }}" target="_blank" class="footer-link">
+                    <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"></path><path d="M9 18c-4.51 2-5-2-7-2"></path></svg> GitHub
+                </a>
+                <a href="{{ config.extra.itch_io_url }}" target="_blank" class="footer-link">
+                    <i data-lucide="download"></i> itch.io
+                </a>
+                <a href="{{ config.extra.github_url }}/blob/main/LICENSE" target="_blank" class="footer-link">
+                    Licensed under {{ config.extra.license }}
+                </a>
+            </div>
+        </div>
+    </div>
+    <div class="footer-bottom">
+        <p>&copy; 2026 eDirStat. Released under the MIT License.</p>
+        <p class="trademark-disclaimer" style="opacity: 0.5; font-size: 0.8rem; margin-top: 8px;">WinDirStat, WizTree, and QDirStat are trademarks of their respective owners. eDirStat is an independent open-source project and is not affiliated with, sponsored by, or endorsed by the trademark holders.</p>
+    </div>
+</footer>
+{% endblock content %}

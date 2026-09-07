@@ -5,9 +5,10 @@
   "main": "index.js",
   "scripts": {
     "copy-assets": "node copy-assets.js",
-    "prebuild": "npm run copy-assets",
+    "sync:devlogs": "python3 ../scripts/sync_devlogs.py",
+    "prebuild": "npm run copy-assets && npm run sync:devlogs",
     "prebuild:assets": "npm run copy-assets",
-    "predev": "npm run copy-assets",
+    "predev": "npm run copy-assets && npm run sync:devlogs",
     "predev:assets": "npm run copy-assets",
     "dev:assets": "vite build --watch",
     "dev:zola": "zola serve",

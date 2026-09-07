@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+
+{% block title %}Devlog &amp; Blog — {{ config.title }}{% endblock title %}
+{% block description %}Official release notes, architecture deep dives, and development chronicles for eDirStat.{% endblock description %}
+{% block keywords %}edirstat changelog, edirstat devlog, release notes, windirstat alternative updates, macos disk analyzer release, linux disk usage devlog, rust disk analyzer updates{% endblock keywords %}
+
+{% block og_tags %}
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="{{ config.title }}">
+<meta property="og:url" content="{{ config.base_url | safe }}/blog/">
+<meta property="og:title" content="Devlog &amp; Engineering Blog — {{ config.title }}">
+<meta property="og:description" content="Official release notes, architecture deep dives, and performance engineering updates for eDirStat.">
+<meta property="og:image" content="{{ config.base_url | safe }}/{{ config.extra.og_image | safe }}">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="eDirStat Devlog &amp; Engineering Blog">
+<meta property="og:locale" content="en_US">
+{% endblock og_tags %}
+
+{% block twitter_tags %}
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Devlog &amp; Engineering Blog — {{ config.title }}">
+<meta name="twitter:description" content="Official release notes, architecture deep dives, and performance engineering updates for eDirStat.">
+<meta name="twitter:image" content="{{ config.base_url | safe }}/{{ config.extra.og_image | safe }}">
+<meta name="twitter:image:alt" content="eDirStat Devlog &amp; Engineering Blog">
+{% endblock twitter_tags %}
+
+{% block structured_data %}
+<script type="application/ld+json">
+{
+    "@context": "https://schema.org",
+    "@type": "CollectionPage",
+    "name": "eDirStat Devlog & Engineering Blog",
+    "description": "Official release notes, architecture deep dives, and performance engineering updates for eDirStat.",
+    "url": "{{ config.base_url | safe }}/blog/",
+    "isPartOf": {
+        "@type": "WebSite",
+        "name": "{{ config.title }}",
+        "url": "{{ config.base_url | safe }}"
+    }
+}
+</script>
+<script type="application/ld+json">
+{
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+        {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "Home",
+            "item": "{{ config.base_url | safe }}/"
+        },
+        {
+            "@type": "ListItem",
+            "position": 2,
+            "name": "Blog",
+            "item": "{{ config.base_url | safe }}/blog/"
+        }
+    ]
+}
+</script>
+{% endblock structured_data %}
+
+{% block content %}
+<!-- Grid Background -->
+<div class="grid-bg"></div>
+
+<!-- Header -->
+<header class="header">
+    <div class="header-container">
+        <a href="/" class="logo">
+            <img src="{{ get_url(path="assets/logo-nosubtext-transparent.svg") | safe }}" alt="eDirStat Logo" class="logo-img" width="160" height="40">
+        </a>
+        <nav class="nav">
+            <a href="/#features" class="nav-link">Features</a>
+            <a href="/#simulator" class="nav-link">Simulator</a>
+            <a href="/#benchmarks" class="nav-link">Benchmarks</a>
+            <a href="/#drag-races" class="nav-link">Videos</a>
+            <a href="/#guide" class="nav-link">Guide</a>
+            <a href="/blog/" class="nav-link active">Blog</a>
+        </nav>
+        <div class="header-actions">
+            <a href="{{ config.extra.github_url }}" target="_blank" class="btn btn-secondary btn-icon" aria-label="GitHub">
+                <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"></path><path d="M9 18c-4.51 2-5-2-7-2"></path></svg>
+            </a>
+            <a href="/app/" class="btn btn-secondary">
+                <i data-lucide="layout"></i>
+                <span>Web Viewer</span>
+            </a>
+            <a href="{{ config.extra.itch_io_url }}" target="_blank" class="btn btn-primary btn-glow">
+                <i data-lucide="download"></i>
+                <span>Download</span>
+            </a>
+        </div>
+    </div>
+</header>
+
+<!-- Main Container -->
+<main class="main-content blog-main">
+    
+    <!-- Hero Banner -->
+    <section class="blog-hero">
+        <div class="hero-glow"></div>
+        <div class="blog-hero-content">
+            <div class="version-badge">
+                <span class="badge-dot"></span>
+                <span>Changelogs &amp; Devlogs</span>
+            </div>
+            
+            <h1 class="hero-title">
+                What's New in <br>
+                <span class="gradient-text">eDirStat</span>
+            </h1>
+            
+            <p class="hero-subtitle">
+                Official release notes, architecture deep dives, and development chronicles as we build the world's fastest cross-platform disk usage analyzer.
+            </p>
+        </div>
+    </section>
+
+    <!-- Blog Posts Grid -->
+    <section class="blog-section">
+        <div class="blog-container">
+            <div class="blog-grid">
+                {% for page in section.pages %}
+                <article class="blog-card glass-card">
+                    <div class="blog-card-meta">
+                        <span class="blog-badge">{{ page.extra.badge | default(value="Release") }} {{ page.extra.version | default(value="") }}</span>
+                        <time class="blog-date" datetime="{{ page.date }}">{{ page.date | date(format="%B %d, %Y") }}</time>
+                        <span class="blog-reading-time">{{ page.reading_time }} min read</span>
+                    </div>
+
+                    <h2 class="blog-card-title">
+                        <a href="{{ page.permalink | safe }}">{{ page.title }}</a>
+                    </h2>
+
+                    <p class="blog-card-desc">
+                        {{ page.description | truncate(length=190) }}
+                    </p>
+
+                    <div class="blog-card-footer">
+                        <a href="{{ page.permalink | safe }}" class="blog-read-link">
+                            <span>Read Release Notes</span>
+                            <i data-lucide="arrow-right"></i>
+                        </a>
+                    </div>
+                </article>
+                {% endfor %}
+            </div>
+        </div>
+    </section>
+
+</main>
+
+<!-- Footer -->
+<footer class="footer">
+    <div class="footer-container">
+        <div class="footer-left">
+            <div class="logo">
+                <img src="{{ get_url(path="assets/logo-nosubtext-transparent.svg") | safe }}" alt="eDirStat Logo" class="logo-img" width="160" height="40">
+            </div>
+            <p class="footer-desc">Fast, modern disk usage analyzer built in safe, native Rust.</p>
+        </div>
+        <div class="footer-right">
+            <div class="footer-links">
+                <a href="/blog/" class="footer-link">Blog &amp; Devlog</a>
+                <a href="{{ config.extra.github_url }}" target="_blank" class="footer-link">
+                    <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"></path><path d="M9 18c-4.51 2-5-2-7-2"></path></svg> GitHub
+                </a>
+                <a href="{{ config.extra.itch_io_url }}" target="_blank" class="footer-link">
+                    <i data-lucide="download"></i> itch.io
+                </a>
+                <a href="{{ config.extra.github_url }}/blob/main/LICENSE" target="_blank" class="footer-link">
+                    Licensed under {{ config.extra.license }}
+                </a>
+            </div>
+        </div>
+    </div>
+    <div class="footer-bottom">
+        <p>&copy; 2026 eDirStat. Released under the MIT License.</p>
+        <p class="trademark-disclaimer" style="opacity: 0.5; font-size: 0.8rem; margin-top: 8px;">WinDirStat, WizTree, and QDirStat are trademarks of their respective owners. eDirStat is an independent open-source project and is not affiliated with, sponsored by, or endorsed by the trademark holders.</p>
+    </div>
+</footer>
+{% endblock content %}

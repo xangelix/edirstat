@@ -5,10 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}{{ config.title }} — {{ config.extra.tagline }}{% endblock title %}</title>
     <meta name="description" content="{% block description %}{{ config.description }}{% endblock description %}">
+    <!-- Meta tags -->
+    <meta name="keywords" content="{% block keywords %}disk usage analyzer, windirstat alternative, wiztree alternative, qdirstat alternative, macos disk analyzer, linux disk usage, duplicate file finder, treemap disk visualization, fast disk scanner, rust disk space analyzer{% endblock keywords %}">
+    <meta name="author" content="{{ config.extra.author | default(value="xangelix") }}">
+    <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1">
     <meta name="theme-color" content="#101014">
-    <link rel="canonical" href="{{ config.base_url | safe }}{{ current_path | default(value="/") | safe }}">
+    <link rel="canonical" href="{% block canonical %}{{ config.base_url | safe }}{{ current_path | default(value="/") | safe }}{% endblock canonical %}">
+
+    <!-- Feed Auto-Discovery -->
+    <link rel="alternate" type="application/atom+xml" title="{{ config.title }} Devlog &amp; Blog (Atom)" href="{{ get_url(path="atom.xml") | safe }}">
+    <link rel="alternate" type="application/atom+xml" title="{{ config.title }} Blog Feed (Atom)" href="{{ get_url(path="blog/atom.xml") | safe }}">
 
     <!-- Open Graph / Facebook -->
+    {% block og_tags %}
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="{{ config.title }}">
     <meta property="og:url" content="{{ config.base_url | safe }}{{ current_path | default(value="/") | safe }}">
@@ -17,15 +26,21 @@
     <meta property="og:image" content="{{ config.base_url | safe }}/{{ config.extra.og_image | safe }}">
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="{{ config.title }} — {{ config.extra.tagline }}">
     <meta property="og:locale" content="en_US">
+    {% endblock og_tags %}
 
     <!-- Twitter -->
+    {% block twitter_tags %}
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="{{ config.title }} — {{ config.extra.tagline }}">
     <meta name="twitter:description" content="{{ config.description }}">
     <meta name="twitter:image" content="{{ config.base_url | safe }}/{{ config.extra.og_image | safe }}">
+    <meta name="twitter:image:alt" content="{{ config.title }} — {{ config.extra.tagline }}">
+    {% endblock twitter_tags %}
 
     <!-- Structured data -->
+    {% block structured_data %}
     <script type="application/ld+json">
     {
         "@context": "https://schema.org",
@@ -43,11 +58,12 @@
         "screenshot": "{{ config.base_url | safe }}/{{ config.extra.og_image | safe }}",
         "author": {
             "@type": "Person",
-            "name": "xangelix",
+            "name": "{{ config.extra.author | default(value="xangelix") }}",
             "url": "{{ config.extra.github_url | safe }}"
         }
     }
     </script>
+    {% endblock structured_data %}
 
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
