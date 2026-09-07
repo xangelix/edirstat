@@ -23,8 +23,7 @@ from pathlib import Path
 try:
     import markdown
 except ImportError:
-    print("ERROR: 'markdown' package is required. Install via: pip install markdown", file=sys.stderr)
-    sys.exit(1)
+    markdown = None
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CHANGELOG_PATH = REPO_ROOT / "CHANGELOG.md"
@@ -187,6 +186,11 @@ badge = "Release"{img_frontmatter}
 
 def export_blog_to_itch():
     """Read Zola blog posts and compile them into itch.io devlog HTML files."""
+    if markdown is None:
+        print("  ℹ 'markdown' package not installed; skipping itch.io devlog HTML generation.", file=sys.stderr)
+        print("    (To enable: pacman -S python-markdown, or pip install markdown)", file=sys.stderr)
+        return 0
+
     ITCH_DIR.mkdir(parents=True, exist_ok=True)
     count = 0
 

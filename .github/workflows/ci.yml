@@ -258,7 +258,7 @@ jobs:
 
       - name: Install System Dependencies
         run: |
-          paru -Syu --noconfirm zola nodejs npm
+          paru -Syu --noconfirm zola nodejs npm python-markdown
 
       - name: Download WASM Dist
         uses: actions/download-artifact@v8
