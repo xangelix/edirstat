@@ -651,6 +651,11 @@ impl GuiApp {
     pub fn load_snapshot_file(&mut self, path: PathBuf) -> Result<(), crate::EdirstatError> {
         let (arena, string_pool) = load_snapshot(&path)?;
         self.ingest_loaded_snapshot(arena, string_pool);
+        let file_name = path
+            .file_name()
+            .map(|s| s.to_string_lossy())
+            .unwrap_or_default();
+        crate::gui::toast_success(format!("Loaded snapshot: {file_name}"));
         self.current_scan_path = Some(path);
         Ok(())
     }
@@ -757,26 +762,95 @@ impl GuiApp {
         }
     }
 
+    /// Determines the default snapshot filename given the current scan path.
+    pub(crate) fn default_snapshot_filename(scan_path: Option<&std::path::Path>) -> String {
+        let base_name = scan_path
+            .and_then(|p| {
+                let name = p.file_name()?.to_string_lossy();
+                let stripped = name
+                    .strip_suffix(".edst.zst")
+                    .or_else(|| name.strip_suffix(".edst"))
+                    .unwrap_or(&name);
+                if stripped.is_empty() {
+                    None
+                } else {
+                    Some(stripped.to_string())
+                }
+            })
+            .unwrap_or_else(|| "snapshot".to_string());
+        format!("{base_name}.edst.zst")
+    }
+
+    /// Resolves the save path and compression mode from a user-selected path.
+    ///
+    /// Returns `(resolved_path, compress)`.
+    ///
+    /// - If the path ends with `.edst` (uncompressed snapshot format), compression is disabled (`compress = false`).
+    /// - If the path ends with `.edst.zst`, compression is enabled (`compress = true`).
+    /// - If the path ends with `.zst`, it is normalized to `.edst.zst` and compression is enabled.
+    /// - Otherwise (e.g. extension omitted or generic), `.edst.zst` is appended and compression is enabled.
+    pub(crate) fn resolve_snapshot_save_path(path: &std::path::Path) -> (std::path::PathBuf, bool) {
+        let path_str = path.to_string_lossy();
+        let lower = path_str.to_ascii_lowercase();
+
+        if lower.ends_with(".edst") {
+            (path.to_path_buf(), false)
+        } else if lower.ends_with(".edst.zst") {
+            (path.to_path_buf(), true)
+        } else if lower.ends_with(".zst") {
+            let base = &path_str[..path_str.len() - 4];
+            let normalized = if base.to_ascii_lowercase().ends_with(".edst") {
+                path.to_path_buf()
+            } else {
+                std::path::PathBuf::from(format!("{base}.edst.zst"))
+            };
+            (normalized, true)
+        } else {
+            (
+                std::path::PathBuf::from(format!("{path_str}.edst.zst")),
+                true,
+            )
+        }
+    }
+
     /// Prompts the user to save the current tree snapshot to disk.
     pub fn prompt_save_snapshot(&mut self, snapshot: &FileArenaSnapshot) {
         if snapshot.nodes.is_empty() {
             return;
         }
 
+        let default_name = Self::default_snapshot_filename(self.current_scan_path.as_deref());
+
         #[cfg(not(target_family = "wasm"))]
         {
             let file_opt = FileDialog::new()
-                .add_filter("eDirStat Compressed Snapshot (*.edst.zst)", &["edst.zst"])
+                .add_filter(
+                    "eDirStat Compressed Snapshot (*.edst.zst)",
+                    &["edst.zst", "zst"],
+                )
                 .add_filter("eDirStat Uncompressed Snapshot (*.edst)", &["edst"])
+                .set_file_name(&default_name)
                 .save_file();
             if let Some(path) = file_opt {
-                let compress = path
-                    .extension()
-                    .is_none_or(|ext| ext.eq_ignore_ascii_case("zst"));
+                let (path, compress) = Self::resolve_snapshot_save_path(&path);
                 match save_snapshot(&snapshot.nodes, &snapshot.string_pool, &path, compress) {
-                    Ok(()) => {}
+                    Ok(()) => {
+                        let file_name = path
+                            .file_name()
+                            .map(|s| s.to_string_lossy())
+                            .unwrap_or_default();
+                        if compress {
+                            crate::gui::toast_success(format!(
+                                "Saved compressed snapshot: {file_name} (Zstandard)"
+                            ));
+                        } else {
+                            crate::gui::toast_success(format!(
+                                "Saved uncompressed snapshot: {file_name}"
+                            ));
+                        }
+                    }
                     Err(e) => {
-                        println!("Failed to save snapshot: {e}");
+                        crate::gui::toast_error(format!("Failed to save snapshot: {e}"));
                     }
                 }
             }
@@ -788,13 +862,18 @@ impl GuiApp {
             let string_pool = snapshot.string_pool.clone();
             wasm_bindgen_futures::spawn_local(async move {
                 if let Some(handle) = rfd::AsyncFileDialog::new()
-                    .add_filter("eDirStat Compressed Snapshot (*.edst.zst)", &["edst.zst"])
+                    .add_filter(
+                        "eDirStat Compressed Snapshot (*.edst.zst)",
+                        &["edst.zst", "zst"],
+                    )
                     .add_filter("eDirStat Uncompressed Snapshot (*.edst)", &["edst"])
-                    .set_file_name("snapshot.edst.zst")
+                    .set_file_name(&default_name)
                     .save_file()
                     .await
                 {
-                    let compress = handle.file_name().to_ascii_lowercase().ends_with(".zst");
+                    let file_name = handle.file_name();
+                    let lower = file_name.to_ascii_lowercase();
+                    let compress = !lower.ends_with(".edst");
                     let result =
                         crate::snapshot::save_snapshot_to_bytes(&nodes, &string_pool, compress)
                             .map_err(|e| e.to_string());
@@ -802,6 +881,14 @@ impl GuiApp {
                         Ok(bytes) => {
                             if let Err(e) = handle.write(&bytes).await {
                                 crate::gui::toast_error(format!("Failed to save snapshot: {e}"));
+                            } else if compress {
+                                crate::gui::toast_success(format!(
+                                    "Saved compressed snapshot: {file_name} (Zstandard)"
+                                ));
+                            } else {
+                                crate::gui::toast_success(format!(
+                                    "Saved uncompressed snapshot: {file_name}"
+                                ));
                             }
                         }
                         Err(e) => {
@@ -923,10 +1010,16 @@ impl GuiApp {
         }
 
         let save_btn = ui.add_enabled_ui(has_nodes, |ui| {
+            let sc_save =
+                shortcuts::format_shortcut(ui.ctx(), &shortcuts::SHORTCUT_SAVE_SNAPSHOT);
             ui.add(shortcuts::button_with_shortcut(
                 t!("save-snapshot"),
                 &shortcuts::SHORTCUT_SAVE_SNAPSHOT,
                 ui.ctx(),
+            ))
+            .on_hover_text(format!(
+                "{} ({sc_save})\nSave active scan to a compressed snapshot (*.edst.zst with Zstandard)",
+                t!("save-snapshot")
             ))
         });
         if save_btn.inner.clicked() {
@@ -2140,7 +2233,10 @@ impl eframe::App for GuiApp {
                     shortcuts::format_shortcut(ui.ctx(), &shortcuts::SHORTCUT_SAVE_SNAPSHOT);
                 if ui
                     .button(t!("save-snapshot"))
-                    .on_hover_text(format!("{} ({sc_save})", t!("save-snapshot")))
+                    .on_hover_text(format!(
+                        "{} ({sc_save})\nSave active scan to a compressed snapshot (*.edst.zst with Zstandard)",
+                        t!("save-snapshot")
+                    ))
                     .clicked()
                     && !snapshot.nodes.is_empty()
                 {
@@ -2152,12 +2248,13 @@ impl eframe::App for GuiApp {
                 #[cfg(not(target_family = "wasm"))]
                 if ui.button(t!("load-snapshot")).clicked() {
                     let file_opt = FileDialog::new()
-                        .add_filter("eDirStat Snapshot", &["edst.zst", "edst"])
+                        .add_filter("eDirStat Snapshot (*.edst.zst, *.edst)", &["edst.zst", "edst", "zst"])
+                        .add_filter("All Files (*)", &["*"])
                         .pick_file();
                     if let Some(path) = file_opt
                         && let Err(e) = self.load_snapshot_file(path)
                     {
-                        println!("Failed to load snapshot: {e}");
+                        crate::gui::toast_error(format!("Failed to load snapshot: {e}"));
                     }
                 }
 
@@ -2169,7 +2266,8 @@ impl eframe::App for GuiApp {
                     let ctx = ui.ctx().clone();
                     wasm_bindgen_futures::spawn_local(async move {
                         if let Some(handle) = rfd::AsyncFileDialog::new()
-                            .add_filter("eDirStat Snapshot", &["edst.zst", "edst"])
+                            .add_filter("eDirStat Snapshot (*.edst.zst, *.edst)", &["edst.zst", "edst", "zst"])
+                            .add_filter("All Files (*)", &["*"])
                             .pick_file()
                             .await
                         {
@@ -2556,12 +2654,16 @@ impl GuiApp {
                         ui.add_space(10.0);
                         if ui.button(t!("load-snapshot")).clicked() {
                             let file_opt = rfd::FileDialog::new()
-                                .add_filter("eDirStat Snapshot", &["edst.zst", "edst"])
+                                .add_filter(
+                                    "eDirStat Snapshot (*.edst.zst, *.edst)",
+                                    &["edst.zst", "edst", "zst"],
+                                )
+                                .add_filter("All Files (*)", &["*"])
                                 .pick_file();
                             if let Some(path) = file_opt
                                 && let Err(e) = self.load_snapshot_file(path)
                             {
-                                println!("Failed to load snapshot: {e}");
+                                crate::gui::toast_error(format!("Failed to load snapshot: {e}"));
                             }
                         }
                     }
@@ -2572,7 +2674,11 @@ impl GuiApp {
                             let command_tx = self.command_tx.clone();
                             wasm_bindgen_futures::spawn_local(async move {
                                 if let Some(handle) = rfd::AsyncFileDialog::new()
-                                    .add_filter("eDirStat Snapshot", &["edst.zst", "edst"])
+                                    .add_filter(
+                                        "eDirStat Snapshot (*.edst.zst, *.edst)",
+                                        &["edst.zst", "edst", "zst"],
+                                    )
+                                    .add_filter("All Files (*)", &["*"])
                                     .pick_file()
                                     .await
                                 {
@@ -3303,5 +3409,64 @@ mod tests {
         // Unsupported / invalid
         assert_eq!(Locale::from_bcp47("fa-IR"), None);
         assert_eq!(Locale::from_bcp47(""), None);
+    }
+
+    #[test]
+    fn test_default_snapshot_filename() {
+        assert_eq!(
+            GuiApp::default_snapshot_filename(Some(Path::new("/home/user/projects"))),
+            "projects.edst.zst"
+        );
+        assert_eq!(
+            GuiApp::default_snapshot_filename(Some(Path::new("/home/user/scan.edst.zst"))),
+            "scan.edst.zst"
+        );
+        assert_eq!(
+            GuiApp::default_snapshot_filename(Some(Path::new("/home/user/scan.edst"))),
+            "scan.edst.zst"
+        );
+        assert_eq!(
+            GuiApp::default_snapshot_filename(Some(Path::new("/"))),
+            "snapshot.edst.zst"
+        );
+        assert_eq!(GuiApp::default_snapshot_filename(None), "snapshot.edst.zst");
+    }
+
+    #[test]
+    fn test_resolve_snapshot_save_path() {
+        // Raw filename without extension -> compressed .edst.zst
+        let (path, compress) = GuiApp::resolve_snapshot_save_path(Path::new("/tmp/my_scan"));
+        assert_eq!(path, PathBuf::from("/tmp/my_scan.edst.zst"));
+        assert!(compress);
+
+        // Full .edst.zst extension preserved
+        let (path, compress) =
+            GuiApp::resolve_snapshot_save_path(Path::new("/tmp/my_scan.edst.zst"));
+        assert_eq!(path, PathBuf::from("/tmp/my_scan.edst.zst"));
+        assert!(compress);
+
+        // Explicit .edst extension -> uncompressed
+        let (path, compress) = GuiApp::resolve_snapshot_save_path(Path::new("/tmp/my_scan.edst"));
+        assert_eq!(path, PathBuf::from("/tmp/my_scan.edst"));
+        assert!(!compress);
+
+        // Lone .zst extension normalized to .edst.zst
+        let (path, compress) = GuiApp::resolve_snapshot_save_path(Path::new("/tmp/my_scan.zst"));
+        assert_eq!(path, PathBuf::from("/tmp/my_scan.edst.zst"));
+        assert!(compress);
+
+        // Generic extension appended with .edst.zst
+        let (path, compress) = GuiApp::resolve_snapshot_save_path(Path::new("/tmp/backup.2024"));
+        assert_eq!(path, PathBuf::from("/tmp/backup.2024.edst.zst"));
+        assert!(compress);
+
+        // Case insensitivity
+        let (path, compress) = GuiApp::resolve_snapshot_save_path(Path::new("/tmp/SCAN.EDST"));
+        assert_eq!(path, PathBuf::from("/tmp/SCAN.EDST"));
+        assert!(!compress);
+
+        let (path, compress) = GuiApp::resolve_snapshot_save_path(Path::new("/tmp/SCAN.EDST.ZST"));
+        assert_eq!(path, PathBuf::from("/tmp/SCAN.EDST.ZST"));
+        assert!(compress);
     }
 }
