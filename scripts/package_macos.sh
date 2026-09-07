@@ -13,6 +13,7 @@
 #   ./scripts/package_macos.sh --skip-notarize          # local signed test (skip notarize wait)
 #   ./scripts/package_macos.sh --ad-hoc                 # local dev or CI build (no secrets needed)
 #   ./scripts/package_macos.sh --appstore --build 3     # Mac App Store upload (.pkg)
+#   ./scripts/package_macos.sh --appstore --profile <path> # specify custom provisioning profile
 #   ./scripts/package_macos.sh --appstore --validate    # build App Store .pkg and run validation
 #   ./scripts/package_macos.sh --validate staging/eDirStat.app # validate existing .app bundle
 #
@@ -21,7 +22,7 @@
 #   rustup target add aarch64-apple-darwin x86_64-apple-darwin
 #   xcrun notarytool store-credentials "notary" --apple-id ... --team-id ... --password ...
 #   App Store mode also expects: sandbox.entitlements + the Mac App Store
-#   provisioning profile (default path: appstore.provisionprofile)
+#   provisioning profile (default: appstore.provisionprofile, or pass --profile <file>)
 
 set -euo pipefail
 
@@ -79,6 +80,7 @@ while [[ $# -gt 0 ]]; do
         shift
       fi
       ;;
+    --profile|--provisionprofile) APPSTORE_PROFILE="$2"; shift 2 ;;
     -h|--help)
       echo "Usage: $0 [options]"
       echo "Options:"
@@ -88,6 +90,7 @@ while [[ $# -gt 0 ]]; do
       echo "  --ad-hoc, --unsigned  Ad-hoc sign (-), skip notarization (for local dev / CI)"
       echo "  --skip-notarize       Sign with Developer ID, skip notarytool"
       echo "  --build <num>         App Store CFBundleVersion build number (default: 1)"
+      echo "  --profile <file>      Mac App Store provisioning profile (default: appstore.provisionprofile)"
       echo "  --entitlements <file> Override entitlements plist"
       echo "  --no-default-features, --no-online"
       echo "                        Build without default features (omits GitHub update check)"
@@ -189,6 +192,19 @@ validate_bundle() {
     fi
   fi
 
+  # 6. Quarantine extended attribute check (TestFlight / App Store reject 91109)
+  if command -v xattr >/dev/null 2>&1; then
+    echo "  ✓ Checking for com.apple.quarantine extended attributes..."
+    local q_hits
+    q_hits=$(xattr -r "$target_app" 2>/dev/null | grep -i "com.apple.quarantine" || true)
+    if [[ -n "$q_hits" ]]; then
+      echo "ERROR: com.apple.quarantine extended attribute found in bundle." >&2
+      echo "       App Store / TestFlight rejects quarantined files (Error 91109)." >&2
+      echo "       Run 'xattr -cr $target_app' to strip extended attributes." >&2
+      return 1
+    fi
+  fi
+
   echo "==> [Validate] Application bundle validation passed: $target_app"
 }
 
@@ -287,6 +303,16 @@ validate_dmg() {
     fi
   fi
 
+  # 3. Stapler ticket check on the DMG (when notarized)
+  if command -v xcrun >/dev/null 2>&1; then
+    if [[ "$AD_HOC" -eq 0 && "$SKIP_NOTARIZE" -eq 0 ]]; then
+      echo "  ✓ Validating stapled ticket (stapler)..."
+      xcrun stapler validate "$target_dmg" 2>&1 | sed 's/^/    /' || {
+        echo "WARNING: Staple ticket validation reported issues for $target_dmg" >&2
+      }
+    fi
+  fi
+
   echo "==> [Validate] Disk image validation passed: $target_dmg"
 }
 
@@ -307,7 +333,9 @@ fi
 
 # ---------- Select identities ----------
 find_identity() {  # $1 = grep pattern, $2 = policy flags
-  security find-identity -v $2 2>/dev/null | grep "$1" | head -1 | sed -E 's/.*"(.*)"/\1/' || true
+  local pattern="$1"
+  local policy="${2:-}"
+  security find-identity -v ${policy:+$policy} 2>/dev/null | grep -E -i "$pattern" | head -1 | sed -E 's/.*"(.*)"/\1/' || true
 }
 
 if [[ "$AD_HOC" -eq 1 ]]; then
@@ -338,11 +366,33 @@ elif [[ "$MODE" == "appstore" ]]; then
 EOF
     fi
   fi
-  CODESIGN_IDENTITY="${CODESIGN_IDENTITY:-$(find_identity "Apple Distribution" "-p codesigning")}"
-  INSTALLER_IDENTITY="${INSTALLER_IDENTITY:-$(find_identity -i "Mac Installer Distribution\|3rd Party Mac Developer Installer" "")}"
-  [[ -n "$CODESIGN_IDENTITY" ]]  || { echo "ERROR: no 'Apple Distribution' identity." >&2; exit 1; }
-  [[ -n "$INSTALLER_IDENTITY" ]] || { echo "ERROR: no installer identity (Mac Installer Distribution)." >&2; exit 1; }
-  [[ -f "$APPSTORE_PROFILE" ]]   || { echo "ERROR: provisioning profile not found at $APPSTORE_PROFILE" >&2; exit 1; }
+  CODESIGN_IDENTITY="${CODESIGN_IDENTITY:-$(find_identity "Apple Distribution|3rd Party Mac Developer Application" "-p codesigning")}"
+  INSTALLER_IDENTITY="${INSTALLER_IDENTITY:-$(find_identity "Mac Installer Distribution|3rd Party Mac Developer Installer" "")}"
+  [[ -n "$CODESIGN_IDENTITY" ]]  || {
+    echo "ERROR: no 'Apple Distribution' or '3rd Party Mac Developer Application' identity found in Keychain." >&2
+    echo "       In Xcode -> Settings -> Accounts -> Manage Certificates..., add an 'Apple Distribution' certificate." >&2
+    exit 1
+  }
+  [[ -n "$INSTALLER_IDENTITY" ]] || {
+    echo "ERROR: no 'Mac Installer Distribution' or '3rd Party Mac Developer Installer' identity found in Keychain." >&2
+    echo "       In Xcode -> Settings -> Accounts -> Manage Certificates..., add a 'Mac Installer Distribution' certificate." >&2
+    exit 1
+  }
+  if [[ ! -f "$APPSTORE_PROFILE" ]]; then
+    # Try finding any *.provisionprofile in the repository root
+    local auto_profile
+    auto_profile="$(find . -maxdepth 1 -name "*.provisionprofile" 2>/dev/null | head -1 || true)"
+    if [[ -n "$auto_profile" && -f "$auto_profile" ]]; then
+      APPSTORE_PROFILE="$auto_profile"
+      echo "==> Auto-detected provisioning profile: $APPSTORE_PROFILE"
+    fi
+  fi
+  [[ -f "$APPSTORE_PROFILE" ]]   || {
+    echo "ERROR: provisioning profile not found at $APPSTORE_PROFILE" >&2
+    echo "       Download your Mac App Store profile from developer.apple.com -> Certificates, Identifiers & Profiles -> Profiles" >&2
+    echo "       and save it as '$APPSTORE_PROFILE' in the repository root, or pass --profile <path>." >&2
+    exit 1
+  }
   echo "==> Mode:             Mac App Store (.pkg)"
   echo "==> App identity:     $CODESIGN_IDENTITY"
   echo "==> Installer ident:  $INSTALLER_IDENTITY"
@@ -450,6 +500,12 @@ cat > "$APP_DIR/Contents/Info.plist" <<EOF
 </plist>
 EOF
 
+# ---------- Strip extended attributes (com.apple.quarantine from web downloads) ----------
+if command -v xattr >/dev/null 2>&1; then
+  echo "==> Stripping extended attributes (quarantine) from bundle"
+  xattr -cr "$APP_DIR" 2>/dev/null || true
+fi
+
 # ---------- Sign (inside-out: executable, then bundle) ----------
 if [[ "$AD_HOC" -eq 1 ]]; then
   echo "==> codesign (ad-hoc)"
@@ -497,7 +553,11 @@ create_dmg() {
   local staging_dir="staging-dmg-$TARGET"
   rm -rf "$staging_dir" "$OUT_DMG"
   mkdir -p "$staging_dir"
-  cp -R "$APP_DIR" "$staging_dir/"
+  if command -v ditto >/dev/null 2>&1; then
+    ditto "$APP_DIR" "$staging_dir/$APP_NAME.app"
+  else
+    cp -R "$APP_DIR" "$staging_dir/"
+  fi
   ln -s /Applications "$staging_dir/Applications"
 
   echo "==> Creating disk image (.dmg): $OUT_DMG"
