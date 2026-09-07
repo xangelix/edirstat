@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=eDirStat
+Comment=Fast, interactive graphical disk usage analyzer & deduplication engine
+GenericName=Disk Usage Analyzer
+Exec=edirstat %U
+Icon=edirstat
+Terminal=false
+StartupNotify=true
+Categories=System;Filesystem;Utility;
+Keywords=disk;usage;analyzer;storage;size;cleanup;dedup;treemap;
+MimeType=application/octet-stream;

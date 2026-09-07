@@ -218,7 +218,7 @@ jobs:
           cache-on-failure: true
 
       - name: Install Packaging Dependencies
-        run: pacman -Syu --noconfirm --needed mingw-w64-gcc pacman-contrib
+        run: pacman -Syu --noconfirm --needed mingw-w64-gcc pacman-contrib dpkg
 
       - name: Configure safe directory for Git
         run: git config --global --add safe.directory "*"
@@ -240,6 +240,10 @@ jobs:
         # TARGET_CPUS defaults to the full variant list in the script; keep
         # the matrix legs above in sync with it.
         run: MULTIVERS_SKIP_VARIANTS=1 ./scripts/build_local_multivers.sh
+
+      - name: Build Debian (.deb) Package
+        run: |
+          ./scripts/package_deb.sh --binary target/x86_64-unknown-linux-gnu/release/edirstat_multivers --out-dir staging-linux-installer
 
       - name: Build Arch Linux Pacman Package as tux user
         run: |
@@ -297,7 +301,7 @@ jobs:
           name: multivers-linux
           path: target/x86_64-unknown-linux-gnu/release/edirstat_multivers
 
-      - name: Store Pacman Package
+      - name: Store Linux Packages (Debian & Pacman)
         uses: actions/upload-artifact@v7
         with:
           name: edirstat-pacman-pkg
