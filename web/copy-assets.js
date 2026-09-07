@@ -59,6 +59,14 @@ if (fs.existsSync(distPath)) {
   console.log("Copied crates/edirstat-gui/dist -> static/app");
 }
 
+// Copy blog hero images
+const blogImagesSrc = path.join(repoRoot, 'assets/blog');
+const blogImagesDest = path.join(projectRoot, 'static/assets/blog');
+if (fs.existsSync(blogImagesSrc)) {
+  copyFolderSync(blogImagesSrc, blogImagesDest);
+  console.log("Copied assets/blog -> static/assets/blog");
+}
+
 // Clean up old viewer directory if it exists
 const oldViewerPath = path.join(projectRoot, 'static/viewer');
 if (fs.existsSync(oldViewerPath)) {

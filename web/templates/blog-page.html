@@ -10,10 +10,14 @@
 <meta property="og:url" content="{{ page.permalink | safe }}">
 <meta property="og:title" content="{{ page.title }}">
 <meta property="og:description" content="{{ page.description }}">
+{% if page.extra.image %}
+<meta property="og:image" content="{{ get_url(path=page.extra.image) | safe }}">
+{% else %}
 <meta property="og:image" content="{{ config.base_url | safe }}/{{ config.extra.og_image | safe }}">
+{% endif %}
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="{{ page.title }}">
+<meta property="og:image:alt" content="{{ page.extra.image_alt | default(value=page.title) }}">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="{{ page.date }}T00:00:00Z">
 <meta property="article:modified_time" content="{{ page.date }}T00:00:00Z">
@@ -28,8 +32,12 @@
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="{{ page.title }}">
 <meta name="twitter:description" content="{{ page.description }}">
+{% if page.extra.image %}
+<meta name="twitter:image" content="{{ get_url(path=page.extra.image) | safe }}">
+{% else %}
 <meta name="twitter:image" content="{{ config.base_url | safe }}/{{ config.extra.og_image | safe }}">
-<meta name="twitter:image:alt" content="{{ page.title }}">
+{% endif %}
+<meta name="twitter:image:alt" content="{{ page.extra.image_alt | default(value=page.title) }}">
 {% endblock twitter_tags %}
 
 {% block structured_data %}
@@ -59,7 +67,7 @@
             "url": "{{ config.base_url | safe }}/assets/logo-nosubtext-transparent.svg"
         }
     },
-    "image": "{{ config.base_url | safe }}/{{ config.extra.og_image | safe }}",
+    "image": "{% if page.extra.image %}{{ get_url(path=page.extra.image) | safe }}{% else %}{{ config.base_url | safe }}/{{ config.extra.og_image | safe }}{% endif %}",
     "keywords": "disk usage analyzer, windirstat alternative, macos disk analyzer, linux disk usage, rust, duplicate file finder"
 }
 </script>
@@ -155,6 +163,12 @@
                 <p class="article-lead">{{ page.description }}</p>
                 {% endif %}
             </header>
+
+            {% if page.extra.image %}
+            <div class="article-hero-media">
+                <img src="{{ get_url(path=page.extra.image) | safe }}" alt="{{ page.extra.image_alt | default(value=page.title) }}" class="article-hero-img" loading="eager">
+            </div>
+            {% endif %}
 
             <hr class="article-divider">
 

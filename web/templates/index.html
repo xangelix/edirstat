@@ -590,6 +590,13 @@ cargo build --release</code></pre>
                 {% for page in blog.pages %}
                 {% if loop.index <= 3 %}
                 <article class="blog-card glass-card">
+                    {% if page.extra.image %}
+                    <div class="blog-card-media">
+                        <a href="{{ page.permalink | safe }}" tabindex="-1" aria-hidden="true">
+                            <img src="{{ get_url(path=page.extra.image) | safe }}" alt="{{ page.extra.image_alt | default(value=page.title) }}" class="blog-card-img" loading="lazy">
+                        </a>
+                    </div>
+                    {% endif %}
                     <div class="blog-card-meta">
                         <span class="blog-badge">{{ page.extra.badge | default(value="Release") }} {{ page.extra.version | default(value="") }}</span>
                         <time class="blog-date" datetime="{{ page.date }}">{{ page.date | date(format="%B %d, %Y") }}</time>

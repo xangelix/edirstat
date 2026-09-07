@@ -30,6 +30,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 CHANGELOG_PATH = REPO_ROOT / "CHANGELOG.md"
 BLOG_DIR = REPO_ROOT / "web" / "content" / "blog"
 ITCH_DIR = REPO_ROOT / "web" / "itch" / "devlog"
+WEB_DIR = REPO_ROOT / "web"
 
 RELEASE_TITLES = {
     "2.2.0": "eDirStat v2.2.0 — Treemap Zoom, 18 Languages & Mac App Store Release",
@@ -90,8 +91,34 @@ def parse_changelog(changelog_path: Path):
     return releases
 
 
+def find_hero_image(version: str) -> tuple:
+    """Check if a hero image exists for a given version in assets/blog or web/static/assets/blog."""
+    extensions = [".png", ".webp", ".jpg", ".jpeg"]
+    candidates = [
+        f"v{version}",
+        version,
+    ]
+    search_dirs = [
+        REPO_ROOT / "assets" / "blog",
+        WEB_DIR / "static" / "assets" / "blog",
+    ]
+    for sdir in search_dirs:
+        if not sdir.exists():
+            continue
+        for cand in candidates:
+            for ext in extensions:
+                img_file = sdir / f"{cand}{ext}"
+                if img_file.exists():
+                    return f"assets/blog/{img_file.name}", img_file
+    return None, None
+
+
 def convert_markdown_to_itch_html(md_text: str) -> str:
-    """Convert markdown into clean, self-contained HTML suitable for itch.io devlogs."""
+    """Convert markdown into clean, self-contained HTML suitable for itch.io devlogs.
+    
+    Note: Itch.io supports separate cover image uploads via its dashboard,
+    so we do not insert inline hero image tags into the devlog body.
+    """
     # Convert markdown using standard extensions
     html = markdown.markdown(
         md_text,
@@ -135,6 +162,11 @@ def import_changelog_to_blog():
         desc = rel["description"].replace('"', '\\"')
         body = promote_headings_for_post(rel["body"])
 
+        rel_img, _ = find_hero_image(ver)
+        img_frontmatter = ""
+        if rel_img:
+            img_frontmatter = f'\nimage = "{rel_img}"\nimage_alt = "{title}"'
+
         post_path = BLOG_DIR / f"v{ver}.md"
         frontmatter = f"""+++
 title = "{title}"
@@ -143,7 +175,7 @@ description = "{desc}"
 
 [extra]
 version = "{ver}"
-badge = "Release"
+badge = "Release"{img_frontmatter}
 +++
 """
         post_path.write_text(frontmatter + body + "\n", encoding="utf-8")
