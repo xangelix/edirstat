@@ -166,7 +166,7 @@
 
             {% if page.extra.image %}
             <div class="article-hero-media">
-                <img src="{{ get_url(path=page.extra.image) | safe }}" alt="{{ page.extra.image_alt | default(value=page.title) }}" class="article-hero-img" loading="eager">
+                <img src="{{ get_url(path=page.extra.image) | safe }}" alt="{{ page.extra.image_alt | default(value=page.title) }}" class="article-hero-img" loading="eager" data-zoomable>
             </div>
             {% endif %}
 

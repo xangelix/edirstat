@@ -21,7 +21,8 @@
   "license": "MIT",
   "dependencies": {
     "chart.js": "^4.5.1",
-    "lucide": "^1.41.0"
+    "lucide": "^1.41.0",
+    "medium-zoom": "^1.1.0"
   },
   "devDependencies": {
     "concurrently": "^10.0.5",

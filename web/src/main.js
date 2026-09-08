@@ -1,4 +1,5 @@
 import './style.css';
+import mediumZoom from 'medium-zoom';
 import { Chart, registerables } from 'chart.js';
 import { 
   createIcons, Folder, File, Zap, Cpu, Shield, Layers, 
@@ -1473,8 +1474,37 @@ function triggerReclaimAnimation(actionType) {
   if (reclaimAmtEl) reclaimAmtEl.textContent = "0 Bytes";
 }
 
+// --- MEDIUM-ZOOM INITIALIZATION ---
+function initMediumZoom() {
+  const zoomableElements = document.querySelectorAll('.article-hero-img, [data-zoomable], .article-content img');
+  if (zoomableElements.length === 0) return;
+
+  const zoom = mediumZoom(zoomableElements, {
+    margin: 24,
+    background: 'rgba(10, 12, 16, 0.95)',
+    scrollOffset: 40,
+  });
+
+  zoom.on('open', (event) => {
+    const media = event.target.closest('.article-hero-media');
+    if (media) {
+      media.classList.add('is-zoomed');
+    }
+  });
+
+  zoom.on('closed', (event) => {
+    const media = event.target.closest('.article-hero-media');
+    if (media) {
+      media.classList.remove('is-zoomed');
+    }
+  });
+}
+
 // Hook actions into simulator controls on load
 document.addEventListener('DOMContentLoaded', () => {
+  // Initialize Medium-Zoom on blog post hero images
+  initMediumZoom();
+
   // Initialize Lucide Icons
   createIcons({
     icons: {
