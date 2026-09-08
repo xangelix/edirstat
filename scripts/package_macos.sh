@@ -205,6 +205,20 @@ validate_bundle() {
     fi
   fi
 
+  # 7. Prohibited private Apple API check (App Store review guideline compliance)
+  if command -v strings >/dev/null 2>&1; then
+    echo "  ✓ Scanning binary for prohibited private Apple APIs..."
+    local private_api_hits
+    private_api_hits=$(strings "$bin_path" 2>/dev/null | grep -E "CGSSetWindowBackgroundBlurRadius|CGSMainConnectionID" || true)
+    if [[ -n "$private_api_hits" ]]; then
+      echo "ERROR: Prohibited private Apple API symbol found in $bin_path:" >&2
+      echo "$private_api_hits" | sed 's/^/         /' >&2
+      echo "       Mac App Store will automatically reject binaries containing these symbols." >&2
+      return 1
+    fi
+    echo "  ✓ No prohibited private Apple APIs detected."
+  fi
+
   echo "==> [Validate] Application bundle validation passed: $target_app"
 }
 
@@ -380,7 +394,6 @@ EOF
   }
   if [[ ! -f "$APPSTORE_PROFILE" ]]; then
     # Try finding any *.provisionprofile in the repository root
-    local auto_profile
     auto_profile="$(find . -maxdepth 1 -name "*.provisionprofile" 2>/dev/null | head -1 || true)"
     if [[ -n "$auto_profile" && -f "$auto_profile" ]]; then
       APPSTORE_PROFILE="$auto_profile"

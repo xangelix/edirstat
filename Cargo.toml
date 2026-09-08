@@ -10,7 +10,8 @@ license = "MIT"
 authors = ["Cody Wyatt Neiman (xangelix) <neiman@cody.to>"]
 repository = "https://github.com/xangelix/edirstat"
 
-# [patch.crates-io]
+[patch.crates-io]
+winit = { git = "https://github.com/xangelix/winit.git", branch = "blur-fix" }
 # egui-table-kit = { path = "../egui-table-kit" }
 
 [profile.release]

@@ -7414,8 +7414,8 @@ Apache License
 
 ### Apache License 2.0
 **Used by:**
-* [dpi](https://github.com/rust-windowing/winit)
 * [winit](https://github.com/rust-windowing/winit)
+* [dpi](https://github.com/rust-windowing/winit)
 
 ```text
 Apache License
