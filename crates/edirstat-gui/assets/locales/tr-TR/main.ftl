@@ -302,6 +302,7 @@ modal-elevation-relaunch-btn = 🛡 Yönetici olarak yeniden başlat
 # About Modal
 modal-about-title = ℹ eDirStat hakkında
 modal-about-author = Geliştiren: Cody Wyatt Neiman (xangelix) <neiman@cody.to>
+modal-about-license-btn = 📜 Lisans (MIT)
 modal-about-desc1 = Rust ile geliştirilmiş yüksek performanslı disk alanı analiz ve yinelenen bulma aracı.
 modal-about-desc2 = Paralel iş çalan dizin taraması, sıkıştırılmış anlık görüntüler, sıfır ayrıştırmalı yerleşim geri yükleme ve duyarlı etkileşimli treemap özelliklerini sunar.
 modal-about-desc3 = Yerleşik yinelenen bulucu, özdeş dosya gruplarını güvenle ayırmak, geri kazanılabilir alanı hesaplamak ve sistem düzeyi sabit bağlantıları korumak için çok aşamalı kriptografik özetleme hattı kullanır.
@@ -333,7 +334,12 @@ modal-how-dedup-step7-desc = Herhangi bir yinelenen işlemi gösterilmeden veya 
 
 # Open Source Licenses Modal
 modal-licenses-title = 📜 Açık kaynak lisansları
+modal-licenses-tab-app = eDirStat (MIT)
+modal-licenses-tab-deps = Üçüncü taraf kütüphaneler
+modal-licenses-app-desc = eDirStat, MIT Lisansı altında dağıtılan açık kaynaklı bir yazılımdır:
 modal-licenses-desc = Bu uygulamada aşağıdaki üçüncü taraf kütüphaneler ve Rust paketleri kullanılmaktadır:
+modal-licenses-copy-btn = 📋 Lisansı kopyala
+modal-licenses-copy-all-btn = 📋 Lisansları kopyala
 
 # Processing Modal
 modal-processing-title = ⏳ İşleniyor...

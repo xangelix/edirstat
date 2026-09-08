@@ -24,6 +24,15 @@ pub enum ActiveModal {
     ScanOptions,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum LicenseTab {
+    #[default]
+    Edirstat,
+    ThirdParty,
+}
+
+pub const EDIRSTAT_LICENSE: &str = include_str!("../../assets/LICENSE");
+
 fn count_nested_stats(
     nodes: &[crate::arena::FileNode],
     idx: u32,
@@ -1542,7 +1551,12 @@ impl GuiApp {
                                 ui.add_space(8.0);
 
                                 ui.label(egui::RichText::new(t!("modal-about-author")));
-                                ui.add_space(12.0);
+                                ui.add_space(6.0);
+                                if ui.button(t!("modal-about-license-btn")).clicked() {
+                                    self.selected_license_tab = LicenseTab::Edirstat;
+                                    self.show_licenses = true;
+                                }
+                                ui.add_space(10.0);
 
                                 let info_bg = theme::get_bg_panel();
                                 egui::Frame::new()
@@ -1561,18 +1575,23 @@ impl GuiApp {
 
                                 ui.add_space(16.0);
 
-                                ui.horizontal(|ui| {
-                                    if ui.button(t!("modal-about-licenses-btn")).clicked() {
-                                        self.show_licenses = true;
-                                    }
-                                    ui.add_space(8.0);
-                                    ui.hyperlink_to("edirstat.com", "https://edirstat.com");
-                                    ui.add_space(8.0);
-                                    ui.hyperlink_to(
-                                        "Privacy Policy",
-                                        "https://raw.githubusercontent.com/xangelix/edirstat/main/PRIVACY.md",
-                                    );
-                                });
+                                ui.with_layout(
+                                    egui::Layout::left_to_right(egui::Align::Center)
+                                        .with_main_align(egui::Align::Center),
+                                    |ui| {
+                                        if ui.button(t!("modal-about-licenses-btn")).clicked() {
+                                            self.selected_license_tab = LicenseTab::ThirdParty;
+                                            self.show_licenses = true;
+                                        }
+                                        ui.add_space(8.0);
+                                        ui.hyperlink_to("edirstat.com", "https://edirstat.com");
+                                        ui.add_space(8.0);
+                                        ui.hyperlink_to(
+                                            "Privacy Policy",
+                                            "https://raw.githubusercontent.com/xangelix/edirstat/main/PRIVACY.md",
+                                        );
+                                    },
+                                );
                             });
                         });
                 });
@@ -1794,53 +1813,115 @@ impl GuiApp {
                         .inner_margin(egui::Margin::same(16))
                         .show(ui, |ui| {
                             ui.vertical(|ui| {
-                                ui.label(t!("modal-licenses-desc"));
+                                // License Tab Bar
+                                ui.horizontal(|ui| {
+                                    ui.selectable_value(
+                                        &mut self.selected_license_tab,
+                                        LicenseTab::Edirstat,
+                                        egui::RichText::new(t!("modal-licenses-tab-app")).strong(),
+                                    );
+                                    ui.selectable_value(
+                                        &mut self.selected_license_tab,
+                                        LicenseTab::ThirdParty,
+                                        egui::RichText::new(t!("modal-licenses-tab-deps")).strong(),
+                                    );
+                                });
+                                ui.add_space(8.0);
+                                ui.separator();
                                 ui.add_space(8.0);
 
-                                let mut licenses_text = {
-                                    #[cfg(target_os = "linux")]
-                                    let bytes =
-                                        include_packed::include_packed!("assets/licenses/linux.md");
-                                    #[cfg(target_os = "windows")]
-                                    let bytes = include_packed::include_packed!(
-                                        "assets/licenses/windows.md"
-                                    );
-                                    #[cfg(target_os = "macos")]
-                                    let bytes =
-                                        include_packed::include_packed!("assets/licenses/macos.md");
-                                    #[cfg(target_family = "wasm")]
-                                    let bytes =
-                                        include_packed::include_packed!("assets/licenses/web.md");
-                                    #[cfg(not(any(
-                                        target_os = "linux",
-                                        target_os = "windows",
-                                        target_os = "macos",
-                                        target_family = "wasm"
-                                    )))]
-                                    let bytes =
-                                        include_packed::include_packed!("assets/licenses/linux.md");
+                                match self.selected_license_tab {
+                                    LicenseTab::Edirstat => {
+                                        ui.label(t!("modal-licenses-app-desc"));
+                                        ui.add_space(8.0);
 
-                                    String::from_utf8(bytes).unwrap_or_default()
-                                };
-
-                                egui::ScrollArea::vertical()
-                                    .max_height(350.0)
-                                    .show(ui, |ui| {
-                                        ui.add(
-                                            egui::TextEdit::multiline(&mut licenses_text)
-                                                .font(egui::TextStyle::Monospace)
-                                                .desired_width(f32::INFINITY)
-                                                .desired_rows(18)
-                                                .interactive(true),
+                                        let mut license_text = EDIRSTAT_LICENSE.to_string();
+                                        egui::ScrollArea::vertical().max_height(350.0).show(
+                                            ui,
+                                            |ui| {
+                                                ui.add(
+                                                    egui::TextEdit::multiline(&mut license_text)
+                                                        .font(egui::TextStyle::Monospace)
+                                                        .desired_width(f32::INFINITY)
+                                                        .desired_rows(18)
+                                                        .interactive(true),
+                                                );
+                                            },
                                         );
-                                    });
 
-                                ui.add_space(16.0);
-                                ui.horizontal(|ui| {
-                                    if ui.button(t!("modal-close-btn")).clicked() {
-                                        self.show_licenses = false;
+                                        ui.add_space(16.0);
+                                        ui.horizontal(|ui| {
+                                            if ui.button(t!("modal-licenses-copy-btn")).clicked() {
+                                                ui.ctx().copy_text(EDIRSTAT_LICENSE.to_string());
+                                            }
+                                            ui.add_space(8.0);
+                                            if ui.button(t!("modal-close-btn")).clicked() {
+                                                self.show_licenses = false;
+                                            }
+                                        });
                                     }
-                                });
+                                    LicenseTab::ThirdParty => {
+                                        ui.label(t!("modal-licenses-desc"));
+                                        ui.add_space(8.0);
+
+                                        let mut licenses_text = {
+                                            #[cfg(target_os = "linux")]
+                                            let bytes = include_packed::include_packed!(
+                                                "assets/licenses/linux.md"
+                                            );
+                                            #[cfg(target_os = "windows")]
+                                            let bytes = include_packed::include_packed!(
+                                                "assets/licenses/windows.md"
+                                            );
+                                            #[cfg(target_os = "macos")]
+                                            let bytes = include_packed::include_packed!(
+                                                "assets/licenses/macos.md"
+                                            );
+                                            #[cfg(target_family = "wasm")]
+                                            let bytes = include_packed::include_packed!(
+                                                "assets/licenses/web.md"
+                                            );
+                                            #[cfg(not(any(
+                                                target_os = "linux",
+                                                target_os = "windows",
+                                                target_os = "macos",
+                                                target_family = "wasm"
+                                            )))]
+                                            let bytes = include_packed::include_packed!(
+                                                "assets/licenses/linux.md"
+                                            );
+
+                                            String::from_utf8(bytes).unwrap_or_default()
+                                        };
+
+                                        egui::ScrollArea::vertical().max_height(350.0).show(
+                                            ui,
+                                            |ui| {
+                                                ui.add(
+                                                    egui::TextEdit::multiline(&mut licenses_text)
+                                                        .font(egui::TextStyle::Monospace)
+                                                        .desired_width(f32::INFINITY)
+                                                        .desired_rows(18)
+                                                        .interactive(true),
+                                                );
+                                            },
+                                        );
+
+                                        ui.add_space(16.0);
+                                        ui.horizontal(|ui| {
+                                            if ui
+                                                .button(t!("modal-licenses-copy-all-btn"))
+                                                .clicked()
+                                            {
+                                                ui.ctx().copy_text(licenses_text);
+                                            }
+                                            ui.add_space(8.0);
+                                            if ui.button(t!("modal-close-btn")).clicked() {
+                                                self.show_licenses = false;
+                                            }
+                                        });
+                                    }
+                                }
                             });
                         });
                 });
@@ -3040,5 +3121,15 @@ mod tests {
 
         let _ = std::fs::remove_dir_all(&temp_dir);
         Ok(())
+    }
+
+    #[test]
+    fn edirstat_license_is_embedded_and_matches_root() {
+        assert!(!EDIRSTAT_LICENSE.is_empty());
+        assert!(EDIRSTAT_LICENSE.contains("MIT License"));
+        assert!(EDIRSTAT_LICENSE.contains("Cody Neiman"));
+
+        let root_license = include_str!("../../../../LICENSE");
+        assert_eq!(EDIRSTAT_LICENSE, root_license);
     }
 }

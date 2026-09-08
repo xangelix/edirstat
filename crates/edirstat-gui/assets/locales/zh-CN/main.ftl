@@ -301,6 +301,7 @@ modal-elevation-relaunch-btn = 🛡 以管理员身份重新启动
 # About Modal
 modal-about-title = ℹ 关于 eDirStat
 modal-about-author = By: Cody Wyatt Neiman (xangelix) <neiman@cody.to>
+modal-about-license-btn = 📜 许可证 (MIT)
 modal-about-desc1 = 一款使用 Rust 构建的高性能磁盘空间分析与去重工具包。
 modal-about-desc2 = 具备并行工作窃取式目录遍历、采用零解析布局反序列化的压缩快照，以及响应迅速的交互式矩形树图。
 modal-about-desc3 = 内置的去重器运行多阶段加密哈希流水线，可安全地隔离重复文件组、计算可回收空间，并正确处理系统级硬链接。
@@ -332,7 +333,12 @@ modal-how-dedup-step7-desc = 在显示或执行任何去重操作之前，应用
 
 # Open Source Licenses Modal
 modal-licenses-title = 📜 开源许可证
+modal-licenses-tab-app = eDirStat (MIT)
+modal-licenses-tab-deps = 第三方库
+modal-licenses-app-desc = eDirStat 是在 MIT 许可证下发布的开源软件：
 modal-licenses-desc = 本应用程序使用了以下第三方库和 crate：
+modal-licenses-copy-btn = 📋 复制许可证
+modal-licenses-copy-all-btn = 📋 复制许可证
 
 # Processing Modal
 modal-processing-title = ⏳ 正在处理…

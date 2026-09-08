@@ -307,6 +307,7 @@ modal-elevation-relaunch-btn = 🛡 প্রশাসক হিসেবে প
 # About Modal
 modal-about-title = ℹ eDirStat সম্পর্কে
 modal-about-author = প্রণেতা: Cody Wyatt Neiman (xangelix) <neiman@cody.to>
+modal-about-license-btn = 📜 লাইসেন্স (MIT)
 modal-about-desc1 = Rust-এ নির্মিত একটি হাই-পারফরম্যান্স ডিস্ক স্পেস বিশ্লেষক ও ডুপ্লিকেট অপসারণ টুলকিট।
 modal-about-desc2 = সমান্তরাল, ওয়ার্ক-স্টিলিং ডিরেক্টরি ট্রাভার্সাল, জিরো-পার্সিং লেআউট ডিসিরিয়ালাইজেশনসহ কম্প্রেসড স্ন্যাপশট এবং রেসপন্সিভ, ইন্টারঅ্যাকটিভ ট্রিম্যাপ ফিচার রয়েছে।
 modal-about-desc3 = অন্তর্নির্মিত ডুপ্লিকেটর একটি মাল্টি-স্টেজ ক্রিপ্টোগ্রাফিক হ্যাশিং পাইপলাইন চালায়, যা ডুপ্লিকেট গ্রুপগুলো নিরাপদে শনাক্ত করে, পুনরুদ্ধারযোগ্য স্থান হিসাব করে এবং সিস্টেম-স্তরের হার্ডলিংকগুলোকে সম্মান করে।
@@ -338,7 +339,12 @@ modal-how-dedup-step7-desc = যেকোনো ডুপ্লিকেট অ�
 
 # Open Source Licenses Modal
 modal-licenses-title = 📜 ওপেন সোর্স লাইসেন্স
+modal-licenses-tab-app = eDirStat (MIT)
+modal-licenses-tab-deps = তৃতীয়-পক্ষের লাইব্রেরি
+modal-licenses-app-desc = eDirStat হলো এমআইটি (MIT) লাইসেন্সের অধীনে বিতরণকৃত ওপেন সোর্স সফটওয়্যার:
 modal-licenses-desc = এই অ্যাপ্লিকেশনে নিচের তৃতীয়-পক্ষের লাইব্রেরি ও ক্রেটগুলো ব্যবহার করা হয়েছে:
+modal-licenses-copy-btn = 📋 লাইসেন্স কপি করুন
+modal-licenses-copy-all-btn = 📋 লাইসেন্সগুলো কপি করুন
 
 # Processing Modal
 modal-processing-title = ⏳ প্রসেস করা হচ্ছে...

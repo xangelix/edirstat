@@ -307,6 +307,7 @@ modal-elevation-relaunch-btn = 🛡 Relaunch as Admin
 # About Modal
 modal-about-title = ℹ About eDirStat
 modal-about-author = By: Cody Wyatt Neiman (xangelix) <neiman@cody.to>
+modal-about-license-btn = 📜 License (MIT)
 modal-about-desc1 = A high-performance disk space analyzer and deduplication toolkit built in Rust.
 modal-about-desc2 = Features parallel, work-stealing directory traversal, compressed snapshots with zero-parsing layout deserialization, and responsive, interactive treemaps.
 modal-about-desc3 = The integrated deduplicator runs a multi-stage cryptographic hashing pipeline to safely isolate duplicate groups, calculate reclaimable space, and respect system-level hardlinks.
@@ -338,7 +339,12 @@ modal-how-dedup-step7-desc = Right before displaying or executing any deduplicat
 
 # Open Source Licenses Modal
 modal-licenses-title = 📜 Open Source Licenses
+modal-licenses-tab-app = eDirStat (MIT)
+modal-licenses-tab-deps = Third-Party Libraries
+modal-licenses-app-desc = eDirStat is open source software distributed under the MIT License:
 modal-licenses-desc = The following third-party libraries and crates are used in this application:
+modal-licenses-copy-btn = 📋 Copy License
+modal-licenses-copy-all-btn = 📋 Copy Licenses
 
 # Processing Modal
 modal-processing-title = ⏳ Processing...

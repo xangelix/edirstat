@@ -307,6 +307,7 @@ modal-elevation-relaunch-btn = 🛡 Opnieuw starten als administrator
 # About Modal
 modal-about-title = ℹ Over eDirStat
 modal-about-author = Door: Cody Wyatt Neiman (xangelix) <neiman@cody.to>
+modal-about-license-btn = 📜 Licentie (MIT)
 modal-about-desc1 = Een krachtige tool voor schijfgebruiksanalyse en deduplicatie geschreven in Rust.
 modal-about-desc2 = Met parallelle work-stealing mapdoorzoeking, gecomprimeerde momentopnames met zero-parsing lay-out deserialisatie, en responsieve, interactieve treemaps.
 modal-about-desc3 = De geïntegreerde duplicatenzoeker voert een meerfasige cryptografische hashing-pipeline uit om duplicaatgroepen veilig te isoleren, terug te winnen ruimte te berekenen en rekening te houden met hardlinks op systeemniveau.
@@ -338,7 +339,12 @@ modal-how-dedup-step7-desc = Vlak voor het weergeven of uitvoeren van een dedupl
 
 # Open Source Licenses Modal
 modal-licenses-title = 📜 Open Source licenties
+modal-licenses-tab-app = eDirStat (MIT)
+modal-licenses-tab-deps = Externe bibliotheken
+modal-licenses-app-desc = eDirStat is opensourcesoftware die wordt gedistribueerd onder de MIT-licentie:
 modal-licenses-desc = De volgende externe bibliotheken en crates worden in deze toepassing gebruikt:
+modal-licenses-copy-btn = 📋 Licentie kopiëren
+modal-licenses-copy-all-btn = 📋 Licenties kopiëren
 
 # Processing Modal
 modal-processing-title = ⏳ Verwerken...

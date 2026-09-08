@@ -43,7 +43,7 @@ pub mod shortcuts;
 pub mod theme;
 
 pub use extensions::ExtensionStat;
-pub use modals::ActiveModal;
+pub use modals::{ActiveModal, LicenseTab};
 pub use notifications::{show_toasts, toast_error, toast_info, toast_success, toast_warning};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -133,6 +133,7 @@ pub struct GuiApp {
     pub(crate) scan_path_input: String,
     pub(crate) paste_requested: u8,
     pub(crate) show_licenses: bool,
+    pub(crate) selected_license_tab: LicenseTab,
 
     // Saved scan parameters
     pub(crate) current_scan_path: Option<PathBuf>,
@@ -481,6 +482,7 @@ impl GuiApp {
                 .unwrap_or_default(),
             paste_requested: 0,
             show_licenses: false,
+            selected_license_tab: LicenseTab::Edirstat,
             current_scan_path: None,
             scan_start_time: None,
             total_scan_duration: None,
@@ -557,6 +559,7 @@ impl GuiApp {
         self.delete_node_idx = None;
         self.active_modal = None;
         self.show_licenses = false;
+        self.selected_license_tab = LicenseTab::Edirstat;
         self.selected_duplicates.clear();
         self.delete_duplicates_indices.clear();
         self.deduplicator_dir_filter.clear();
@@ -2218,6 +2221,11 @@ impl eframe::App for GuiApp {
                         .clicked()
                     {
                         self.active_modal = Some(ActiveModal::About);
+                        ui.close_kind(egui::UiKind::Menu);
+                    }
+                    if ui.button(t!("modal-about-license-btn")).clicked() {
+                        self.selected_license_tab = LicenseTab::Edirstat;
+                        self.show_licenses = true;
                         ui.close_kind(egui::UiKind::Menu);
                     }
                 });

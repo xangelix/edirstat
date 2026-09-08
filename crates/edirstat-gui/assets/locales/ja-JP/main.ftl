@@ -301,6 +301,7 @@ modal-elevation-relaunch-btn = 🛡 管理者として再起動
 # About Modal
 modal-about-title = ℹ eDirStat のバージョン情報
 modal-about-author = By: Cody Wyatt Neiman (xangelix) <neiman@cody.to>
+modal-about-license-btn = 📜 ライセンス (MIT)
 modal-about-desc1 = Rust で構築された高性能なディスク容量アナライザーおよび重複排除ツールキット。
 modal-about-desc2 = ワークスティーリング方式の並列ディレクトリ走査、ゼロ解析レイアウトデシリアライズによる圧縮スナップショット、応答性の高いインタラクティブなツリーマップを備えています。
 modal-about-desc3 = 統合された重複排除ツールは、多段の暗号学的ハッシュパイプラインを実行して重複グループを安全に特定し、回収可能な容量を計算し、システムレベルのハードリンクを尊重します。
@@ -332,7 +333,12 @@ modal-how-dedup-step7-desc = 重複排除アクションを表示または実行
 
 # Open Source Licenses Modal
 modal-licenses-title = 📜 オープンソースライセンス
+modal-licenses-tab-app = eDirStat (MIT)
+modal-licenses-tab-deps = サードパーティライブラリ
+modal-licenses-app-desc = eDirStat は MIT ライセンスの下で配布されているオープンソースソフトウェアです：
 modal-licenses-desc = このアプリケーションでは以下のサードパーティライブラリとクレートが使用されています：
+modal-licenses-copy-btn = 📋 ライセンスをコピー
+modal-licenses-copy-all-btn = 📋 ライセンスをコピー
 
 # Processing Modal
 modal-processing-title = ⏳ 処理しています…

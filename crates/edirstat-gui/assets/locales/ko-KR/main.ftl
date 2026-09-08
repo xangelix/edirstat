@@ -301,6 +301,7 @@ modal-elevation-relaunch-btn = 🛡 관리자로 다시 시작
 # About Modal
 modal-about-title = ℹ eDirStat 정보
 modal-about-author = By: Cody Wyatt Neiman (xangelix) <neiman@cody.to>
+modal-about-license-btn = 📜 라이선스 (MIT)
 modal-about-desc1 = Rust로 만든 고성능 디스크 공간 분석 및 중복 제거 도구 모음입니다.
 modal-about-desc2 = 병렬 작업 가로채기 디렉터리 탐색, 파싱 없는 레이아웃 역직렬화를 사용하는 압축 스냅샷, 빠르게 반응하는 대화형 트리맵을 제공합니다.
 modal-about-desc3 = 통합 중복 제거 도구는 다단계 암호화 해싱 파이프라인을 실행하여 중복 그룹을 안전하게 격리하고, 확보 가능한 공간을 계산하며, 시스템 수준 하드 링크를 보존합니다.
@@ -332,7 +333,12 @@ modal-how-dedup-step7-desc = 중복 제거 작업을 표시하거나 실행하�
 
 # Open Source Licenses Modal
 modal-licenses-title = 📜 오픈 소스 라이선스
+modal-licenses-tab-app = eDirStat (MIT)
+modal-licenses-tab-deps = 타사 라이브러리
+modal-licenses-app-desc = eDirStat은 MIT 라이선스로 배포되는 오픈 소스 애플리케이션입니다:
 modal-licenses-desc = 이 애플리케이션에는 다음 타사 라이브러리 및 크레이트가 사용되었습니다:
+modal-licenses-copy-btn = 📋 라이선스 복사
+modal-licenses-copy-all-btn = 📋 라이선스 복사
 
 # Processing Modal
 modal-processing-title = ⏳ 처리 중...

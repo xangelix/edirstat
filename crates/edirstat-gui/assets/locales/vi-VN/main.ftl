@@ -289,6 +289,7 @@ modal-elevation-relaunch-btn = 🛡 Khởi chạy lại với quyền Quản tr�
 # About Modal
 modal-about-title = ℹ Giới thiệu eDirStat
 modal-about-author = Tác giả: Cody Wyatt Neiman (xangelix) <neiman@cody.to>
+modal-about-license-btn = 📜 Giấy phép (MIT)
 modal-about-desc1 = Công cụ phân tích dung lượng đĩa và loại bỏ trùng lặp hiệu năng cao được xây dựng bằng Rust.
 modal-about-desc2 = Có khả năng duyệt thư mục song song theo cơ chế work-stealing, bản chụp nhanh nén với giải tuần tự hóa bố cục không cần phân tích cú pháp, và các treemap tương tác, phản hồi nhanh.
 modal-about-desc3 = Trình loại bỏ trùng lặp tích hợp chạy một quy trình băm mật mã nhiều giai đoạn để tách biệt an toàn các nhóm trùng lặp, tính toán dung lượng có thể thu hồi và tôn trọng các liên kết cứng cấp hệ thống.
@@ -320,7 +321,12 @@ modal-how-dedup-step7-desc = Ngay trước khi hiển thị hoặc thực thi b�
 
 # Open Source Licenses Modal
 modal-licenses-title = 📜 Giấy phép mã nguồn mở
+modal-licenses-tab-app = eDirStat (MIT)
+modal-licenses-tab-deps = Thư viện bên thứ ba
+modal-licenses-app-desc = eDirStat là phần mềm nguồn mở được phân phối theo Giấy phép MIT:
 modal-licenses-desc = Các thư viện và crate bên thứ ba sau đây được sử dụng trong ứng dụng này:
+modal-licenses-copy-btn = 📋 Sao chép giấy phép
+modal-licenses-copy-all-btn = 📋 Sao chép giấy phép
 
 # Processing Modal
 modal-processing-title = ⏳ Đang xử lý...

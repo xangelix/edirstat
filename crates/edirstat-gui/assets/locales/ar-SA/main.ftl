@@ -328,6 +328,7 @@ modal-elevation-relaunch-btn = 🛡 إعادة التشغيل كمسؤول
 # About Modal
 modal-about-title = ℹ حول eDirStat
 modal-about-author = تأليف: Cody Wyatt Neiman (xangelix) <neiman@cody.to>
+modal-about-license-btn = 📜 الترخيص (MIT)
 modal-about-desc1 = أداة عالية الأداء لتحليل مساحة القرص وإزالة التكرارات، مبنية بلغة Rust.
 modal-about-desc2 = تتميز باجتياز متوازٍ للمجلدات بمبدأ «سرقة المهام»، ولقطات مضغوطة مع إلغاء تسلسل التخطيط دون تحليل، وخرائط شجرية تفاعلية سريعة الاستجابة.
 modal-about-desc3 = يشغّل مُزيل التكرارات المدمج خط أنابيب تجزئة تشفيرية متعدد المراحل لعزل مجموعات التكرارات بأمان، وحساب المساحة القابلة للاسترداد، واحترام الارتباطات الثابتة على مستوى النظام.
@@ -359,7 +360,12 @@ modal-how-dedup-step7-desc = مباشرةً قبل عرض أو تنفيذ أي �
 
 # Open Source Licenses Modal
 modal-licenses-title = 📜 تراخيص المصدر المفتوح
+modal-licenses-tab-app = eDirStat (MIT)
+modal-licenses-tab-deps = مكتبات الطرف الثالث
+modal-licenses-app-desc = eDirStat هو برنامج مفتوح المصدر يتم توزيعه بموجب ترخيص MIT:
 modal-licenses-desc = تُستخدم المكتبات والحزم الخارجية التالية في هذا التطبيق:
+modal-licenses-copy-btn = 📋 نسخ الترخيص
+modal-licenses-copy-all-btn = 📋 نسخ التراخيص
 
 # Processing Modal
 modal-processing-title = ⏳ جارٍ المعالجة...
