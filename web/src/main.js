@@ -1500,8 +1500,73 @@ function initMediumZoom() {
   });
 }
 
+// --- MOBILE NAVIGATION CONTROLLER ---
+function initMobileNav() {
+  const toggleBtn = document.getElementById('mobileMenuToggle');
+  const drawer = document.getElementById('mobileNavDrawer');
+  if (!toggleBtn || !drawer) return;
+
+  function closeMenu() {
+    toggleBtn.classList.remove('is-active');
+    toggleBtn.setAttribute('aria-expanded', 'false');
+    drawer.classList.remove('is-open');
+    drawer.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('mobile-menu-open');
+  }
+
+  function toggleMenu() {
+    const isOpen = toggleBtn.classList.toggle('is-active');
+    toggleBtn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    drawer.classList.toggle('is-open', isOpen);
+    drawer.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
+    document.body.classList.toggle('mobile-menu-open', isOpen);
+  }
+
+  toggleBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleMenu();
+  });
+
+  // Close when clicking any link inside the mobile drawer
+  const links = drawer.querySelectorAll('a');
+  links.forEach(link => {
+    link.addEventListener('click', () => {
+      closeMenu();
+    });
+  });
+
+  // Close when clicking outside
+  document.addEventListener('click', (e) => {
+    if (drawer.classList.contains('is-open') && !drawer.contains(e.target) && !toggleBtn.contains(e.target)) {
+      closeMenu();
+    }
+  });
+
+  // Close on Escape key
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && drawer.classList.contains('is-open')) {
+      closeMenu();
+    }
+  });
+
+  // Close on window resize if scaled up to desktop
+  window.addEventListener('resize', () => {
+    if (window.innerWidth > 768 && drawer.classList.contains('is-open')) {
+      closeMenu();
+    }
+  });
+
+  // Support #menu hash to open drawer
+  if (window.location.hash === '#menu') {
+    toggleMenu();
+  }
+}
+
 // Hook actions into simulator controls on load
 document.addEventListener('DOMContentLoaded', () => {
+  // Initialize Mobile Navigation
+  initMobileNav();
+
   // Initialize Medium-Zoom on blog post hero images
   initMediumZoom();
 
