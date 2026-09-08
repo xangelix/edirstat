@@ -1521,9 +1521,9 @@ impl GuiApp {
                                     egui::Image::new(egui::include_image!(
                                         "../../assets/img/logo-nosubtext-transparent.png"
                                     ))
-                                    .max_height(48.0),
+                                    .max_height(96.0),
                                 );
-                                ui.add_space(8.0);
+                                ui.add_space(10.0);
 
                                 ui.label(
                                     egui::RichText::new(t!("modal-about-version", {
