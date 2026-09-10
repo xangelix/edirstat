@@ -233,23 +233,20 @@ jobs:
             edirstat-macos-*.zip
 
   deploy-web:
-    name: Deploy Web (Arch Container)
+    name: Deploy Web (Cloudflare Workers)
     runs-on: ubuntu-latest
     container:
       image: registry.gitlab.com/xangelix-pub/containers/arch
       options: --user root # How I wish this were GitLab
     needs: [build-wasm]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')
 
-    # Core permissions required for native GitHub Actions Pages deployments
     permissions:
       contents: read
-      pages: write
-      id-token: write
 
-    # Allow only one concurrent deployment
+    # Allow only one concurrent deployment per branch
     concurrency:
-      group: "pages"
+      group: "cloudflare-deploy-${{ github.ref }}"
       cancel-in-progress: true
 
     steps:
@@ -272,11 +269,21 @@ jobs:
           npm ci
           npm run build
 
-      - name: Upload Pages Artifact
-        uses: actions/upload-pages-artifact@v5
-        with:
-          path: ./web/public
+      - name: Deploy to Cloudflare Workers (Prod)
+        if: github.ref == 'refs/heads/main'
+        run: |
+          cd web
+          npx --yes wrangler deploy --env prod
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v5
+      - name: Deploy to Cloudflare Workers (Dev)
+        if: github.ref == 'refs/heads/dev'
+        run: |
+          cd web
+          npx --yes wrangler deploy --env dev
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+

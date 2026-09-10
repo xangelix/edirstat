@@ -1,0 +1,32 @@
+name = "cn-edirstat"
+compatibility_date = "2026-09-10"
+
+# Disable public workers.dev URL
+workers_dev = false
+
+# Disable auto-generated preview URLs for extra paranoia
+preview_urls = false
+
+[assets]
+directory = "./public"
+not_found_handling = "404-page"
+
+# --- Production (main branch) ---
+[env.prod]
+name = "cn-edirstat"
+
+[[env.prod.routes]]
+pattern = "edirstat.com"
+custom_domain = true
+
+[[env.prod.routes]]
+pattern = "www.edirstat.com"
+custom_domain = true
+
+# --- Dev (dev branch) ---
+[env.dev]
+name = "cn-edirstat-dev"
+
+[[env.dev.routes]]
+pattern = "dev.edirstat.com"
+custom_domain = true
