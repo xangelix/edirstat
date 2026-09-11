@@ -18,6 +18,14 @@ const targets = [
     dest: path.join(projectRoot, 'static/assets/og-image.png')
   },
   {
+    src: path.join(repoRoot, 'assets/img/app-store-badge.svg'),
+    dest: path.join(projectRoot, 'static/assets/app-store-badge.svg')
+  },
+  {
+    src: path.join(repoRoot, 'assets/img/itch-badge.svg'),
+    dest: path.join(projectRoot, 'static/assets/itch-badge.svg')
+  },
+  {
     src: path.join(projectRoot, 'robots.txt'),
     dest: path.join(projectRoot, 'static/robots.txt')
   },

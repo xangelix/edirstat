@@ -1573,6 +1573,24 @@ function initMobileNav() {
   }
 }
 
+// --- FAQ ACCORDION CONTROLLER ---
+function initFAQAccordion() {
+  const faqItems = document.querySelectorAll('.faq-item');
+  if (faqItems.length === 0) return;
+
+  faqItems.forEach((item) => {
+    item.addEventListener('toggle', () => {
+      if (item.open) {
+        faqItems.forEach((other) => {
+          if (other !== item && other.open) {
+            other.removeAttribute('open');
+          }
+        });
+      }
+    });
+  });
+}
+
 // --- ANTI-SPAM EMAIL BUTTON CONTROLLER ---
 function initSupportEmailButtons() {
   const buttons = document.querySelectorAll('.support-email-btn');
@@ -1624,6 +1642,9 @@ function initSupportEmailButtons() {
 document.addEventListener('DOMContentLoaded', () => {
   // Initialize Mobile Navigation
   initMobileNav();
+
+  // Initialize FAQ Accordion
+  initFAQAccordion();
 
   // Initialize Anti-Spam Support Email Buttons
   initSupportEmailButtons();

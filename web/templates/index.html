@@ -13,7 +13,8 @@
     "softwareVersion": "{{ config.extra.version | safe }}",
     "license": "https://opensource.org/licenses/MIT",
     "isAccessibleForFree": true,
-    "downloadUrl": "{{ config.extra.itch_io_url | safe }}",
+    "downloadUrl": "{{ config.extra.mac_app_store_url | safe }}",
+    "installUrl": "{{ config.extra.itch_io_url | safe }}",
     "codeRepository": "{{ config.extra.github_url | safe }}",
     "screenshot": "{{ config.base_url | safe }}/{{ config.extra.og_image | safe }}",
     "offers": {
@@ -61,8 +62,8 @@
             <a href="#features" class="nav-link">Features</a>
             <a href="#simulator" class="nav-link">Simulator</a>
             <a href="#benchmarks" class="nav-link">Benchmarks</a>
-            <a href="#drag-races" class="nav-link">Videos</a>
             <a href="#guide" class="nav-link">Guide</a>
+            <a href="#faq" class="nav-link">FAQ</a>
             <a href="/blog/" class="nav-link">Blog</a>
         </nav>
         <div class="header-actions">
@@ -73,7 +74,7 @@
                 <i data-lucide="layout"></i>
                 <span>Web Viewer</span>
             </a>
-            <a href="{{ config.extra.itch_io_url }}" target="_blank" class="btn btn-primary btn-glow btn-header-cta">
+            <a href="#download" class="btn btn-primary btn-glow btn-header-cta">
                 <i data-lucide="download"></i>
                 <span>Download</span>
             </a>
@@ -90,8 +91,8 @@
             <a href="#features" class="mobile-nav-link">Features</a>
             <a href="#simulator" class="mobile-nav-link">Simulator</a>
             <a href="#benchmarks" class="mobile-nav-link">Benchmarks</a>
-            <a href="#drag-races" class="mobile-nav-link">Videos</a>
             <a href="#guide" class="mobile-nav-link">Guide</a>
+            <a href="#faq" class="mobile-nav-link">FAQ</a>
             <a href="/blog/" class="mobile-nav-link">Blog</a>
         </nav>
         <div class="mobile-nav-actions">
@@ -103,7 +104,7 @@
                 <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"></path><path d="M9 18c-4.51 2-5-2-7-2"></path></svg>
                 <span>GitHub Source</span>
             </a>
-            <a href="{{ config.extra.itch_io_url }}" target="_blank" class="btn btn-primary btn-glow mobile-action-btn">
+            <a href="#download" class="btn btn-primary btn-glow mobile-action-btn">
                 <i data-lucide="download"></i>
                 <span>Download eDirStat</span>
             </a>
@@ -137,24 +138,31 @@
                 to scan millions of files in milliseconds.
             </p>
             
-            <div class="hero-buttons">
-                <a href="{{ config.extra.github_url }}" target="_blank" class="btn btn-secondary btn-lg">
-                    <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px;"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"></path><path d="M9 18c-4.51 2-5-2-7-2"></path></svg>
-                    <span>Source Code</span>
-                </a>
-                <a href="/app/?demo=true" class="btn btn-secondary btn-lg">
-                    <i data-lucide="eye"></i>
-                    <span>Try Live Demo</span>
-                </a>
-                <a href="{{ config.extra.itch_io_url }}" target="_blank" class="btn btn-primary btn-lg btn-glow">
-                    <i data-lucide="download"></i>
-                    <span>Download Binaries</span>
-                </a>
+            <div class="hero-actions-group" id="download">
+                <div class="hero-buttons">
+                    <a href="{{ config.extra.github_url }}" target="_blank" class="btn btn-secondary btn-lg">
+                        <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"></path><path d="M9 18c-4.51 2-5-2-7-2"></path></svg>
+                        <span>Source Code</span>
+                    </a>
+                    <a href="/app/?demo=true" class="btn btn-secondary btn-lg">
+                        <i data-lucide="eye"></i>
+                        <span>Try Live Demo</span>
+                    </a>
+                </div>
+                
+                <div class="hero-store-row">
+                    <a href="{{ config.extra.mac_app_store_url }}" target="_blank" rel="noopener noreferrer" class="app-store-badge-btn" aria-label="Download eDirStat on the Mac App Store">
+                        <img src="{{ get_url(path="assets/app-store-badge.svg") | safe }}" alt="Download on the Mac App Store" class="app-store-badge-img" width="156" height="40">
+                    </a>
+                    <a href="{{ config.extra.itch_io_url }}" target="_blank" rel="noopener noreferrer" class="app-store-badge-btn" aria-label="Download eDirStat on itch.io">
+                        <img src="{{ get_url(path="assets/itch-badge.svg") | safe }}" alt="Download on itch.io" class="app-store-badge-img" width="156" height="40">
+                    </a>
+                </div>
             </div>
             
             <div class="hero-note">
                 <i data-lucide="shield" class="note-icon"></i>
-                <span>eDirStat is 100% open-source under the MIT license. Pre-compiled binaries are provided exclusively through itch.io.</span>
+                <span>100% open-source under the MIT license. Binaries available on the Mac App Store and itch.io.</span>
             </div>
         </div>
     </section>
@@ -661,6 +669,94 @@ cargo build --release</code></pre>
         </div>
     </section>
 
+    <!-- FAQ Section -->
+    <section id="faq" class="section faq-section">
+        <div class="section-header">
+            <h2 class="section-title">Frequently Asked Questions</h2>
+            <p class="section-subtitle">Everything you need to know about eDirStat licenses, security sandboxing, performance, and platform support.</p>
+        </div>
+
+        <div class="faq-container">
+            <details class="faq-item glass-card" open>
+                <summary class="faq-question">
+                    <span>What is the difference between the Mac App Store and itch.io editions? Can I switch between them?</span>
+                    <i data-lucide="chevron-down" class="faq-chevron"></i>
+                </summary>
+                <div class="faq-answer">
+                    <p>The Mac App Store version runs inside Apple's mandatory App Sandbox, meaning it can only scan files and folders you explicitly grant it access to through the system file dialog — the itch.io version is not sandboxed and can scan any path directly. The App Store version is individually reviewed and approved by Apple and receives automatic updates through the App Store, while the itch.io version is Apple-notarized but distributed directly.</p>
+                    <p style="margin-top: 12px;">If you purchased the Mac App Store version and need the unrestricted build, email <button type="button" class="support-email-btn" data-contact="c3VwcG9ydEBlZGlyc3RhdC5jb20=" data-subject="TWFjIEFwcCBTdG9yZSBMaWNlbnNlIFZlcmlmaWNhdGlvbg==" title="Click to copy email &amp; open mail app"><span class="email-text">support [at] edirstat.com</span><span class="email-copy-badge"><svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg> Copy</span></button> with your receipt and we'll provide the itch.io version at no additional cost — unfortunately, the reverse is not possible, as we cannot issue Mac App Store copies to itch.io customers at this time.</p>
+                </div>
+            </details>
+
+            <details class="faq-item glass-card">
+                <summary class="faq-question">
+                    <span>Does eDirStat collect any telemetry, analytics, or crash reports?</span>
+                    <i data-lucide="chevron-down" class="faq-chevron"></i>
+                </summary>
+                <div class="faq-answer">
+                    <p><strong>No.</strong> eDirStat is 100% offline, privacy-first software with zero telemetry, zero analytics, zero network beacons, and zero crash reporting SDKs. The Mac App Store binary is compiled without any network entitlements, making network access physically impossible at the OS kernel level. Your filesystem hierarchy, folder names, and drive contents remain strictly private on your computer.</p>
+                </div>
+            </details>
+
+            <details class="faq-item glass-card">
+                <summary class="faq-question">
+                    <span>How is eDirStat so much faster than WinDirStat, WizTree, and QDirStat?</span>
+                    <i data-lucide="chevron-down" class="faq-chevron"></i>
+                </summary>
+                <div class="faq-answer">
+                    <p>eDirStat is engineered in safe, parallel Rust using a lock-free, work-stealing thread pool and zero-copy columnar arena allocations. On Windows NTFS drives, it queries the Master File Table (MFT) directly, bypassing standard Win32 recursive APIs. On macOS and Linux, it uses high-concurrency <code>readdir</code> batches optimized to saturate NVMe queue depths and modern SSD controllers.</p>
+                </div>
+            </details>
+
+            <details class="faq-item glass-card">
+                <summary class="faq-question">
+                    <span>How does the 7-Stage Duplicate Hunter work? Will it delete my files without permission?</span>
+                    <i data-lucide="chevron-down" class="faq-chevron"></i>
+                </summary>
+                <div class="faq-answer">
+                    <p><strong>Never.</strong> eDirStat never modifies or deletes any file without your explicit manual review and confirmation. The Duplicate Hunter identifies identical files using a 7-stage cryptographic pipeline: file size matching, prefix hashing, suffix hashing, sparse sampling, full Blake3 cryptographic verification, safety locks, and journal metadata confirmation. You can review all duplicate clusters in an interactive table and safely reclaim space using either hardlinks or permanent deletion.</p>
+                </div>
+            </details>
+
+            <details class="faq-item glass-card">
+                <summary class="faq-question">
+                    <span>What are the supported platforms and system requirements?</span>
+                    <i data-lucide="chevron-down" class="faq-chevron"></i>
+                </summary>
+                <div class="faq-answer">
+                    <p>eDirStat runs natively across all major platforms:</p>
+                    <ul class="faq-list">
+                        <li><strong>macOS:</strong> Universal binary (native Apple Silicon M1/M2/M3/M4 &amp; Intel x86_64) on macOS 12.0 (Monterey) and higher. Available on the Mac App Store and itch.io.</li>
+                        <li><strong>Windows:</strong> 64-bit Windows 10 &amp; 11 with direct NTFS MFT acceleration. Available on itch.io.</li>
+                        <li><strong>Linux:</strong> Standalone binaries, AppImage, deb, and rpm packages supporting ext4, btrfs, xfs, and ZFS.</li>
+                        <li><strong>Web Viewer:</strong> In addition to desktop binaries, our Web Viewer lets you inspect and query exported <code>.edst</code> disk snapshot files directly in your browser with zero installation.</li>
+                    </ul>
+                </div>
+            </details>
+
+            <details class="faq-item glass-card">
+                <summary class="faq-question">
+                    <span>Can eDirStat scan external hard drives, USB drives, and network shares?</span>
+                    <i data-lucide="chevron-down" class="faq-chevron"></i>
+                </summary>
+                <div class="faq-answer">
+                    <p><strong>Yes.</strong> You can scan external hard drives, SSDs, USB flash drives, and mounted SMB/NFS network shares. On macOS, simply drag and drop any mounted volume or folder into eDirStat to grant security-scoped access immediately.</p>
+                </div>
+            </details>
+
+            <details class="faq-item glass-card">
+                <summary class="faq-question">
+                    <span>How do I get support, report bugs, or claim an itch.io key?</span>
+                    <i data-lucide="chevron-down" class="faq-chevron"></i>
+                </summary>
+                <div class="faq-answer">
+                    <p>For general bug reports, feature requests, and community discussions, please visit our open-source <a href="{{ config.extra.github_url }}/issues" target="_blank" rel="noopener noreferrer">GitHub Issues</a> page.</p>
+                    <p style="margin-top: 12px;">For private purchase inquiries, receipt verification, or claiming your complimentary unrestricted itch.io build after purchasing on the Mac App Store, email <button type="button" class="support-email-btn" data-contact="c3VwcG9ydEBlZGlyc3RhdC5jb20=" data-subject="U3VwcG9ydCBJbnF1aXJ5" title="Click to copy email &amp; open mail app"><span class="email-text">support [at] edirstat.com</span><span class="email-copy-badge"><svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg> Copy</span></button>.</p>
+                </div>
+            </details>
+        </div>
+    </section>
+
     <!-- CTA Section -->
     <section class="cta-section">
         <div class="cta-glow"></div>
@@ -668,11 +764,15 @@ cargo build --release</code></pre>
             <!-- Card 1: Download -->
             <div class="cta-card glass-card">
                 <h2 class="cta-title">Ready to Scan?</h2>
-                <p class="cta-subtitle">Get the official binaries pre-compiled for your platform directly on our itch.io page.</p>
-                <a href="{{ config.extra.itch_io_url }}" target="_blank" class="btn btn-primary btn-lg btn-glow">
-                    <i data-lucide="download"></i>
-                    <span>Get Binaries on itch.io</span>
-                </a>
+                <p class="cta-subtitle">Download on the Mac App Store or get official cross-platform binaries directly on itch.io.</p>
+                <div class="cta-buttons-group">
+                    <a href="{{ config.extra.mac_app_store_url }}" target="_blank" rel="noopener noreferrer" class="app-store-badge-btn" aria-label="Download eDirStat on the Mac App Store">
+                        <img src="{{ get_url(path="assets/app-store-badge.svg") | safe }}" alt="Download on the Mac App Store" class="app-store-badge-img" width="156" height="40">
+                    </a>
+                    <a href="{{ config.extra.itch_io_url }}" target="_blank" rel="noopener noreferrer" class="app-store-badge-btn" aria-label="Download eDirStat on itch.io">
+                        <img src="{{ get_url(path="assets/itch-badge.svg") | safe }}" alt="Download on itch.io" class="app-store-badge-img" width="156" height="40">
+                    </a>
+                </div>
             </div>
             
             <!-- Card 2: Contribute -->
@@ -700,12 +800,16 @@ cargo build --release</code></pre>
         </div>
         <div class="footer-right">
             <div class="footer-links">
+                <a href="/#faq" class="footer-link">FAQ &amp; Support</a>
                 <a href="/blog/" class="footer-link">Blog &amp; Devlog</a>
-                <a href="{{ config.extra.github_url }}" target="_blank" class="footer-link">
-                    <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"></path><path d="M9 18c-4.51 2-5-2-7-2"></path></svg> GitHub
+                <a href="{{ config.extra.mac_app_store_url }}" target="_blank" class="footer-link">
+                    <i data-lucide="apple"></i> Mac App Store
                 </a>
                 <a href="{{ config.extra.itch_io_url }}" target="_blank" class="footer-link">
                     <i data-lucide="download"></i> itch.io
+                </a>
+                <a href="{{ config.extra.github_url }}" target="_blank" class="footer-link">
+                    <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"></path><path d="M9 18c-4.51 2-5-2-7-2"></path></svg> GitHub
                 </a>
                 <a href="{{ config.extra.github_url }}/blob/main/LICENSE" target="_blank" class="footer-link">
                     Licensed under {{ config.extra.license }}

@@ -10,6 +10,7 @@ feed_filenames = ["atom.xml"]
 [extra]
 author = "xangelix"
 itch_io_url = "https://xangelix.itch.io/edirstat"
+mac_app_store_url = "https://apps.apple.com/us/app/edirstat/id6805133585"
 github_url = "https://github.com/xangelix/edirstat"
 version = "2.2.0"
 license = "MIT"
