@@ -1476,7 +1476,18 @@ function triggerReclaimAnimation(actionType) {
 
 // --- MEDIUM-ZOOM INITIALIZATION ---
 function initMediumZoom() {
-  const zoomableElements = document.querySelectorAll('.article-hero-img, [data-zoomable], .article-content img');
+  const elements = document.querySelectorAll(
+    '.article-hero-img, [data-zoomable], .article-content img:not(.no-zoom):not([data-no-zoom]):not(.app-store-badge-img)'
+  );
+
+  const zoomableElements = Array.from(elements).filter((el) => {
+    if (el.matches('.no-zoom, [data-no-zoom], .app-store-badge-img, [data-zoomable="false"]')) return false;
+    if (el.closest('.no-zoom, [data-no-zoom], .app-store-badge-btn, [data-zoomable="false"]')) return false;
+    if (el.closest('a')) return false;
+    if (el.src && el.src.includes('badge')) return false;
+    return true;
+  });
+
   if (zoomableElements.length === 0) return;
 
   const zoom = mediumZoom(zoomableElements, {
@@ -1562,10 +1573,60 @@ function initMobileNav() {
   }
 }
 
+// --- ANTI-SPAM EMAIL BUTTON CONTROLLER ---
+function initSupportEmailButtons() {
+  const buttons = document.querySelectorAll('.support-email-btn');
+  if (buttons.length === 0) return;
+
+  buttons.forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+
+      const encodedEmail = btn.getAttribute('data-contact');
+      const encodedSubject = btn.getAttribute('data-subject');
+      if (!encodedEmail) return;
+
+      const email = atob(encodedEmail);
+      const subject = encodedSubject ? atob(encodedSubject) : '';
+      const mailto = subject ? `mailto:${email}?subject=${encodeURIComponent(subject)}` : `mailto:${email}`;
+
+      // 1. Copy email to clipboard
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(email).catch(() => {});
+      }
+
+      // 2. Display visual toast alert
+      if (typeof toast_success === 'function') {
+        toast_success(`Copied ${email} to clipboard!`);
+      }
+
+      // 3. Temporary button badge feedback
+      const badge = btn.querySelector('.email-copy-badge');
+      if (badge) {
+        const originalContent = badge.innerHTML;
+        btn.classList.add('copied');
+        badge.innerHTML = `<svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -1px; margin-right: 2px;"><polyline points="20 6 9 17 4 12"></polyline></svg> Copied!`;
+        setTimeout(() => {
+          btn.classList.remove('copied');
+          badge.innerHTML = originalContent;
+        }, 2200);
+      }
+
+      // 4. Launch mail client
+      setTimeout(() => {
+        window.location.href = mailto;
+      }, 150);
+    });
+  });
+}
+
 // Hook actions into simulator controls on load
 document.addEventListener('DOMContentLoaded', () => {
   // Initialize Mobile Navigation
   initMobileNav();
+
+  // Initialize Anti-Spam Support Email Buttons
+  initSupportEmailButtons();
 
   // Initialize Medium-Zoom on blog post hero images
   initMediumZoom();
