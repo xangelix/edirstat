@@ -1,3 +1,5 @@
+
+
 # eDirStat
 
 ![eDirStat Treemap](docs/screenshots/treemap-b-logo.png)
@@ -192,7 +194,7 @@ edirstat /path -x                            # Restrict the scan to the same fil
 If you need to analyze a server or remote environment:
 
 1. `edirstat /path/to/my/dir --to mysnapshot`
-2. Transfer the `mysnapshot.edst` file to another machine.
+2. Transfer the `mysnapshot.edst.zst` file to another machine.
 3. Launch `edirstat` and click **📖 Load Snapshot** to open and navigate the tree with full interactivity, requiring no active filesystem connection.
 
 ---
