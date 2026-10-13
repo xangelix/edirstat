@@ -441,11 +441,9 @@ impl super::GuiApp {
                 ui.separator();
 
                 let has_selection = !self.selected_duplicates.is_empty();
-                let total_selected_size: u64 = self
-                    .selected_duplicates
-                    .iter()
-                    .map(|&idx| snapshot.nodes[idx as usize].size)
-                    .sum();
+                let total_selected_size = results_lock
+                    .read()
+                    .reclaimable_for(|idx| self.selected_duplicates.contains(&idx));
                 let reclaim_str = prettier_bytes::ByteFormatter::new()
                     .format(total_selected_size)
                     .to_string();
@@ -616,7 +614,12 @@ impl super::GuiApp {
                     .body(|body| {
                         body.rows(22.0, row_len, |mut row| {
                             let r_idx = row.index();
-                            let row_data = &results_lock.read().flat_rows[r_idx];
+                            // The dedup thread republishes results after every phase, so
+                            // the rows can shrink between `row_len` above and this row.
+                            let Some(row_data) = results_lock.read().flat_rows.get(r_idx).cloned()
+                            else {
+                                return;
+                            };
                             let node_idx = row_data.node_idx;
                             let is_original = row_data.is_original;
                             let is_hardlink = row_data.is_hardlink;

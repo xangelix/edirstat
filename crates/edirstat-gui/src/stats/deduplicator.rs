@@ -166,6 +166,36 @@ impl DeduplicationResults {
         }
         self.flat_rows = flat_rows;
     }
+
+    /// Bytes that removing the selected duplicates would actually free. Hardlinks
+    /// share one copy of the data, so an inode only counts once every one of its
+    /// links in the group is selected; files without a known identity count singly.
+    pub fn reclaimable_for(&self, is_selected: impl Fn(u32) -> bool) -> u64 {
+        let mut links: Vec<((u64, u64), bool)> = Vec::new();
+        self.groups
+            .iter()
+            .map(|group| {
+                let ids_known = group.file_ids.len() == group.nodes.len();
+                let mut freed_files = 0u64;
+                links.clear();
+                for (i, &node_idx) in group.nodes.iter().enumerate() {
+                    let selected = is_selected(node_idx);
+                    let id = if ids_known { group.file_ids[i] } else { (0, 0) };
+                    if id == (0, 0) {
+                        freed_files += u64::from(selected);
+                    } else {
+                        links.push((id, selected));
+                    }
+                }
+                links.sort_unstable_by_key(|&(id, _)| id);
+                let freed_inodes = links
+                    .chunk_by(|a, b| a.0 == b.0)
+                    .filter(|inode| inode.iter().all(|&(_, selected)| selected))
+                    .count() as u64;
+                group.size * (freed_files + freed_inodes)
+            })
+            .sum()
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -1016,6 +1046,37 @@ mod tests {
         assert_eq!(results.flat_rows[1].node_idx, 2);
         assert!(results.flat_rows[1].is_hardlink);
         assert_eq!(results.flat_rows[1].reclaimable_str, "0 B");
+    }
+
+    #[test]
+    fn test_reclaimable_for_selection_is_hardlink_aware() {
+        // Nodes 1 and 2 are two links to one inode; 3 is a separate copy;
+        // 4 and 5 are a second group whose identities are unknown.
+        let results = DeduplicationResults {
+            groups: vec![
+                DuplicateGroup {
+                    size: 1000,
+                    nodes: vec![1, 2, 3],
+                    file_ids: vec![(5, 5), (5, 5), (5, 6)],
+                },
+                DuplicateGroup {
+                    size: 10,
+                    nodes: vec![4, 5],
+                    file_ids: vec![],
+                },
+            ],
+            flat_rows: vec![],
+        };
+        let reclaim = |selected: &[u32]| results.reclaimable_for(|idx| selected.contains(&idx));
+
+        // "All but" keeping one link of the shared inode frees only the separate copy,
+        // matching the group's reported reclaimable space.
+        assert_eq!(reclaim(&[2, 3, 5]), 1010);
+        // Keeping the separate copy frees the shared inode once, not once per link.
+        assert_eq!(reclaim(&[1, 2, 4]), 1010);
+        // A lone link of a still-referenced inode frees nothing.
+        assert_eq!(reclaim(&[1]), 0);
+        assert_eq!(reclaim(&[]), 0);
     }
 
     #[test]
