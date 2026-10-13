@@ -716,6 +716,11 @@ impl GuiApp {
         // click to the last-registered overlapping widget, so overlap is fatal).
         let mut arrow_rect = None;
 
+        // Reserve the row background's paint slot before laying out the row, so the
+        // selection/hover fill (only known after layout) lands beneath the contents.
+        // The Light and High Contrast fills are opaque and would otherwise hide them.
+        let bg_idx = ui.painter().add(egui::Shape::Noop);
+
         let horizontal_res = ui.horizontal(|ui| {
             // Indent padding
             #[allow(clippy::cast_precision_loss)]
@@ -858,14 +863,16 @@ impl GuiApp {
                 AppTheme::Light => egui::Color32::from_rgb(204, 229, 255),
                 AppTheme::Dark => ui.visuals().selection.bg_fill.linear_multiply(0.12),
             };
-            ui.painter().rect_filled(rect, 4.0, fill_color);
+            ui.painter()
+                .set(bg_idx, egui::Shape::rect_filled(rect, 4.0, fill_color));
         } else if hovered {
             let hover_color = match get_current_theme() {
                 AppTheme::HighContrast => egui::Color32::from_rgb(65, 65, 65),
                 AppTheme::Light => egui::Color32::from_rgb(225, 238, 254),
                 AppTheme::Dark => ui.visuals().widgets.hovered.bg_fill.linear_multiply(0.04),
             };
-            ui.painter().rect_filled(rect, 4.0, hover_color);
+            ui.painter()
+                .set(bg_idx, egui::Shape::rect_filled(rect, 4.0, hover_color));
         }
 
         let double_clicked = response.double_clicked()
