@@ -914,10 +914,12 @@ impl GuiApp {
                 if idxs.is_empty() {
                     None
                 } else {
-                    let total_size: u64 = idxs
-                        .iter()
-                        .map(|&idx| snapshot.nodes[idx as usize].size)
-                        .sum();
+                    // Space actually freed: a hardlinked file's data stays until its last link goes.
+                    let selected: std::collections::HashSet<u32> = idxs.iter().copied().collect();
+                    let total_size = self
+                        .deduplicator_results
+                        .read()
+                        .reclaimable_for(|idx| selected.contains(&idx));
                     let size_str = prettier_bytes::ByteFormatter::new()
                         .format(total_size)
                         .to_string();
@@ -948,10 +950,12 @@ impl GuiApp {
                 if idxs.is_empty() {
                     None
                 } else {
-                    let total_size: u64 = idxs
-                        .iter()
-                        .map(|&idx| snapshot.nodes[idx as usize].size)
-                        .sum();
+                    // Space actually freed: a hardlinked file's data stays until its last link goes.
+                    let selected: std::collections::HashSet<u32> = idxs.iter().copied().collect();
+                    let total_size = self
+                        .deduplicator_results
+                        .read()
+                        .reclaimable_for(|idx| selected.contains(&idx));
                     let size_str = prettier_bytes::ByteFormatter::new()
                         .format(total_size)
                         .to_string();
@@ -2610,6 +2614,11 @@ impl GuiApp {
         if dir_indices.is_empty() {
             return;
         }
+        // Refreshing the root replaces the whole tree: run it as a full rescan.
+        if dir_indices.contains(&0) {
+            self.rescan_current_root();
+            return;
+        }
         self.scan_start_time = Some(std::time::Instant::now());
         self.total_scan_duration = None;
         let current_snap = self.shared_state.current_snapshot.load();
@@ -2617,13 +2626,11 @@ impl GuiApp {
         // Snapshot the currently-expanded folders as *paths* (not indices) so the
         // render loop can re-expand them after the rescan re-indexes the target
         // subtrees. See the update loop in `GuiApp` / `resolve_path_index`.
-        let expanded_paths: std::collections::HashSet<String, ahash::RandomState> = self
-            .table_state
-            .expanded_rows
-            .iter()
-            .map(|idx| current_snap.get_full_path(idx))
-            .collect();
-        self.pending_expand_restore = Some(expanded_paths);
+        self.pending_view_restore = Some(super::PendingViewRestore {
+            from_nodes: Arc::downgrade(&current_snap.nodes),
+            expanded: self.expanded_paths(&current_snap),
+            zoom_path: None,
+        });
 
         // Classify each target: re-scan directories that still exist, and prune
         // any that have been deleted/moved since the last scan.
@@ -2685,8 +2692,9 @@ impl GuiApp {
                         files_removed += 1;
                     }
                 }
-                // A pruned directory itself is gone for good, so account for it.
-                if path_opt.is_none() && cloned_nodes[dir_idx as usize].is_directory() {
+                // The target directory itself goes too: a pruned one is gone for good,
+                // and `walk_dir` counts a re-walked one again.
+                if cloned_nodes[dir_idx as usize].is_directory() {
                     dirs_removed += 1;
                 }
 

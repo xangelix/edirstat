@@ -76,6 +76,20 @@ pub enum LayoutMode {
 /// Host-injected top-panel widget closure (see [`GuiApp::top_panel_prefix`]).
 pub type TopPanelPrefix = Box<dyn FnMut(&mut egui::Ui)>;
 
+/// Explorer view state captured as *paths* (not indices) when a rescan starts,
+/// re-resolved once the rescan's final snapshot lands.
+pub(crate) struct PendingViewRestore {
+    /// Node storage of the snapshot the rescan started from; the restore waits
+    /// for a newer one, so a scan that has not published yet is never matched.
+    /// Weak, so the address stays reserved (no reuse by a later snapshot)
+    /// without keeping the old nodes alive.
+    pub(crate) from_nodes: std::sync::Weak<crate::arena::NodeStorage>,
+    pub(crate) expanded: HashSet<String, ahash::RandomState>,
+    /// Treemap zoom to re-apply. Only a full rescan sets it: it resets the zoom,
+    /// while an in-place subtree refresh keeps `zoom_path` throughout.
+    pub(crate) zoom_path: Option<String>,
+}
+
 #[allow(clippy::struct_excessive_bools)]
 pub struct GuiApp {
     pub(crate) shared_state: Arc<SharedState>,
@@ -187,11 +201,10 @@ pub struct GuiApp {
     pub(crate) last_rendered_snapshot_ptr: usize,
     pub(crate) last_extension_stats_ptr: usize,
 
-    /// Directories that were expanded when a rescan started, captured as paths
-    /// (not indices) so they can be re-resolved after the rescan re-indexes the
-    /// refreshed subtree. Consumed by the render loop when the next snapshot lands.
-    pub(crate) pending_expand_restore:
-        Option<std::collections::HashSet<String, ahash::RandomState>>,
+    /// Expanded folders (and treemap zoom) captured when a rescan started, so
+    /// they can be re-resolved after the rescan re-indexes the refreshed nodes.
+    /// Consumed by the render loop once the rescan's final snapshot lands.
+    pub(crate) pending_view_restore: Option<PendingViewRestore>,
 
     /// Caches (Node Index, User String, Group String, Permissions String)
     pub(crate) unix_metadata_cache: Option<(u32, String, String, String)>,
@@ -562,7 +575,7 @@ impl GuiApp {
             remember_confirmation: false,
             last_rendered_snapshot_ptr: 0,
             last_extension_stats_ptr: 0,
-            pending_expand_restore: None,
+            pending_view_restore: None,
 
             zoom_path: None,
 
@@ -639,7 +652,7 @@ impl GuiApp {
         self.scroll_to_top_selected = false;
         self.last_rendered_snapshot_ptr = 0;
         self.last_extension_stats_ptr = 0;
-        self.pending_expand_restore = None;
+        self.pending_view_restore = None;
         self.zoom_path = None;
 
         self.unix_metadata_cache = None;
@@ -813,12 +826,41 @@ impl GuiApp {
     }
 
     /// Rescans the current scanned root directory if a scan is not already in progress.
+    ///
+    /// Refreshing the root replaces every node, so it runs as a full scan rather than
+    /// an in-place re-walk (`refresh_directory_subtrees`), which would leave the whole
+    /// old tree resident in the arena as orphans (doubling it on every rescan) and walk
+    /// the disk on a single thread. Expanded folders and the treemap zoom carry over.
     pub fn rescan_current_root(&mut self) {
         let is_scanning = self.shared_state.is_scanning.load(Ordering::SeqCst);
-        let snapshot = self.shared_state.current_snapshot.load();
-        if !is_scanning && !snapshot.nodes.is_empty() && self.scanner.is_some() {
-            self.refresh_directory_subtrees(&[0]);
+        let snapshot = self.shared_state.current_snapshot.load_full();
+        if is_scanning || snapshot.nodes.is_empty() || self.scanner.is_none() {
+            return;
         }
+        // The root as scanned: for a loaded snapshot, the scan path is the file instead.
+        let root = PathBuf::from(snapshot.get_full_path(0));
+        if !root.is_dir() {
+            return; // nothing on disk to rescan, e.g. a snapshot from another machine
+        }
+        let restore = PendingViewRestore {
+            from_nodes: Arc::downgrade(&snapshot.nodes),
+            expanded: self.expanded_paths(&snapshot),
+            zoom_path: self.zoom_path.clone(),
+        };
+        self.start_scan(root);
+        self.pending_view_restore = Some(restore);
+    }
+
+    /// The expanded folders as paths, which survive a rescan's re-indexing.
+    pub(crate) fn expanded_paths(
+        &self,
+        snapshot: &crate::arena::FileArenaSnapshot,
+    ) -> HashSet<String, ahash::RandomState> {
+        self.table_state
+            .expanded_rows
+            .iter()
+            .map(|idx| snapshot.get_full_path(idx))
+            .collect()
     }
 
     /// Determines the default snapshot filename given the current scan path.
@@ -1916,9 +1958,11 @@ impl eframe::App for GuiApp {
         // Process any deferred command line paths on the first draw pass
         self.process_pending_initial_path();
 
-        // Fetch current snapshot
-        let snapshot = self.shared_state.current_snapshot.load();
+        // Fetch current snapshot. Load `is_scanning` first: a scan publishes its final
+        // snapshot before clearing the flag, so `!is_scanning` guarantees `snapshot`
+        // is final (the rescan view restore below relies on this).
         let is_scanning = self.shared_state.is_scanning.load(Ordering::SeqCst);
+        let snapshot = self.shared_state.current_snapshot.load();
         let snapshot_ptr = std::sync::Arc::as_ptr(&snapshot.nodes) as usize;
 
         // Escape: always allowed to dismiss active modal or clear search focus/query
@@ -2097,22 +2141,35 @@ impl eframe::App for GuiApp {
             }
         }
 
-        if self.last_rendered_snapshot_ptr != snapshot_ptr {
-            self.table_state.filter_cache_dirty = true;
-            // A rescan re-indexes every node under the refreshed directory, which
-            // would otherwise collapse the expanded folders there. If a rescan
-            // captured the expanded paths, re-resolve them against this snapshot.
-            if let Some(paths) = self.pending_expand_restore.take() {
-                self.table_state.expanded_rows.clear();
-                self.table_state.expanded_rows.insert(0); // keep the scan root expanded
-                for path in &paths {
-                    if let Some(idx) = snapshot.resolve_path_index(path)
-                        && idx != 0
-                    {
-                        self.table_state.expanded_rows.insert(idx);
-                    }
+        // A rescan re-indexes every node it refreshes, which would otherwise collapse
+        // the expanded folders there (and a full rescan resets the treemap zoom). If a
+        // rescan captured them as paths, re-resolve them once its final snapshot is
+        // current: `is_scanning` is loaded before `snapshot`, so a finished rescan
+        // means this frame already holds its final snapshot, never a partial one.
+        if !is_scanning
+            && let Some(restore) = self.pending_view_restore.take_if(|restore| {
+                !std::ptr::eq(restore.from_nodes.as_ptr(), Arc::as_ptr(&snapshot.nodes))
+            })
+        {
+            self.table_state.expanded_rows.clear();
+            self.table_state.expanded_rows.insert(0); // keep the scan root expanded
+            for path in &restore.expanded {
+                if let Some(idx) = snapshot.resolve_path_index(path)
+                    && idx != 0
+                {
+                    self.table_state.expanded_rows.insert(idx);
                 }
             }
+            if let Some(path) = restore.zoom_path
+                && let Some(idx) = snapshot.resolve_path_index(&path)
+            {
+                self.treemap_chart.zoom_root = idx;
+                self.zoom_path = Some(path);
+            }
+        }
+
+        if self.last_rendered_snapshot_ptr != snapshot_ptr {
+            self.table_state.filter_cache_dirty = true;
             if let Some(ref path) = self.zoom_path {
                 if let Some(idx) = snapshot.resolve_path_index(path) {
                     self.treemap_chart.zoom_root = idx;
