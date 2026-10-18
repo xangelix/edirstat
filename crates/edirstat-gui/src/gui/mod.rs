@@ -251,6 +251,7 @@ pub enum Locale {
     KoKr,
     NlNl,
     PlPl,
+    PtBr,
     PtPt,
     RuRu,
     TrTr,
@@ -274,6 +275,7 @@ impl std::fmt::Display for Locale {
             Self::KoKr => write!(f, "ko-KR"),
             Self::NlNl => write!(f, "nl-NL"),
             Self::PlPl => write!(f, "pl-PL"),
+            Self::PtBr => write!(f, "pt-BR"),
             Self::PtPt => write!(f, "pt-PT"),
             Self::RuRu => write!(f, "ru-RU"),
             Self::TrTr => write!(f, "tr-TR"),
@@ -300,6 +302,7 @@ impl Locale {
             Self::KoKr => "ko-KR",
             Self::NlNl => "nl-NL",
             Self::PlPl => "pl-PL",
+            Self::PtBr => "pt-BR",
             Self::PtPt => "pt-PT",
             Self::RuRu => "ru-RU",
             Self::TrTr => "tr-TR",
@@ -344,7 +347,16 @@ impl Locale {
             return Some(Self::ZhCn);
         }
 
-        // 3. Base language prefix match (e.g. "de" for "de-AT" or "de_DE")
+        // 3. Portuguese regional matching: Brazil, plus a bare "pt" (which macOS
+        // uses for Brazilian Portuguese), vs. the European norm everywhere else.
+        if clean == "pt" || clean.starts_with("pt-br") {
+            return Some(Self::PtBr);
+        }
+        if clean.starts_with("pt-") {
+            return Some(Self::PtPt);
+        }
+
+        // 4. Base language prefix match (e.g. "de" for "de-AT" or "de_DE")
         let lang_code = clean.split('-').next()?;
         if lang_code.is_empty() {
             return None;
@@ -3623,6 +3635,32 @@ mod tests {
         );
     }
 
+    /// Every [`Locale`] must name a bundled `assets/locales/<tag>/main.ftl`, or
+    /// selecting it would silently fall back to English.
+    #[test]
+    fn test_every_locale_has_translations() {
+        let lookup = |locale: Locale| {
+            crate::CACHE
+                .get(locale.as_str())
+                .and_then(|messages| messages.get("file"))
+                .copied()
+        };
+
+        for locale in Locale::iter() {
+            assert!(
+                lookup(locale).is_some(),
+                "No Fluent bundle for locale {locale}"
+            );
+        }
+
+        let lookup = |locale: Locale| match lookup(locale) {
+            Some(fluent_zero::CacheEntry::Static(s)) => s,
+            _ => panic!("'file' should be a static message for {locale}"),
+        };
+        assert_eq!(lookup(Locale::PtBr), "Arquivo");
+        assert_eq!(lookup(Locale::PtPt), "Ficheiro");
+    }
+
     #[test]
     fn test_locale_from_bcp47_matching() {
         assert_eq!(Locale::from_bcp47("tr-TR"), Some(Locale::TrTr));
@@ -3641,7 +3679,12 @@ mod tests {
         assert_eq!(Locale::from_bcp47("pl-PL"), Some(Locale::PlPl));
         assert_eq!(Locale::from_bcp47("pl"), Some(Locale::PlPl));
         assert_eq!(Locale::from_bcp47("pt-PT"), Some(Locale::PtPt));
-        assert_eq!(Locale::from_bcp47("pt-BR"), Some(Locale::PtPt));
+        assert_eq!(Locale::from_bcp47("pt_PT.UTF-8"), Some(Locale::PtPt));
+        assert_eq!(Locale::from_bcp47("pt-AO"), Some(Locale::PtPt));
+        assert_eq!(Locale::from_bcp47("pt_MZ"), Some(Locale::PtPt));
+        assert_eq!(Locale::from_bcp47("pt-BR"), Some(Locale::PtBr));
+        assert_eq!(Locale::from_bcp47("pt_BR.UTF-8"), Some(Locale::PtBr));
+        assert_eq!(Locale::from_bcp47("pt"), Some(Locale::PtBr));
         assert_eq!(Locale::from_bcp47("ru-RU"), Some(Locale::RuRu));
         assert_eq!(Locale::from_bcp47("ru_RU.UTF-8"), Some(Locale::RuRu));
         assert_eq!(Locale::from_bcp47("ru"), Some(Locale::RuRu));
