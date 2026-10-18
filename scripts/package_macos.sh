@@ -502,7 +502,8 @@ cat > "$APP_DIR/Contents/Info.plist" <<EOF
         <string>ko</string>
         <string>nl</string>
         <string>pl</string>
-        <string>pt</string>
+        <string>pt-BR</string>
+        <string>pt-PT</string>
         <string>ru</string>
         <string>tr</string>
         <string>vi</string>

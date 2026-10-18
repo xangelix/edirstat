@@ -33,8 +33,8 @@ POWER USER DESKTOP WORKFLOW
 • Total Scan Control: Cancel scans at any time, or restrict traversal to a single filesystem (-x).
 • Shortcuts & Drag-and-Drop: Fast keyboard navigation (⌘O/Ctrl+O, ⌘F/Ctrl+F, ⌥↑, ⏎ Zoom, Del) and drag-and-drop folder scanning.
 
-18 LANGUAGES & 3 SLEEK THEMES
-• 18 Languages: English, Arabic, Bengali, Chinese (Simplified), Chinese (Traditional), Dutch, French, German, Hindi, Italian, Japanese, Korean, Polish, Portuguese, Russian, Spanish, Turkish, and Vietnamese with auto-detection.
+19 LANGUAGES & 3 SLEEK THEMES
+• 19 Languages: English, Arabic, Bengali, Chinese (Simplified), Chinese (Traditional), Dutch, French, German, Hindi, Italian, Japanese, Korean, Polish, Portuguese (Brazil), Portuguese (Portugal), Russian, Spanish, Turkish, and Vietnamese with auto-detection.
 • 3 Themes: Dark Mode, Light Mode, and High Contrast.
 
 100% PRIVATE, LOCAL-FIRST, SAFE RUST
