@@ -11,7 +11,17 @@
 - **🧹 Cleanup tab:** New Cleanup visualization (native builds) that runs a rulepack over the finished scan and flags well-known reclaimable directories — Rust `target/` directories, `node_modules`, Python virtual environments, and language package caches (tier 1 "Regenerable": per-row actions reuse the primary table's ♻/🗑 trash-and-permanent-delete icon buttons, colored and rendered exactly like its TableOperations, wired through the existing confirmation-modal pipeline with no bulk actions) — plus tool-owned locations like the pacman/apt/dnf caches and the systemd journal (tier 2 "System tool": strictly display-only, showing the owning tool's cleanup command with a copy button and zero in-app deletion capability). Findings are ranked by size weighted by staleness, the location column is a click-to-jump link that reveals the directory in the explorer tree (select + expand ancestors + scroll), re-analysis runs automatically whenever the snapshot changes, and a completed scan with 100 MiB or more of reclaimable space raises a one-shot notification.
 - **🇧🇷 Brazilian Portuguese (`pt-BR`):** New dedicated Brazilian Portuguese translation (19 languages total). System locale detection now routes `pt-BR` and a bare `pt` (macOS's tag for Brazilian Portuguese) to `pt-BR`, while `pt-PT` and other regional variants (`pt-AO`, `pt-MZ`, …) keep the European Portuguese translation; previously every Portuguese locale fell back to `pt-PT`.
 
+### Changed
+
+- **⚡ Faster NTFS MFT scans:** The Master File Table scanner (raw volumes on Windows; NTFS drives and exported `$MFT` files on Linux) now runs on [`ntfs-ng`](https://crates.io/crates/ntfs-ng): `$MFT` is read in parallel through all of its extents into a compact disk-usage table, extension records folded in, and every directory link is checked by sequence number. On volumes of 1.3 and 1.9 million records, full scans are 3.5× and 2.9× faster, with a quarter less CPU and 41% and 17% less memory. `rayon`, `parking_lot`, `bytemuck`, and `crc-fast` are no longer dependencies.
+
 ### Fixed
+
+- **🔗 Hard links in MFT scans:** Every name of a hard-linked file is listed, including several names in one folder, which collapsed into one.
+- **📏 File sizes in MFT scans:** Files whose data lives in an MFT extension record (large, heavily fragmented files) show their size instead of 0 B, and sizes come from the file's data rather than the copy NTFS keeps, and lets go stale, in its name record.
+- **💽 4 KiB MFT records:** Volumes formatted with 4 KiB file records (common on 4Kn disks) are scanned; every record used to be rejected, and the scan found nothing.
+- **🧭 Reused MFT records:** A file whose folder was deleted, and whose folder's record was reused, is no longer placed in the new folder: parent links must match the folder's sequence number.
+- **🧷 Links in MFT scans:** Symbolic links and junctions are marked as links, as they are in regular scans.
 
 - **🔀 Overlay mounts no longer double-counted:** Full-filesystem scans on Linux now skip `overlay` filesystem mountpoints (e.g. running containers' `merged/` views), whose bytes are already counted under their layer `diff/` directories.
 

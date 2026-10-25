@@ -33,19 +33,16 @@ profile-tracy = ["tracy-client", "edirstat-gui/profile-tracy"]
 [dependencies]
 edirstat-core = { path = "../edirstat-core", version = "2.2.0" }
 edirstat-gui = { path = "../edirstat-gui", version = "2.2.0", default-features = false }
+ntfs-ng = "0.1.0"
 
 ahash = "0.8.12"
 anyhow = "1.0.104"
-bytemuck = { version = "1.25.2", features = ["derive"] }
 clap = { version = "4.6.7", features = ["derive"] }
 cli-or-gui = "0.1.1"
 compact_str = "0.10.0"
-crc-fast = "1.10.0"
 crossbeam = "0.8.5"
 eframe = "0.36.2"
 mimalloc-rspack = { version = "0.2.4", features = ["v3"] }
-parking_lot = { version = "0.12.5", features = ["hardware-lock-elision"] }
-rayon = "1.12.0"
 serde_json = "1.0.151"
 smallvec = "1.16.1"
 sysinfo = { version = "0.39.6", default-features = false, features = ["disk"] }
