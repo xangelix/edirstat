@@ -61,7 +61,7 @@ Purchasing precompiled packages directly funds the engineering efforts required 
 - ⚡ **Work-Stealing Multi-threading:** Powered by a lock-free task injector queue that keeps all CPU cores saturated during scanning-- inspired by `ripgrep`.
 - 🪟 **NTFS MFT Scanner (Windows & Linux):** Accesses raw NTFS volumes to parse the Master File Table directly, bypassing OS filesystem bottlenecks for near-instantaneous drive indexing (requires administrative/root privileges). Exported `$MFT` files can also be parsed offline on any platform.
 - 👥 **7-Stage Deduplication Engine:** Safely identifies byte-for-byte identical files using cryptographically secure BLAKE3 hashing. It is hardlink-aware to protect shared filesystem links and automatically filters out dataless cloud placeholders, special devices, and restricted entries.
-- 🌍 **Full Localization:** Community-translated interface in 19 languages (English, Arabic, Bengali, Chinese (Simplified), Chinese (Traditional), Dutch, French, German, Hindi, Italian, Japanese, Korean, Polish, Portuguese (Brazil), Portuguese (Portugal), Russian, Spanish, Turkish, and Vietnamese) with automatic system language detection and dedicated Google Noto font subsets.
+- 🌍 **Full Localization:** Community-translated interface in 20 languages (English, Arabic, Bengali, Chinese (Simplified), Chinese (Traditional), Dutch, French, German, Hindi, Italian, Japanese, Korean, Polish, Portuguese (Brazil), Portuguese (Portugal), Russian, Spanish, Turkish, Ukrainian, and Vietnamese) with automatic system language detection and dedicated Google Noto font subsets.
 - 🎨 **Theme System:** System (auto-detected), Dark, Light, and High Contrast themes.
 - ⏹️ **Scan Control:** Cancel in-progress scans at any time, and restrict scans to a single filesystem (`-x`).
 - 🌐 **Browser Snapshot Viewer:** Explore saved `.edst` snapshots in the browser via the wasm build on [edirstat.com](https://edirstat.com).
@@ -158,7 +158,7 @@ edirstat /path -x                            # Restrict the scan to the same fil
    - **Move to Trash:** Sends the selected items to your system's Recycle Bin / Trash.
    - **Delete (Permanent):** Opens a safety dialog to permanently delete the target path from your disk.
 7. **Personalize the View:**
-   The **View** menu offers theme selection (System, Dark, Light, High Contrast), interface language (19 languages with automatic system detection), a configurable timestamp **Time Format**, and treemap border toggles. View preferences are saved automatically between sessions.
+   The **View** menu offers theme selection (System, Dark, Light, High Contrast), interface language (20 languages with automatic system detection), a configurable timestamp **Time Format**, and treemap border toggles. View preferences are saved automatically between sessions.
 8. **Keyboard Shortcuts:**
    Quickly navigate, inspect, and manage files using native keyboard shortcuts (see the [complete table](#keyboard-shortcuts) below).
 
