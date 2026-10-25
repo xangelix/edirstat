@@ -1,13 +1,24 @@
 name: CI Pipeline
 
 on:
+  # Post-merge builds and deploys. Feature branches are covered by
+  # `pull_request`, which tests the merge result; running both would
+  # duplicate every job.
   push:
     branches:
-      - "**"
+      - main
+      - dev
   pull_request:
+  # Manual runs for branches without a PR.
+  workflow_dispatch:
+
+# A new push to a PR supersedes its in-flight run; main/dev runs always finish.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   test-linux:
