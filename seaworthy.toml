@@ -9,9 +9,24 @@
 #   seaworthy build-plan --triple x86_64-unknown-linux-gnu   # what to build
 #   seaworthy package --artifacts <dir> --out <dir> --release 2.2.0 --sequence 1
 #
-# eDirStat is local-only: no service, no update helper (and so no release
-# manifests or signing keys here). Paths are relative to this file; crate
-# paths to the workspace root.
+# eDirStat is local-only: no service (so no service account or identity to
+# declare), no update helper (and so no release keys, release-trust, CI test
+# keys or manifests here). Paths are relative to this file; crate paths to
+# the workspace root. Its builds need no SEAWORTHY_TOOL_ENV: no tool
+# seaworthy runs (nFPM, strip, WiX, the macOS tools) needs a variable beyond
+# the system's.
+#
+# Release signing (.github/workflows/release.yml): macOS is Developer
+# ID-signed ([defaults.apple] below). The Linux and Windows packages sign
+# nothing yet, so a release fails until either Authenticode is configured
+# (the workflow's secrets or Azure inputs, and the pin below, uncommented
+# with the certificate's subject and its roots), or allow-unsigned is set on
+# purpose. With OpenPGP package signatures, also `openpgp-keys` in
+# [defaults].
+#
+#   [defaults.authenticode]
+#   subject = "<the signing certificate's subject, as osslsigncode verify prints it>"
+#   trust = "<a PEM file of the roots its chain and timestamp reach>"
 
 [defaults]
 # The install directories' parent (/opt/xangelix, %ProgramFiles%\xangelix)

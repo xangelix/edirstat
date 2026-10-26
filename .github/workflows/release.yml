@@ -23,14 +23,32 @@ jobs:
     # the Cargo manifests); the user's signing rewrites hashes on push.
     uses: xangelix/seaworthy/.github/workflows/dist.yml@0000000000000000000000000000000000000000 # TODO(seaworthy)
     # <<< seaworthy pin (TODO) <<<
+    # contents: read alone: id-token: write is for Azure Artifact Signing
+    # (the azure-* inputs), and dist.yml refuses it without them.
     permissions:
       contents: read
-      id-token: write # requested by its signing jobs (Azure OIDC); unused here
     with:
-      # Versioned from the release's tag; signed where secrets are given
-      # (here the Apple Developer ID: the Linux and Windows packages are
-      # unsigned, as before).
+      # Versioned from the release's tag, signed with the secrets given.
       release: true
+      # !!! THIS RELEASE FAILS UNTIL LINUX/WINDOWS SIGNING IS CONFIGURED !!!
+      # The Linux and Windows packages are made in a job that holds no
+      # signer yet (the Apple secrets reach the macOS job alone), and a
+      # release handed no signer fails rather than ship unsigned. Either:
+      #   - sign: Authenticode for the Windows binaries and MSI (a signed
+      #     release with Windows outputs needs it): the AUTHENTICODE_PFX and
+      #     AUTHENTICODE_PFX_PASSWORD secrets with the
+      #     authenticode-timestamp-url input, or Azure Artifact Signing (the
+      #     five azure-* inputs, plus id-token: write above), and
+      #     [defaults.authenticode] in seaworthy.toml; optionally
+      #     OPENPGP_SECRET_KEY with openpgp-key-fingerprint (rpm and pacman
+      #     signatures) and openpgp-keys in seaworthy.toml; keep the secrets
+      #     in a protected environment (environment: release);
+      #   - or ship the Linux and Windows packages unsigned ON PURPOSE (as
+      #     the pre-seaworthy releases were): allow-unsigned: true. A user
+      #     decision for a public app, not a default.
+      allow-unsigned: false
+      # No CI test keys: eDirStat has no update helper.
+      ci-test-keys: false
     secrets:
       APPLE_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
       APPLE_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
