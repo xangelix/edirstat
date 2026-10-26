@@ -36,6 +36,7 @@
 //! for full documentation and the companion crates `edirstat-core` and
 //! `edirstat-gui`.
 
+pub mod app;
 pub mod engine;
 
 pub use edirstat_core::{EdirstatError, arena, extensions, fs_utils, snapshot, time_utils};
