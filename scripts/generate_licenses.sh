@@ -59,11 +59,13 @@ main() {
 
     check_dependencies
 
-    # Target-specific markdown files: target:manifest_path:output_file
+    # Target-specific markdown files: target:manifest_path:output_file. The
+    # native lists are the shipped core's (crates/edirstat_app: the whole
+    # application plus seaworthy-launcher, which the launcher shares).
     local targets=(
-        "x86_64-unknown-linux-gnu:crates/edirstat/Cargo.toml:crates/edirstat-gui/assets/licenses/linux.md"
-        "x86_64-pc-windows-msvc:crates/edirstat/Cargo.toml:crates/edirstat-gui/assets/licenses/windows.md"
-        "x86_64-apple-darwin:crates/edirstat/Cargo.toml:crates/edirstat-gui/assets/licenses/macos.md"
+        "x86_64-unknown-linux-gnu:crates/edirstat_app/Cargo.toml:crates/edirstat-gui/assets/licenses/linux.md"
+        "x86_64-pc-windows-msvc:crates/edirstat_app/Cargo.toml:crates/edirstat-gui/assets/licenses/windows.md"
+        "x86_64-apple-darwin:crates/edirstat_app/Cargo.toml:crates/edirstat-gui/assets/licenses/macos.md"
         "wasm32-unknown-unknown:crates/edirstat-gui/Cargo.toml:crates/edirstat-gui/assets/licenses/web.md"
     )
 

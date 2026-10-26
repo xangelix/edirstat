@@ -1329,6 +1329,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "edirstat_app"
+version = "2.2.0"
+dependencies = [
+ "anyhow",
+ "edirstat",
+ "mimalloc-rspack",
+ "seaworthy-launcher",
+]
+
+[[package]]
 name = "eframe"
 version = "0.36.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2391,7 +2401,7 @@ checksum = "5be964dae7f699e95012a09ff08bb74d36a0fbb4fc20b5f618241cadd90911c4"
 dependencies = [
  "cc",
  "include_packed_macros",
- "object",
+ "object 0.40.0",
  "thiserror 2.0.20",
  "zstd",
 ]
@@ -3246,6 +3256,15 @@ dependencies = [
  "objc2 0.5.2",
  "objc2-core-location",
  "objc2-foundation 0.2.2",
+]
+
+[[package]]
+name = "object"
+version = "0.37.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ff76201f031d8863c38aa7f905eca4f53abbfa15f609db4277d44cd8938f33fe"
+dependencies = [
+ "memchr",
 ]
 
 [[package]]
@@ -4211,6 +4230,23 @@ dependencies = [
  "memmap2",
  "smithay-client-toolkit 0.19.2",
  "tiny-skia",
+]
+
+[[package]]
+name = "seaworthy-launcher"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "seaworthy-levels",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "seaworthy-levels"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "object 0.37.3",
 ]
 
 [[package]]

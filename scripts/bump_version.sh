@@ -9,8 +9,8 @@
 #   - Cargo.toml (workspace.package.version)
 #   - crates/edirstat/Cargo.toml (path dependencies)
 #   - crates/edirstat-gui/Cargo.toml (path dependencies)
-#   - runner/Cargo.toml (version and ProductVersion)
-#   - runner/Cargo.lock (runner package version)
+#   - launcher/Cargo.toml (version)
+#   - launcher/Cargo.lock (launcher package version)
 #   - web/config.toml (extra.version)
 #   - web/package.json & web/package-lock.json (version)
 #   - web/itch/index.html (title header version)
@@ -48,13 +48,13 @@ sed -i "s/version = \"$CURRENT_VER\"/version = \"$NEW_VER\"/g" crates/edirstat/C
 # 3. crates/edirstat-gui/Cargo.toml
 sed -i "s/version = \"$CURRENT_VER\"/version = \"$NEW_VER\"/g" crates/edirstat-gui/Cargo.toml
 
-# 4. runner/Cargo.toml
-sed -i "s/^version = \"$CURRENT_VER\"/version = \"$NEW_VER\"/" runner/Cargo.toml
-sed -i "s/ProductVersion = \"$CURRENT_VER\"/ProductVersion = \"$NEW_VER\"/" runner/Cargo.toml
+# 4. launcher/Cargo.toml (its own workspace; seaworthy stamps the release's
+#    version resource into the Windows launcher when it packages it)
+sed -i "s/^version = \"$CURRENT_VER\"/version = \"$NEW_VER\"/" launcher/Cargo.toml
 
-# 5. runner/Cargo.lock (if present)
-if [[ -f runner/Cargo.lock ]]; then
-    sed -i "/name = \"edirstat-runner\"/{n;s/version = \".*\"/version = \"$NEW_VER\"/}" runner/Cargo.lock
+# 5. launcher/Cargo.lock
+if [[ -f launcher/Cargo.lock ]]; then
+    sed -i "/name = \"edirstat-launcher\"/{n;s/version = \".*\"/version = \"$NEW_VER\"/}" launcher/Cargo.lock
 fi
 
 # 6. web/config.toml
@@ -108,8 +108,8 @@ echo "       # Wait ~30s for crates.io index to update, then Step 3:"
 echo "       # Main binary & engine (depends on edirstat-core and edirstat-gui)"
 echo "       cargo publish -p edirstat"
 echo ""
-echo "       (Note: 'edirstat-runner' has publish = false and is not published to crates.io)"
+echo "       (Note: edirstat_app and the launcher have publish = false and are not published to crates.io)"
 echo ""
 echo "  5. Deployments & Store Packages:"
-echo "       - itch.io: Pushing tag triggers .github/workflows/release.yml (builds multivers & Inno Setup)"
+echo "       - itch.io: Publishing the GitHub release runs .github/workflows/release.yml (seaworthy packages, Inno Setup)"
 echo "       - Mac App Store: Run ./scripts/package_macos.sh --appstore --build 1 --validate and upload .pkg"

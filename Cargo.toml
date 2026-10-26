@@ -2,6 +2,8 @@
 resolver = "3"
 members = ["crates/*"]
 default-members = ["crates/edirstat"]
+# launcher/ is its own workspace (its Cargo.toml says why).
+exclude = ["launcher"]
 
 [workspace.package]
 version = "2.2.0"
@@ -9,6 +11,17 @@ edition = "2024"
 license = "MIT"
 authors = ["Cody Wyatt Neiman (xangelix) <neiman@cody.to>"]
 repository = "https://github.com/xangelix/edirstat"
+
+# >>> seaworthy path dependency (TODO) >>>
+# TODO(seaworthy): seaworthy (github.com/xangelix/seaworthy) is not on GitHub
+# yet: this builds against a local checkout beside the repository
+# (../../seaworthy). Once it is pushed, run `scripts/use-seaworthy-git.sh
+# <rev>`, which rewrites this line (and launcher/Cargo.toml's) to
+# `git = "https://github.com/xangelix/seaworthy", rev = "<rev>"` and
+# refreshes both lockfiles.
+[workspace.dependencies]
+seaworthy-launcher = { path = "../../seaworthy/crates/seaworthy-launcher" }
+# <<< seaworthy path dependency (TODO) <<<
 
 [patch.crates-io]
 winit = { git = "https://github.com/xangelix/winit.git", branch = "blur-fix" }
