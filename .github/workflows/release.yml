@@ -5,9 +5,39 @@ on:
     types: [published]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
+  # Every package seaworthy builds from seaworthy.toml, through its reusable
+  # workflow: one core per CPU target plus the launcher (Linux in a Debian 12
+  # container, so the binaries run on glibc 2.34 and newer; Windows natively
+  # with MSVC; macOS on Apple Silicon), the deb, rpm, pacman and tarball, the
+  # Windows zip and MSI, and the macOS disk image, Developer ID-signed and
+  # notarized with the Apple secrets. Everything lands, checked against its
+  # listing with SHA256SUMS, in the `seaworthy-packages` artifact.
+  dist:
+    name: seaworthy (Linux, Windows, macOS packages)
+    # >>> seaworthy pin (TODO) >>>
+    # TODO(seaworthy): replace the placeholder with the full commit SHA of the
+    # pushed seaworthy revision (the one scripts/use-seaworthy-git.sh pins in
+    # the Cargo manifests); the user's signing rewrites hashes on push.
+    uses: xangelix/seaworthy/.github/workflows/dist.yml@0000000000000000000000000000000000000000 # TODO(seaworthy)
+    # <<< seaworthy pin (TODO) <<<
+    permissions:
+      contents: read
+      id-token: write # requested by its signing jobs (Azure OIDC); unused here
+    with:
+      # Versioned from the release's tag; signed where secrets are given
+      # (here the Apple Developer ID: the Linux and Windows packages are
+      # unsigned, as before).
+      release: true
+    secrets:
+      APPLE_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+      APPLE_NOTARY_KEY: ${{ secrets.APPLE_API_KEY }}
+      APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+      APPLE_NOTARY_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+
   build-linux:
     name: Package Linux Production
     runs-on: ubuntu-latest
@@ -36,15 +66,10 @@ jobs:
           name: edirstat-linux-x86_64
           path: staging/edirstat-linux-x86_64
 
-      # - name: Upload Asset to GitHub Release
-      #   uses: softprops/action-gh-release@v3
-      #   with:
-      #     files: staging/edirstat-linux-x86_64
-      #   env:
-      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
+  # macOS beyond seaworthy's Apple Silicon disk image: the Intel (x86_64)
+  # Developer ID build, and the Mac App Store package (aarch64).
   build-macos:
-    name: Package macOS Production
+    name: Package macOS Production (${{ matrix.target }})
     runs-on: macos-latest
     strategy:
       matrix:
@@ -60,15 +85,18 @@ jobs:
 
     steps:
       - name: Checkout Source Code
+        if: matrix.target == 'x86_64-apple-darwin' || env.APPSTORE_PROVISIONPROFILE != ''
         uses: actions/checkout@v7
 
       - name: Install Rust Toolchain
+        if: matrix.target == 'x86_64-apple-darwin' || env.APPSTORE_PROVISIONPROFILE != ''
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
           targets: ${{ matrix.target }}
 
       - name: Cache dependencies
+        if: matrix.target == 'x86_64-apple-darwin' || env.APPSTORE_PROVISIONPROFILE != ''
         uses: swatinem/rust-cache@v2
         with:
           key: ${{ matrix.target }}
@@ -76,6 +104,7 @@ jobs:
       # A release must never silently ship unsigned: fail loud if the
       # secrets aren't installed (see AGENTS/release docs for the list).
       - name: Require signing secrets
+        if: matrix.target == 'x86_64-apple-darwin' || env.APPSTORE_PROVISIONPROFILE != ''
         run: |
           if [ -z "$MACOS_CERTIFICATE_P12" ] || [ -z "$APPLE_API_KEY" ]; then
             echo "::error::macOS release packaging requires MACOS_CERTIFICATE_P12, MACOS_CERTIFICATE_PASSWORD, APPLE_API_KEY, APPLE_API_KEY_ID, APPLE_API_ISSUER secrets."
@@ -83,6 +112,7 @@ jobs:
           fi
 
       - name: Import signing identity & notary credentials
+        if: matrix.target == 'x86_64-apple-darwin' || env.APPSTORE_PROVISIONPROFILE != ''
         run: |
           set -euo pipefail
           KEYCHAIN="edirstat-ci.keychain-db"
@@ -109,10 +139,14 @@ jobs:
             --key AuthKey.p8 --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER"
           rm AuthKey.p8
 
-      - name: Build, Bundle, Sign & Notarize
+      # Apple Silicon's Developer ID disk image comes from seaworthy (dist);
+      # Intel Macs keep the single-binary build.
+      - name: Build, Bundle, Sign & Notarize (Intel)
+        if: matrix.target == 'x86_64-apple-darwin'
         run: ./scripts/package_macos.sh --target "${{ matrix.target }}" --validate
 
       - name: Store macOS Package as Private Artifact
+        if: matrix.target == 'x86_64-apple-darwin'
         uses: actions/upload-artifact@v7
         with:
           name: edirstat-macos-${{ matrix.target }}
@@ -136,200 +170,35 @@ jobs:
           name: edirstat-appstore-pkg
           path: edirstat-appstore-*.pkg
 
-      # - name: Upload Asset to GitHub Release
-      #   uses: softprops/action-gh-release@v3
-      #   with:
-      #     files: |
-      #       edirstat-macos-*.dmg
-      #       edirstat-macos-*.zip
-      #   env:
-      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Cleanup keychain & sensitive files
         if: always()
         run: |
           security delete-keychain edirstat-ci.keychain-db 2>/dev/null || true
           rm -f appstore.provisionprofile signing.p12 AuthKey.p8 2>/dev/null || true
 
-  # One parallel leg per (target, CPU) pair: each builds a single optimized
-  # variant binary. combine-multivers merges them into the multivers wrappers.
-  build-multivers-variants:
-    name: Multivers Variant (${{ matrix.target }} / ${{ matrix.cpu }})
-    runs-on: ubuntu-latest
-    container:
-      image: registry.gitlab.com/xangelix-pub/containers/arch-rust-nightly-pin-common:latest
-      options: --user root # How I wish this were GitLab
-
-    strategy:
-      fail-fast: false
-      matrix:
-        target: [x86_64-unknown-linux-gnu, x86_64-pc-windows-gnu]
-        # Keep in sync with TARGET_CPUS in scripts/build_local_multivers.sh
-        cpu: [x86-64-v2, x86-64-v3, x86-64-v4, znver3, znver4, znver5, skylake, alderlake]
-
-    env:
-      TARGETS: ${{ matrix.target }}
-      TARGET_CPUS: ${{ matrix.cpu }}
-
-    steps:
-      - name: Checkout Source Code
-        uses: actions/checkout@v7
-
-      - name: Cache dependencies
-        uses: swatinem/rust-cache@v2
-        with:
-          # Per-leg caches keep each variant's dependency tree warm across runs
-          key: multivers-${{ matrix.target }}-${{ matrix.cpu }}
-          cache-on-failure: true
-
-      - name: Install MinGW cross toolchain
-        if: contains(matrix.target, 'windows')
-        run: pacman -Syu --noconfirm --needed mingw-w64-gcc
-
-      - name: Build CPU Variant
-        run: MULTIVERS_SKIP_WRAPPER=1 ./scripts/build_local_multivers.sh
-
-      - name: Store Variant Artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: multivers-${{ matrix.target }}-${{ matrix.cpu }}
-          path: target/${{ matrix.target }}/release/edirstat-${{ matrix.cpu }}${{ endsWith(matrix.target, 'windows-gnu') && '.exe' || '' }}
-          if-no-files-found: error
-          retention-days: 1
-
-  # Downloads the per-CPU variant binaries, combines them into the two
-  # multivers wrapper executables, and builds the Arch pacman package.
-  combine-multivers:
-    name: Combine Multivers Wrappers & Pacman Package
-    runs-on: ubuntu-latest
-    needs: [build-multivers-variants]
-    container:
-      image: registry.gitlab.com/xangelix-pub/containers/arch-rust-nightly-pin-common:latest
-      options: --user root # How I wish this were GitLab
-
-    steps:
-      - name: Checkout Source Code
-        uses: actions/checkout@v7
-
-      - name: Cache dependencies
-        uses: swatinem/rust-cache@v2
-        with:
-          # Save even on failure: keeps the wrapper build's deps warm
-          cache-on-failure: true
-
-      - name: Install Packaging Dependencies
-        run: pacman -Syu --noconfirm --needed mingw-w64-gcc pacman-contrib dpkg rpm-tools
-
-      - name: Configure safe directory for Git
-        run: git config --global --add safe.directory "*"
-
-      - name: Download Multivers Variants
-        uses: actions/download-artifact@v8
-        with:
-          pattern: multivers-*
-          merge-multiple: true
-          path: staging-variants
-
-      - name: Stage Variant Binaries per Target
-        run: |
-          mkdir -p target/x86_64-unknown-linux-gnu/release target/x86_64-pc-windows-gnu/release
-          find staging-variants -type f -name '*.exe' -exec cp -t target/x86_64-pc-windows-gnu/release {} +
-          find staging-variants -type f ! -name '*.exe' -exec cp -t target/x86_64-unknown-linux-gnu/release {} +
-
-      - name: Build Multivers Wrappers
-        # TARGET_CPUS defaults to the full variant list in the script; keep
-        # the matrix legs above in sync with it.
-        run: MULTIVERS_SKIP_VARIANTS=1 ./scripts/build_local_multivers.sh
-
-      - name: Build Debian (.deb) Package
-        run: |
-          ./scripts/package_deb.sh --binary target/x86_64-unknown-linux-gnu/release/edirstat_multivers --out-dir staging-linux-installer
-
-      - name: Build Red Hat / Fedora (.rpm) Package
-        run: |
-          ./scripts/package_rpm.sh --binary target/x86_64-unknown-linux-gnu/release/edirstat_multivers --out-dir staging-linux-installer
-
-      - name: Build Arch Linux Pacman Package as tux user
-        run: |
-          # 1. Determine version
-          VERSION="${{ github.event.release.tag_name }}"
-          VERSION="${VERSION#v}"
-
-          # 2. Stage binary in /home/tux matching manual source name
-          cp target/x86_64-unknown-linux-gnu/release/edirstat_multivers /home/tux/edirstat-$VERSION-portable-x86_64
-          chown tux:tux /home/tux/edirstat-$VERSION-portable-x86_64
-
-          # 3. Clone and build as the tux user to bypass makepkg root restriction.
-          #    The script is piped to bash via stdin (quoted heredoc): passing a
-          #    multi-line script through `sudo -i bash -c "..."` re-joins the
-          #    arguments and flattens the newlines into one broken line.
-          sudo -u tux HOME=/home/tux VERSION="$VERSION" bash <<'EOF'
-          set -euo pipefail
-          cd /home/tux
-          rm -rf edirstat-bin
-          git clone https://aur.archlinux.org/edirstat-bin.git
-          cd edirstat-bin
-
-          # Place precompiled binary in build directory
-          cp "/home/tux/edirstat-$VERSION-portable-x86_64" ./
-
-          # Update version properties
-          sed -i "s/^pkgver=.*/pkgver=$VERSION/" PKGBUILD
-          sed -i 's/^pkgrel=.*/pkgrel=1/' PKGBUILD
-
-          # Never emit makepkg's debug split package (default `debug` option);
-          # a multi-file channel upload makes itch.io wrap it as a zip
-          echo "options=('!debug')" >> PKGBUILD
-
-          # Automatically resolve checksums for the local binary and download metadata
-          updpkgsums
-
-          # Build and package
-          makepkg -s --noconfirm
-          EOF
-
-          # 4. Copy the compiled package back to workspace (main package only,
-          #    never a debug split package)
-          mkdir -p staging-linux-installer
-          cp /home/tux/edirstat-bin/edirstat-bin-"$VERSION"-*-x86_64.pkg.tar.zst staging-linux-installer/
-
-      - name: Store Multivers Windows Wrapper
-        uses: actions/upload-artifact@v7
-        with:
-          name: multivers-windows-exe
-          path: target/x86_64-pc-windows-gnu/release/edirstat_multivers.exe
-
-      - name: Store Multivers Linux Wrapper
-        uses: actions/upload-artifact@v7
-        with:
-          name: multivers-linux
-          path: target/x86_64-unknown-linux-gnu/release/edirstat_multivers
-
-      - name: Store Linux Packages (Debian & Pacman)
-        uses: actions/upload-artifact@v7
-        with:
-          name: edirstat-pacman-pkg
-          path: staging-linux-installer/
-
+  # The Inno Setup installer, from the same Windows tree as seaworthy's zip
+  # and MSI (the launcher and its per-CPU cores). Existing installs (an Inno
+  # AppId) upgrade in place; the MSI, beside it, installs elsewhere and is
+  # an additional artifact until the switch is decided.
   package-windows-installer:
-    name: Package Windows Installer (Multivers, Inno Setup)
+    name: Package Windows Installer (Inno Setup)
     runs-on: windows-latest
-    needs: [combine-multivers]
+    needs: [dist]
 
     steps:
       - name: Checkout Source Code
         uses: actions/checkout@v7
 
-      - name: Download Multivers Windows Wrapper
+      - name: Download the seaworthy Windows tree
         uses: actions/download-artifact@v8
         with:
-          name: multivers-windows-exe
-          path: dl-multivers
+          name: seaworthy-dist
+          path: dl-seaworthy
 
       - name: Stage Payload for Inno Setup
         run: |
-          mkdir -Force target\release
-          cp -Force dl-multivers\edirstat_multivers.exe target\release\edirstat.exe
+          mkdir -Force staging\windows
+          Copy-Item -Recurse -Force dl-seaworthy\edirstat\x86_64-pc-windows-msvc\tree\xangelix\eDirStat\* staging\windows\
 
       - name: Compile Inno Setup Installer
         shell: powershell
@@ -350,86 +219,71 @@ jobs:
   deploy-itchio:
     name: Deploy to itch.io
     runs-on: ubuntu-latest
-    needs: [combine-multivers, package-windows-installer, build-macos]
+    needs: [dist, package-windows-installer]
     # Environment scoping enables an approval gate before pushing to the paid
     # store, and lets the BUTLER_API_KEY secret be scoped to this deployment
     # (Settings → Environments → itchio).
     environment: itchio
-    container:
-      image: registry.gitlab.com/xangelix-pub/containers/arch-rust-nightly-pin-common:latest
-      options: --user root # How I wish this were GitLab
 
     steps:
-      - name: Install Deploy Dependencies
-        run: pacman -Syu --noconfirm --needed curl unzip
-
       - name: Download Windows Installer Artifact
         uses: actions/download-artifact@v8
         with:
           name: edirstat-setup-x86_64.exe
           path: staging-windows-installer
 
-      - name: Download Multivers Windows Wrapper
+      - name: Download the seaworthy packages
         uses: actions/download-artifact@v8
         with:
-          name: multivers-windows-exe
-          path: dl-multivers-windows
-
-      - name: Download Multivers Linux Wrapper
-        uses: actions/download-artifact@v8
-        with:
-          name: multivers-linux
-          path: dl-multivers-linux
-
-      - name: Download Linux Packages (Debian, RPM, Pacman)
-        uses: actions/download-artifact@v8
-        with:
-          name: edirstat-pacman-pkg
-          path: dl-linux-packages
-
-      - name: Download macOS aarch64 Production Artifact
-        uses: actions/download-artifact@v8
-        with:
-          name: edirstat-macos-aarch64-apple-darwin
-          path: dl-macos-aarch64
+          name: ${{ needs.dist.outputs.packages-artifact }}
+          path: dl-packages
 
       - name: Stage Channels
+        env:
+          TAG: ${{ github.event.release.tag_name }}
         run: |
+          set -euo pipefail
+          (cd dl-packages && sha256sum --check --strict SHA256SUMS)
           # Versioned filenames become the download names shown on itch.io
-          VERSION="${{ github.event.release.tag_name }}"
-          VERSION="${VERSION#v}"
+          VERSION="${TAG#v}"
+          linux=dl-packages/packages/edirstat/packages
+          macos=dl-packages/packages-macos/edirstat/packages
           mkdir -p staging-windows staging-osx
           mkdir -p staging-linux-portable staging-linux-deb staging-linux-rpm staging-linux-pacman
 
-          # Windows
-          cp dl-multivers-windows/edirstat_multivers.exe "staging-windows/edirstat-$VERSION-portable-x86_64.exe"
+          # Windows portable: the launcher, its per-CPU cores and the license
+          # (the zip's one directory, unpacked).
+          unzip -q "$linux"/*-windows-x86_64.zip -d staging-windows-unpacked
+          mv staging-windows-unpacked/*/* staging-windows/
 
-          # macOS
-          cp dl-macos-aarch64/edirstat-macos-aarch64-*.dmg "staging-osx/edirstat-$VERSION-macos-aarch64.dmg"
+          # macOS (Apple Silicon): seaworthy's Developer ID disk image
+          cp "$macos"/*-macos-arm64.dmg "staging-osx/edirstat-$VERSION-macos-aarch64.dmg"
+
+          # Linux portable: the launcher, lib/ with the cores, the license
+          tar --zstd -xf "$linux"/*-linux-x86_64.tar.zst -C staging-linux-portable --strip-components=1
 
           # Linux Distros (Dedicated standalone files per channel)
-          cp dl-multivers-linux/edirstat_multivers "staging-linux-portable/edirstat-$VERSION-portable-x86_64"
-          chmod +x "staging-linux-portable/edirstat-$VERSION-portable-x86_64"
-
-          cp dl-linux-packages/edirstat_*.deb staging-linux-deb/
-          cp dl-linux-packages/edirstat-*.rpm staging-linux-rpm/
-          cp dl-linux-packages/edirstat-bin-*.pkg.tar.zst staging-linux-pacman/
+          cp "$linux"/*_amd64.deb staging-linux-deb/
+          cp "$linux"/*.x86_64.rpm staging-linux-rpm/
+          cp "$linux"/*-x86_64.pkg.tar.zst staging-linux-pacman/
 
       - name: Push to itch.io
         env:
           BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
+          TAG: ${{ github.event.release.tag_name }}
         run: |
           # Determine version
-          VERSION="${{ github.event.release.tag_name }}"
-          VERSION="${VERSION#v}" # strip 'v' prefix if present
+          VERSION="${TAG#v}" # strip 'v' prefix if present
           echo "Deploying version: $VERSION"
 
           # Ensure butler is available in PATH, downloading it as a fallback if necessary
           if ! command -v butler &> /dev/null; then
             echo "butler not found in PATH, installing..."
             curl -L -o butler.zip https://broth.itch.zone/butler/linux-amd64/LATEST/archive/default
-            unzip -o butler.zip -d /usr/local/bin
+            mkdir -p "$HOME/.local/bin"
+            unzip -o butler.zip -d "$HOME/.local/bin"
             rm butler.zip
+            export PATH="$HOME/.local/bin:$PATH"
           fi
 
           # Push Windows packages
@@ -439,7 +293,7 @@ jobs:
           # Push macOS package
           butler push staging-osx/ xangelix/edirstat:osx-arm64 --userversion "$VERSION"
 
-          # Push dedicated Linux channels (each contains a single uncompressed file)
+          # Push dedicated Linux channels
           butler push staging-linux-portable/ xangelix/edirstat:linux-portable --userversion "$VERSION"
           butler push staging-linux-deb/ xangelix/edirstat:linux-deb --userversion "$VERSION"
           butler push staging-linux-rpm/ xangelix/edirstat:linux-rpm --userversion "$VERSION"
@@ -480,4 +334,3 @@ jobs:
           fi
           echo "==> Delivering $PKG to Mac App Store..."
           ./scripts/deliver_macos.sh --pkg "$PKG"
-

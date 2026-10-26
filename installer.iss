@@ -26,7 +26,9 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-Source: "target\release\edirstat.exe"; DestDir: "{app}"; Flags: ignoreversion
+; The seaworthy Windows tree (the release workflow stages it): the edirstat.exe
+; launcher, one edirstat_app_<cpu>.dll core per CPU target beside it, the license.
+Source: "staging\windows\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{group}\eDirStat"; Filename: "{app}\edirstat.exe"; IconFilename: "{app}\edirstat.exe"
