@@ -1,0 +1,99 @@
+# How eDirStat is built, packaged and verified for release: seaworthy
+# (github.com/xangelix/seaworthy) builds one core per CPU target
+# (crates/edirstat_app) plus the launcher (launcher/), checks every binary,
+# lays out the install trees and builds the packages below. The release
+# workflow (.github/workflows/release.yml) runs it through seaworthy's
+# reusable GitHub workflow; locally:
+#
+#   seaworthy check
+#   seaworthy build-plan --triple x86_64-unknown-linux-gnu   # what to build
+#   seaworthy package --artifacts <dir> --out <dir> --release 2.2.0 --sequence 1
+#
+# eDirStat is local-only: no service, no update helper (and so no release
+# manifests or signing keys here). Paths are relative to this file; crate
+# paths to the workspace root.
+
+[defaults]
+# The install directories' parent (/opt/xangelix, %ProgramFiles%\xangelix)
+# and the Linux packages' name prefix (xangelix-edirstat).
+vendor = "xangelix"
+# The CPU targets, most preferred first: the launcher's list
+# (launcher/src/main.rs), in the same order. The cargo-multivers set and
+# order (the most enabled features first), so every machine runs the build
+# it ran before.
+targets = [
+    "znver5",
+    "znver4",
+    "alderlake",
+    "znver3",
+    "skylake",
+    "x86-64-v4",
+    "x86-64-v3",
+    "x86-64-v2",
+]
+# Apple Silicon: one core, which every arm64 Mac runs.
+macos-targets = ["apple-m1"]
+# The arm64-only deployment target the Mac App Store build already uses.
+macos-minimum = "12.0"
+channel = "stable"
+maintainer = "Cody Wyatt Neiman (xangelix) <neiman@cody.to>"
+license = "MIT"
+homepage = "https://edirstat.com"
+
+# The Apple team whose Developer ID signs (and notarizes) the macOS disk
+# image: the release workflow's Apple secrets hold its identity.
+[defaults.apple]
+team-id = "B2QGXRL5VZ"
+
+[product.edirstat]
+display-name = "eDirStat"
+description = "Fast, interactive graphical disk usage analyzer and deduplication engine"
+launcher = "launcher"
+executable = "edirstat"
+core = "edirstat_app"
+kind = "desktop"
+windows-directory = "eDirStat"
+# Ties every MSI release together: pinned, so renaming the vendor or the id
+# never orphans installed copies.
+upgrade-code = "{626B51A4-4065-846D-A41E-1F4D5E77A6DC}"
+outputs = ["msi", "zip", "deb", "rpm", "pacman", "tar", "dmg"]
+updates.default = "off"
+linux.command = "edirstat"
+# The packages released before seaworthy (edirstat .deb/.rpm, the AUR's
+# edirstat-bin) install the same /usr/bin/edirstat and menu entry: every
+# format conflicts with and replaces them, so an install upgrades cleanly.
+linux.replaces = ["edirstat", "edirstat-bin"]
+# What eframe/winit open at run time (dlopen) beside the base system.
+linux.depends.deb = ["libc6 (>= 2.34)", "libxkbcommon0", "libfontconfig1"]
+linux.depends.rpm = ["glibc >= 2.34", "libxkbcommon", "fontconfig"]
+linux.depends.pacman = ["glibc", "libxkbcommon", "fontconfig"]
+
+[product.edirstat.desktop]
+# The window's app id (eframe's app name): menus and docks match it.
+app-id = "edirstat"
+wm-class = "edirstat"
+linux-icons = [
+    "assets/img/icon_16x.png",
+    "assets/img/icon_32x.png",
+    "assets/img/icon_48x.png",
+    "assets/img/icon_64x.png",
+    "assets/img/icon_128x.png",
+    "assets/img/icon_256x.png",
+    "assets/img/icon_512x.png",
+    "assets/img/icon-transparent.svg",
+]
+windows-icon = "assets/img/icon.ico"
+start-menu = true
+desktop-shortcut = false
+categories = ["System", "Filesystem", "Utility"]
+keywords = ["disk", "usage", "analyzer", "storage", "size", "cleanup", "dedup", "treemap"]
+
+[product.edirstat.macos]
+bundle-id = "com.edirstat.app"
+icon = "assets/img/icon.icns"
+category = "public.app-category.utilities"
+
+# The MIT license travels with every copy.
+[[product.edirstat.files]]
+source = "LICENSE"
+destination = "LICENSE.txt"
