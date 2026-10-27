@@ -7,6 +7,12 @@ name: Packages (dry run)
 # and no secret is handed over. It runs on pull requests that change how
 # eDirStat is built or packaged, and by hand (Actions → Packages (dry run)
 # → Run workflow) on any branch before tagging a release.
+#
+# The packages are the paid builds in all but signature and version, and
+# artifacts of a public repository are not private (any signed-in GitHub
+# user, and proxies such as nightly.link for anyone). So a pull request's
+# run only checks them and deletes its artifacts when it passes; a run by
+# hand, which only maintainers can start, keeps them for 3 days to download.
 on:
   pull_request:
     paths:
@@ -36,3 +42,29 @@ jobs:
       # A development build: versioned from the manifest, unsigned.
       release: false
       ci-test-keys: false
+      # A failed pull request run keeps its artifacts a day, for "Re-run
+      # failed jobs".
+      retention-days: ${{ github.event_name == 'pull_request' && 1 || 3 }}
+
+  delete-artifacts:
+    name: Delete the Packages
+    runs-on: ubuntu-latest
+    needs: [dist]
+    # A fork's pull request gets a read-only token: its artifacts expire.
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      actions: write # to delete this run's artifacts
+    steps:
+      - name: Delete every artifact of this run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # The whole listing first: deleting while paging would skip some.
+          artifacts="$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts" \
+            --jq '.artifacts[] | "\(.id) \(.name)"')"
+          while read -r id name; do
+            [ -n "$id" ] || continue
+            echo "Deleting $name"
+            gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$id"
+          done <<< "$artifacts"
