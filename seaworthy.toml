@@ -103,11 +103,21 @@ start-menu = true
 desktop-shortcut = false
 categories = ["System", "Filesystem", "Utility"]
 keywords = ["disk", "usage", "analyzer", "storage", "size", "cleanup", "dedup", "treemap"]
+# File managers offer eDirStat for folders ("Open With"); it scans the one
+# it's opened with.
+mime-types = ["inode/directory"]
 
 [product.edirstat.macos]
 bundle-id = "com.edirstat.app"
 icon = "assets/img/icon.icns"
 category = "public.app-category.utilities"
+# The languages the GUI speaks (crates/edirstat-gui/assets/locales), as the
+# Intel and App Store bundles list them (scripts/package_macos.sh): macOS
+# shows its own menus and panels in the user's language only when it's here.
+localizations = [
+    "en", "ar", "bn", "de", "es", "fr", "hi", "it", "ja", "ko",
+    "nl", "pl", "pt-BR", "pt-PT", "ru", "tr", "uk", "vi", "zh-Hans", "zh-Hant",
+]
 
 # The MIT license travels with every copy.
 [[product.edirstat.files]]
