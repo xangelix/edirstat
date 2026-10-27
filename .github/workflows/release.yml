@@ -17,12 +17,8 @@ jobs:
   # listing with SHA256SUMS, in the `seaworthy-packages` artifact.
   dist:
     name: seaworthy (Linux, Windows, macOS packages)
-    # >>> seaworthy pin (TODO) >>>
-    # TODO(seaworthy): replace the placeholder with the full commit SHA of the
-    # pushed seaworthy revision (the one scripts/use-seaworthy-git.sh pins in
-    # the Cargo manifests); the user's signing rewrites hashes on push.
-    uses: xangelix/seaworthy/.github/workflows/dist.yml@0000000000000000000000000000000000000000 # TODO(seaworthy)
-    # <<< seaworthy pin (TODO) <<<
+    # The commit Cargo.toml pins seaworthy to (scripts/use-seaworthy-git.sh).
+    uses: xangelix/seaworthy/.github/workflows/dist.yml@2224dc724a1a2fec447c298f4ddfc9e57b8d444c # seaworthy 2224dc724a1a
     # contents: read alone: id-token: write is for Azure Artifact Signing
     # (the azure-* inputs), and dist.yml refuses it without them.
     permissions:

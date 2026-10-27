@@ -46,9 +46,9 @@ checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 
 [[package]]
 name = "object"
-version = "0.37.3"
+version = "0.40.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ff76201f031d8863c38aa7f905eca4f53abbfa15f609db4277d44cd8938f33fe"
+checksum = "dd229a0361b9d0d4396176e02d65897f487eebeab7caa6d443855ee152ca0b9c"
 dependencies = [
  "memchr",
 ]
@@ -72,10 +72,22 @@ dependencies = [
 ]
 
 [[package]]
-name = "seaworthy-launcher"
+name = "seaworthy-fsguard"
 version = "0.1.0"
+source = "git+https://github.com/xangelix/seaworthy?rev=2224dc724a1a2fec447c298f4ddfc9e57b8d444c#2224dc724a1a2fec447c298f4ddfc9e57b8d444c"
 dependencies = [
  "libc",
+ "thiserror",
+ "windows-sys",
+]
+
+[[package]]
+name = "seaworthy-launcher"
+version = "0.1.0"
+source = "git+https://github.com/xangelix/seaworthy?rev=2224dc724a1a2fec447c298f4ddfc9e57b8d444c#2224dc724a1a2fec447c298f4ddfc9e57b8d444c"
+dependencies = [
+ "libc",
+ "seaworthy-fsguard",
  "seaworthy-levels",
  "windows-sys",
 ]
@@ -83,6 +95,7 @@ dependencies = [
 [[package]]
 name = "seaworthy-levels"
 version = "0.1.0"
+source = "git+https://github.com/xangelix/seaworthy?rev=2224dc724a1a2fec447c298f4ddfc9e57b8d444c#2224dc724a1a2fec447c298f4ddfc9e57b8d444c"
 dependencies = [
  "libc",
  "object",
@@ -126,6 +139,26 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-ident",
+]
+
+[[package]]
+name = "thiserror"
+version = "2.0.21"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "09e52cb86a36cede5cb101bf8908837b3e4c6e5e59fe7fd85c23fb56200d189e"
+dependencies = [
+ "thiserror-impl",
+]
+
+[[package]]
+name = "thiserror-impl"
+version = "2.0.21"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fe5197923287db20a58125f0bc85c062f7f2c892de97b18c356f9efb14b28524"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]

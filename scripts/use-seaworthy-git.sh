@@ -1,68 +1,45 @@
 #!/usr/bin/env bash
-# use-seaworthy-git.sh — switch eDirStat from the local seaworthy checkout
-# (the path dependencies marked "seaworthy path dependency (TODO)") to the
-# pushed seaworthy repository, pinned to one commit, and pin the release
-# workflow's reusable seaworthy workflow to the same commit.
+# use-seaworthy-git.sh — move eDirStat to another seaworthy commit: the
+# seaworthy-launcher pins in Cargo.toml and launcher/Cargo.toml and the
+# reusable seaworthy workflow (dist.yml) that release.yml and packages.yml
+# call, all to one commit of github.com/xangelix/seaworthy, then both
+# lockfiles refreshed for the new source alone (cargo metadata: nothing else
+# is upgraded).
 #
 # Usage:
-#   ./scripts/use-seaworthy-git.sh <full commit SHA> [<repository URL>]
+#   ./scripts/use-seaworthy-git.sh <full commit SHA>
 #
-# The repository defaults to https://github.com/xangelix/seaworthy. It
-# rewrites, between their >>> / <<< markers:
-#   - Cargo.toml          [workspace.dependencies] seaworthy-launcher
-#   - launcher/Cargo.toml [dependencies] seaworthy-launcher
-#   - .github/workflows/release.yml  uses: …/dist.yml@<SHA>
-# then refreshes Cargo.lock and launcher/Cargo.lock for the new source only
-# (cargo metadata: nothing else is upgraded).
+# A newer seaworthy can need a newer version of a crate eDirStat already
+# locks; cargo then names the conflict, and `cargo update -p
+# <crate>@<locked> --precise <needed>` (in the workspace that names it)
+# moves that one crate before a second run.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd -P)"
 cd "$REPO_ROOT"
 
 rev="${1:-}"
-url="${2:-https://github.com/xangelix/seaworthy}"
 if [[ ! "$rev" =~ ^[0-9a-f]{40}$ ]]; then
-    echo "usage: $0 <full 40-character commit SHA> [<repository URL>]" >&2
+    echo "usage: $0 <full 40-character commit SHA>" >&2
     exit 2
-fi
-if [[ ! "$url" =~ ^(https://[A-Za-z0-9./_-]+|file:///[A-Za-z0-9./_-]+)$ ]]; then
-    echo "error: '$url' isn't an https (or file) repository URL" >&2
-    exit 2
-fi
-# The workflow pin names the repository as owner/name.
-owner_repo=""
-if [[ "$url" =~ ^https://github\.com/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)$ ]]; then
-    owner_repo="${BASH_REMATCH[1]%.git}"
 fi
 
-# Replaces the lines between "# >>> <marker>" and "# <<< <marker>" (the
-# markers included) in <file> with <replacement>.
-replace_block() { # <file> <marker> <replacement>
-    local file="$1" marker="$2" replacement="$3"
-    grep -q "^ *# >>> $marker" "$file" || { echo "error: $file has no '# >>> $marker' block (already switched?)" >&2; exit 1; }
-    REPLACEMENT="$replacement" MARKER="$marker" awk '
-        index($0, "# >>> " ENVIRON["MARKER"]) { skip = 1; print ENVIRON["REPLACEMENT"]; next }
-        index($0, "# <<< " ENVIRON["MARKER"]) { skip = 0; next }
-        !skip { print }
-    ' "$file" > "$file.new"
-    mv "$file.new" "$file"
+# Rewrites <file> through sed's extended expression <expression>, and fails
+# unless the result names the new commit (the pin was where expected).
+pin() { # <file> <expression>
+    sed -E "$2" "$1" > "$1.new"
+    mv "$1.new" "$1"
+    grep -q "$rev" "$1" || { echo "error: $1 holds no seaworthy pin to move" >&2; exit 1; }
 }
 
-dep="seaworthy-launcher = { git = \"$url\", rev = \"$rev\" }"
-replace_block Cargo.toml "seaworthy path dependency (TODO)" \
-"# seaworthy, pinned to one commit (scripts/use-seaworthy-git.sh moves it).
-[workspace.dependencies]
-$dep"
-replace_block launcher/Cargo.toml "seaworthy path dependency (TODO)" \
-"# seaworthy, pinned to the commit the workspace pins (scripts/use-seaworthy-git.sh).
-$dep"
-if [ -n "$owner_repo" ]; then
-    replace_block .github/workflows/release.yml "seaworthy pin (TODO)" \
-"    # The commit Cargo.toml pins seaworthy to (scripts/use-seaworthy-git.sh).
-    uses: $owner_repo/.github/workflows/dist.yml@$rev # seaworthy ${rev:0:12}"
-else
-    echo "note: $url isn't a github.com repository: .github/workflows/release.yml keeps its placeholder pin" >&2
-fi
+pin Cargo.toml \
+    "s#(seaworthy-launcher = \\{ git = \"https://github.com/xangelix/seaworthy\", rev = \")[0-9a-f]{40}(\" \\})#\\1$rev\\2#"
+pin launcher/Cargo.toml \
+    "s#(seaworthy-launcher = \\{ git = \"https://github.com/xangelix/seaworthy\", rev = \")[0-9a-f]{40}(\" \\})#\\1$rev\\2#"
+for workflow in .github/workflows/release.yml .github/workflows/packages.yml; do
+    pin "$workflow" \
+        "s#(uses: xangelix/seaworthy/\\.github/workflows/dist\\.yml@)[0-9a-f]{40}( \\# seaworthy )[0-9a-f]{12}#\\1$rev\\2${rev:0:12}#"
+done
 
 echo "==> Refreshing the lockfiles for the new source"
 cargo metadata --format-version 1 >/dev/null
