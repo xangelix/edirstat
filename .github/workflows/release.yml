@@ -30,23 +30,17 @@ jobs:
     with:
       # Versioned from the release's tag, signed with the secrets given.
       release: true
-      # !!! THIS RELEASE FAILS UNTIL LINUX/WINDOWS SIGNING IS CONFIGURED !!!
-      # The Linux and Windows packages are made in a job that holds no
-      # signer yet (the Apple secrets reach the macOS job alone), and a
-      # release handed no signer fails rather than ship unsigned. Either:
-      #   - sign: Authenticode for the Windows binaries and MSI (a signed
-      #     release with Windows outputs needs it): the AUTHENTICODE_PFX and
-      #     AUTHENTICODE_PFX_PASSWORD secrets with the
-      #     authenticode-timestamp-url input, or Azure Artifact Signing (the
-      #     five azure-* inputs, plus id-token: write above), and
-      #     [defaults.authenticode] in seaworthy.toml; optionally
-      #     OPENPGP_SECRET_KEY with openpgp-key-fingerprint (rpm and pacman
-      #     signatures) and openpgp-keys in seaworthy.toml; keep the secrets
-      #     in a protected environment (environment: release);
-      #   - or ship the Linux and Windows packages unsigned ON PURPOSE (as
-      #     the pre-seaworthy releases were): allow-unsigned: true. A user
-      #     decision for a public app, not a default.
-      allow-unsigned: false
+      # Only macOS is signed: the Apple secrets below Developer ID-sign and
+      # notarize the disk image, and because seaworthy.toml pins the team
+      # ([defaults.apple]), a release whose Apple secrets don't reach the
+      # macOS job fails instead of shipping an ad hoc-signed dmg. The Linux
+      # and Windows packages ship unsigned, as the releases before seaworthy
+      # did: their job gets no signer, which a release refuses unless
+      # allow-unsigned says it's meant. To sign them later: Authenticode
+      # (the AUTHENTICODE_PFX secrets or the azure-* inputs, and
+      # [defaults.authenticode] in seaworthy.toml), and OPENPGP_SECRET_KEY
+      # with openpgp-keys for rpm and pacman; then drop this.
+      allow-unsigned: true
       # No CI test keys: eDirStat has no update helper.
       ci-test-keys: false
     secrets:
@@ -55,34 +49,6 @@ jobs:
       APPLE_NOTARY_KEY: ${{ secrets.APPLE_API_KEY }}
       APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
       APPLE_NOTARY_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
-
-  build-linux:
-    name: Package Linux Production
-    runs-on: ubuntu-latest
-    container:
-      image: registry.gitlab.com/xangelix-pub/containers/arch-rust-nightly-pin-common:latest
-      options: --user root # How I wish this were GitLab
-
-    steps:
-      - name: Checkout Source Code
-        uses: actions/checkout@v7
-
-      - name: Cache dependencies
-        uses: swatinem/rust-cache@v2
-
-      - name: Compile optimized release binary
-        run: cargo build --release
-
-      - name: Stage Artifact
-        run: |
-          mkdir -p staging
-          cp target/release/edirstat staging/edirstat-linux-x86_64
-
-      - name: Store Production Binary as Private Artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: edirstat-linux-x86_64
-          path: staging/edirstat-linux-x86_64
 
   # macOS beyond seaworthy's Apple Silicon disk image: the Intel (x86_64)
   # Developer ID build, and the Mac App Store package (aarch64).

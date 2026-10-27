@@ -16,13 +16,14 @@
 # seaworthy runs (nFPM, strip, WiX, the macOS tools) needs a variable beyond
 # the system's.
 #
-# Release signing (.github/workflows/release.yml): macOS is Developer
-# ID-signed ([defaults.apple] below). The Linux and Windows packages sign
-# nothing yet, so a release fails until either Authenticode is configured
-# (the workflow's secrets or Azure inputs, and the pin below, uncommented
-# with the certificate's subject and its roots), or allow-unsigned is set on
-# purpose. With OpenPGP package signatures, also `openpgp-keys` in
-# [defaults].
+# Release signing (.github/workflows/release.yml): only macOS is signed,
+# Developer ID with notarization; the pinned team ([defaults.apple] below)
+# makes a release fail rather than ship an ad hoc-signed dmg when the Apple
+# secrets don't reach it. The Linux and Windows packages ship unsigned on
+# purpose (the workflow's allow-unsigned), as before seaworthy. To sign
+# Windows later, uncomment this pin with the certificate's subject and its
+# roots, and hand the workflow the Authenticode secrets (or Azure inputs);
+# for OpenPGP package signatures, also `openpgp-keys` in [defaults].
 #
 #   [defaults.authenticode]
 #   subject = "<the signing certificate's subject, as osslsigncode verify prints it>"
