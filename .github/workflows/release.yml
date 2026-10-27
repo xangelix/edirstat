@@ -156,62 +156,16 @@ jobs:
           security delete-keychain edirstat-ci.keychain-db 2>/dev/null || true
           rm -f appstore.provisionprofile signing.p12 AuthKey.p8 2>/dev/null || true
 
-  # The Inno Setup installer, from the same Windows tree as seaworthy's zip
-  # and MSI (the launcher and its per-CPU cores). Existing installs (an Inno
-  # AppId) upgrade in place; the MSI, beside it, installs elsewhere and is
-  # an additional artifact until the switch is decided.
-  package-windows-installer:
-    name: Package Windows Installer (Inno Setup)
-    runs-on: windows-latest
-    needs: [dist]
-
-    steps:
-      - name: Checkout Source Code
-        uses: actions/checkout@v7
-
-      - name: Download the seaworthy Windows tree
-        uses: actions/download-artifact@v8
-        with:
-          name: seaworthy-dist
-          path: dl-seaworthy
-
-      - name: Stage Payload for Inno Setup
-        run: |
-          mkdir -Force staging\windows
-          Copy-Item -Recurse -Force dl-seaworthy\edirstat\x86_64-pc-windows-msvc\tree\xangelix\eDirStat\* staging\windows\
-
-      - name: Compile Inno Setup Installer
-        shell: powershell
-        run: |
-          # 1. Extract the version string from Cargo.toml
-          $version = (Select-String -Path Cargo.toml -Pattern '^version\s*=\s*"(.*?)"').Matches.Groups[1].Value
-          echo "Detected Cargo Version: $version"
-
-          # 2. Compile passing the version dynamically, with a versioned filename
-          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DAppVersion=$version /Fedirstat-$version-setup-x86_64 installer.iss
-
-      - name: Store Production Installer as Private Artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: edirstat-setup-x86_64.exe
-          path: staging\edirstat-*-setup-x86_64.exe
-
   deploy-itchio:
     name: Deploy to itch.io
     runs-on: ubuntu-latest
-    needs: [dist, package-windows-installer]
+    needs: [dist]
     # Environment scoping enables an approval gate before pushing to the paid
     # store, and lets the BUTLER_API_KEY secret be scoped to this deployment
     # (Settings → Environments → itchio).
     environment: itchio
 
     steps:
-      - name: Download Windows Installer Artifact
-        uses: actions/download-artifact@v8
-        with:
-          name: edirstat-setup-x86_64.exe
-          path: staging-windows-installer
-
       - name: Download the seaworthy packages
         uses: actions/download-artifact@v8
         with:
@@ -228,13 +182,18 @@ jobs:
           VERSION="${TAG#v}"
           linux=dl-packages/packages/edirstat/packages
           macos=dl-packages/packages-macos/edirstat/packages
-          mkdir -p staging-windows staging-osx
+          mkdir -p staging-windows staging-windows-installer staging-osx
           mkdir -p staging-linux-portable staging-linux-deb staging-linux-rpm staging-linux-pacman
 
           # Windows portable: the launcher, its per-CPU cores and the license
           # (the zip's one directory, unpacked).
           unzip -q "$linux"/*-windows-x86_64.zip -d staging-windows-unpacked
           mv staging-windows-unpacked/*/* staging-windows/
+
+          # Windows installer: seaworthy's MSI (C:\Program Files\xangelix\eDirStat).
+          # It replaced the Inno Setup installer, which installed elsewhere:
+          # an install from that one is uninstalled first (Settings → Apps).
+          cp "$linux"/*-windows-x86_64.msi "staging-windows-installer/edirstat-$VERSION-windows-x86_64.msi"
 
           # macOS (Apple Silicon): seaworthy's Developer ID disk image
           cp "$macos"/*-macos-arm64.dmg "staging-osx/edirstat-$VERSION-macos-aarch64.dmg"

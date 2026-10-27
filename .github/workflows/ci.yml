@@ -169,7 +169,7 @@ jobs:
           path: crates/edirstat-gui/dist
 
   build-windows:
-    name: Build & Package Windows (Inno Setup)
+    name: Build & Package Windows
     runs-on: windows-latest
     needs: [test-linux, test-macos]
 
@@ -189,24 +189,13 @@ jobs:
       - name: Compile optimized release binary
         run: cargo build --release --target x86_64-pc-windows-msvc
 
+      # The release installer is seaworthy's MSI (release.yml, and
+      # packages.yml's dry run); this job keeps a Windows build in CI.
       - name: Restructure Build Path
         run: |
           mkdir -Force target\release
+          mkdir -Force staging
           cp -Force target\x86_64-pc-windows-msvc\release\edirstat.exe target\release\edirstat.exe
-          # installer.iss installs staging\windows (in a release, seaworthy's
-          # launcher and cores; here the single CI binary)
-          mkdir -Force staging\windows
-          cp -Force target\release\edirstat.exe staging\windows\edirstat.exe
-
-      - name: Compile Inno Setup Installer
-        shell: powershell
-        run: |
-          # 1. Extract the version string from Cargo.toml
-          $version = (Select-String -Path Cargo.toml -Pattern '^version\s*=\s*"(.*?)"').Matches.Groups[1].Value
-          echo "Detected Cargo Version: $version"
-
-          # 2. Compile passing the version dynamically
-          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DAppVersion=$version installer.iss
 
       - name: Prepare Portable ZIP
         run: |
@@ -217,12 +206,6 @@ jobs:
         with:
           name: edirstat-windows-portable-x86_64.zip
           path: staging\edirstat-windows-portable-x86_64.zip
-
-      - name: Upload Installer as Artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: edirstat-setup-x86_64.exe
-          path: staging\edirstat-setup-x86_64.exe
 
   build-macos:
     name: Build & Package macOS
