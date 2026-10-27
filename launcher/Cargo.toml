@@ -1,0 +1,43 @@
+# The edirstat launcher: the `edirstat` executable the release packages ship.
+# It picks the best per-CPU-level core this machine runs (`edirstat_app`,
+# built once per CPU target, see seaworthy.toml) and runs it in-process
+# (seaworthy-launcher): nothing is unpacked or written to disk at run time.
+#
+# Its own workspace and lockfile, outside the main one: the main workspace
+# already has an `edirstat` binary (crates/edirstat, what `cargo run` and
+# `cargo install edirstat` build), and two binaries of one name in one
+# workspace would collide in its target directory. seaworthy build-plan
+# builds it with `--manifest-path launcher/Cargo.toml --bin edirstat`, for
+# the architecture's baseline (no CPU flags).
+[workspace]
+
+[package]
+name = "edirstat-launcher"
+version = "2.2.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[[bin]]
+name = "edirstat"
+path = "src/main.rs"
+
+[package.metadata.winresource]
+ProductName = "eDirStat"
+OriginalFilename = "edirstat.exe"
+FileDescription = "eDirStat"
+LegalCopyright = "Copyright © 2026 Cody Wyatt Neiman (xangelix) <neiman@cody.to>"
+
+[dependencies]
+# seaworthy, pinned to the commit the workspace pins (scripts/use-seaworthy-git.sh).
+seaworthy-launcher = { git = "https://github.com/xangelix/seaworthy", rev = "2224dc724a1a2fec447c298f4ddfc9e57b8d444c" }
+
+[build-dependencies]
+winresource = "0.1.31"
+
+# The shipped profile: the launcher is tiny and runs before everything else.
+[profile.release]
+lto = true
+strip = true
+panic = "abort"
+codegen-units = 1

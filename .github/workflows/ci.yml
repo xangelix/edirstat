@@ -193,6 +193,10 @@ jobs:
         run: |
           mkdir -Force target\release
           cp -Force target\x86_64-pc-windows-msvc\release\edirstat.exe target\release\edirstat.exe
+          # installer.iss installs staging\windows (in a release, seaworthy's
+          # launcher and cores; here the single CI binary)
+          mkdir -Force staging\windows
+          cp -Force target\release\edirstat.exe staging\windows\edirstat.exe
 
       - name: Compile Inno Setup Installer
         shell: powershell

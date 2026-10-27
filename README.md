@@ -107,6 +107,10 @@ The compiled binary will be located at `target/release/edirstat`.
 
 > **Note:** The desktop app builds on **stable** Rust. Only the wasm32 web frontend (`scripts/build_web.sh`) still needs the pinned nightly toolchain, for `-Zbuild-std` with atomics (wasm threads).
 
+### Release packages
+
+The released packages (deb, rpm, pacman, the Windows MSI and zip, the macOS disk image) are built by [seaworthy](https://github.com/xangelix/seaworthy) from `seaworthy.toml`: eDirStat is compiled once per CPU target (`crates/edirstat_app`, the targets cargo-multivers used before), and the `edirstat` launcher (`launcher/`) loads the best build for the machine in its own process, with nothing unpacked or written to disk at run time. `.github/workflows/release.yml` runs it on every release.
+
 ---
 
 ## 📖 Usage Guide

@@ -2,6 +2,8 @@
 resolver = "3"
 members = ["crates/*"]
 default-members = ["crates/edirstat"]
+# launcher/ is its own workspace (its Cargo.toml says why).
+exclude = ["launcher"]
 
 [workspace.package]
 version = "2.2.0"
@@ -9,6 +11,10 @@ edition = "2024"
 license = "MIT"
 authors = ["Cody Wyatt Neiman (xangelix) <neiman@cody.to>"]
 repository = "https://github.com/xangelix/edirstat"
+
+# seaworthy, pinned to one commit (scripts/use-seaworthy-git.sh moves it).
+[workspace.dependencies]
+seaworthy-launcher = { git = "https://github.com/xangelix/seaworthy", rev = "2224dc724a1a2fec447c298f4ddfc9e57b8d444c" }
 
 [patch.crates-io]
 winit = { git = "https://github.com/xangelix/winit.git", branch = "blur-fix" }

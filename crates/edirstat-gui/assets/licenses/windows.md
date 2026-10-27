@@ -6,8 +6,8 @@ This page lists the licenses of the projects used in eDirStat.
 
 ## Overview of licenses
 
-* [Apache License 2.0](https://spdx.org/licenses/Apache-2.0.html) (226)
-* [MIT License](https://spdx.org/licenses/MIT.html) (58)
+* [Apache License 2.0](https://spdx.org/licenses/Apache-2.0.html) (230)
+* [MIT License](https://spdx.org/licenses/MIT.html) (59)
 * [Unicode License v3](https://spdx.org/licenses/Unicode-3.0.html) (19)
 * [BSD 3-Clause &quot;New&quot; or &quot;Revised&quot; License](https://spdx.org/licenses/BSD-3-Clause.html) (6)
 * [ISC License](https://spdx.org/licenses/ISC.html) (5)
@@ -4546,6 +4546,7 @@ limitations under the License.
 * [mime](https://github.com/hyperium/mime)
 * [ntfs-ng](https://github.com/xangelix/ntfs-ng)
 * [num-traits](https://github.com/rust-num/num-traits)
+* [object](https://github.com/gimli-rs/object)
 * [once_cell](https://github.com/matklad/once_cell)
 * [parking_lot](https://github.com/Amanieu/parking_lot)
 * [parking_lot_core](https://github.com/Amanieu/parking_lot)
@@ -6690,6 +6691,9 @@ limitations under the License.
 
 ### Apache License 2.0
 **Used by:**
+* [seaworthy-fsguard](https://github.com/xangelix/seaworthy)
+* [seaworthy-launcher](https://github.com/xangelix/seaworthy)
+* [seaworthy-levels](https://github.com/xangelix/seaworthy)
 * [accesskit](https://github.com/AccessKit/accesskit)
 * [accesskit_consumer](https://github.com/AccessKit/accesskit)
 * [accesskit_windows](https://github.com/AccessKit/accesskit)
@@ -8047,6 +8051,7 @@ SOFTWARE.
 **Used by:**
 * [edirstat-core](https://github.com/xangelix/edirstat)
 * [edirstat-gui](https://github.com/xangelix/edirstat)
+* [edirstat_app](https://github.com/xangelix/edirstat)
 * [atomic-progress](https://github.com/xangelix/atomic-progress)
 * [aws-lc-sys](https://github.com/aws/aws-lc-rs)
 * [dpi](https://github.com/rust-windowing/winit)

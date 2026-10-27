@@ -1,0 +1,26 @@
+[package]
+name = "edirstat_app"
+description = "eDirStat as a per-CPU-level core: the application built once per CPU target, loaded by the edirstat launcher (seaworthy-launcher)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+# Built and shipped by the release pipeline (seaworthy.toml), never published.
+publish = false
+
+# A shared library per CPU target (`-C target-cpu=<cpu>`, seaworthy
+# build-plan): the launcher (launcher/) loads the best one the machine runs.
+[lib]
+crate-type = ["cdylib"]
+# A cdylib has no doctests to run.
+doctest = false
+
+[dependencies]
+anyhow = "1.0.104"
+edirstat = { path = "../edirstat" }
+# The dlopen'ed core must not use initial-exec TLS (glibc gives a library
+# loaded at run time only a small static TLS surplus; `seaworthy verify`
+# refuses a core flagged DF_STATIC_TLS): mimalloc's local-dynamic model.
+mimalloc-rspack = { version = "0.2.4", features = ["v3", "local_dynamic_tls"] }
+seaworthy-launcher.workspace = true

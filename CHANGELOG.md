@@ -16,6 +16,10 @@
 
 - **⚡ Faster NTFS MFT scans:** The Master File Table scanner (raw volumes on Windows; NTFS drives and exported `$MFT` files on Linux) now runs on [`ntfs-ng`](https://crates.io/crates/ntfs-ng): `$MFT` is read in parallel through all of its extents into a compact disk-usage table, extension records folded in, and every directory link is checked by sequence number. On volumes of 1.3 and 1.9 million records, full scans are 3.5× and 2.9× faster, with a quarter less CPU and 41% and 17% less memory. `rayon`, `parking_lot`, `bytemuck`, and `crc-fast` are no longer dependencies.
 
+### Changed
+
+- **📦 Release packages built with seaworthy:** The per-CPU builds are now shared libraries (one per CPU target, the same eight cargo-multivers built) beside a small `edirstat` launcher, which loads the best one for the machine in-process: nothing is extracted to a temporary file or memfd at startup any more. Linux packages are now named `xangelix-edirstat` (installing under `/opt/xangelix/edirstat`, with `/usr/bin/edirstat`) and replace the earlier `edirstat` and `edirstat-bin` packages on install; the binaries run on glibc 2.34 and newer. Windows releases add an MSI beside the Inno Setup installer, and the Apple Silicon disk image is Developer ID-signed and notarized by the same pipeline.
+
 ### Fixed
 
 - **🔗 Hard links in MFT scans:** Every name of a hard-linked file is listed, including several names in one folder, which collapsed into one.
