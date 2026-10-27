@@ -30,6 +30,11 @@ pub struct ScanTask {
     pub slot: u32,
     /// The directory's own device (0 when unknown).
     pub device_id: u64,
+    /// The directory's size as its parent's listing saw it (0 when unknown).
+    pub dir_size: u64,
+    /// Whether the directory is on btrfs, when known (it is once its parent was read on the
+    /// same device).
+    pub btrfs: Option<bool>,
     pub ancestors: smallvec::SmallVec<[(u64, u64); 16]>,
     /// The device/volume identifier to restrict traversal within.
     pub expected_device_id: Option<u64>,
@@ -139,6 +144,8 @@ impl TraversalEngine {
                 path: root_path.clone(),
                 slot: 0,
                 device_id: root_file_id.0,
+                dir_size: root_metadata.as_ref().map_or(0, fs::Metadata::len),
+                btrfs: None,
                 ancestors: smallvec::smallvec![root_file_id],
                 expected_device_id,
                 allowed_secondary_device_id,
@@ -181,6 +188,8 @@ impl TraversalEngine {
                         builder: BatchBuilder::default(),
                         last_flush: Instant::now(),
                         subdirs: Vec::new(),
+                        #[cfg(target_os = "linux")]
+                        dirents: vec![std::mem::MaybeUninit::uninit(); 32 * 1024],
                         event_tx: &event_tx,
                         local_worker: &local_worker,
                         stats: &stats,
@@ -276,8 +285,11 @@ fn steal(
 struct WorkerContext<'a> {
     builder: BatchBuilder,
     last_flush: Instant,
-    /// Scratch: the subdirectories of the directory being read (listing index, path, id).
-    subdirs: Vec<(u32, PathBuf, (u64, u64))>,
+    /// Scratch: the subdirectories of the directory being read (listing index, path, id, size).
+    subdirs: Vec<(u32, PathBuf, (u64, u64), u64)>,
+    /// Scratch: the buffer directory entries are read into.
+    #[cfg(target_os = "linux")]
+    dirents: Vec<std::mem::MaybeUninit<u8>>,
     event_tx: &'a Sender<ScanBatch>,
     local_worker: &'a Worker<ScanTask>,
     stats: &'a TraversalStats,
@@ -294,89 +306,36 @@ impl WorkerContext<'_> {
     }
 }
 
+/// How reading a directory ended.
+enum Read {
+    /// Every entry was listed. On btrfs, whether the directory is.
+    Listed { btrfs: Option<bool> },
+    /// The scan was cancelled midway.
+    Cancelled,
+    /// The directory could not be opened.
+    Unreadable,
+}
+
 fn scan_directory(task: &ScanTask, ctx: &mut WorkerContext<'_>) {
     if ctx.scan_cancel.load(Ordering::Relaxed) {
         return;
     }
-    let dir_path = &task.path;
-
-    // Try reading directory entries
-    let entries = match fs::read_dir(dir_path) {
-        Ok(entries) => entries,
-        Err(e) => {
-            if e.kind() == std::io::ErrorKind::PermissionDenied {
-                ctx.builder.deny(task.slot);
-            }
-            return;
-        }
-    };
-
-    ctx.builder.add_dirs(1);
     ctx.subdirs.clear();
 
-    for (entry_idx, entry_res) in entries.enumerate() {
-        if entry_idx % 256 == 0 && ctx.scan_cancel.load(Ordering::Relaxed) {
+    #[cfg(target_os = "linux")]
+    let read = linux::read_directory(task, ctx);
+    #[cfg(not(target_os = "linux"))]
+    let read = read_directory(task, ctx);
+
+    let btrfs = match read {
+        Read::Listed { btrfs } => btrfs,
+        Read::Cancelled => {
             // An interrupted listing is never sent: the scan is thrown away.
             ctx.builder.discard_listing();
             return;
         }
-        let Ok(entry) = entry_res else { continue };
-
-        let Some(meta) = crate::arena::EntryMetadata::from_dir_entry(&entry) else {
-            continue;
-        };
-
-        // Check if directory
-        if meta.is_dir {
-            // Skip virtual filesystems, device nodes, network mounts, and macOS APFS
-            // sub-volume mirror mount points when scanning the system root.
-            if should_skip_root_entry(&task.path, meta.name.as_str()) {
-                continue;
-            }
-
-            // Mount Point / Device boundary safety protection check
-            if is_device_boundary_crossed(
-                task.expected_device_id,
-                task.allowed_secondary_device_id,
-                meta.file_id.0,
-            ) {
-                // Do not descend into subdirectories across filesystem boundaries (e.g. /sys or /proc)
-                continue;
-            }
-
-            // Cycle Detection
-            if meta.file_id != (0, 0) && task.ancestors.contains(&meta.file_id) {
-                continue;
-            }
-
-            let index = ctx.builder.listing_len() as u32;
-            ctx.builder.push(
-                &meta.name,
-                FileNode::from_metadata(StringId(0), None, &meta),
-            );
-
-            // Overlay mountpoints (e.g. a running container's `…/merged`)
-            // duplicate bytes already counted under the layer `diff/` dirs.
-            // The node stays visible (size 0) but no scan task is queued.
-            // Discovered directories are never the traversal root itself, so
-            // an explicit root scan of a mountpoint is unaffected. A mountpoint
-            // is on another device than its parent: only those are looked up.
-            let child_path = entry.path();
-            if !ctx.overlay_mounts.is_empty()
-                && meta.file_id.0 != task.device_id
-                && super::mounts::is_overlay_mountpoint(ctx.overlay_mounts, &child_path)
-            {
-                continue;
-            }
-
-            ctx.subdirs.push((index, child_path, meta.file_id));
-        } else {
-            ctx.builder.push(
-                &meta.name,
-                FileNode::from_metadata(StringId(0), None, &meta),
-            );
-        }
-    }
+        Read::Unreadable => return,
+    };
 
     // The listing's slots exist from here on: its subdirectories can be queued.
     if let Some(first_slot) = ctx.builder.finish_listing(task.slot, ctx.slots) {
@@ -385,7 +344,7 @@ fn scan_directory(task: &ScanTask, ctx: &mut WorkerContext<'_>) {
         // the increment always precedes that decrement.
         ctx.in_flight_tasks
             .fetch_add(ctx.subdirs.len(), Ordering::SeqCst);
-        for (index, path, file_id) in ctx.subdirs.drain(..) {
+        for (index, path, file_id, dir_size) in ctx.subdirs.drain(..) {
             let mut ancestors = task.ancestors.clone();
             if file_id != (0, 0) {
                 ancestors.push(file_id);
@@ -394,6 +353,9 @@ fn scan_directory(task: &ScanTask, ctx: &mut WorkerContext<'_>) {
                 path,
                 slot: first_slot + index,
                 device_id: file_id.0,
+                dir_size,
+                // Another device may be another filesystem: it is checked when read.
+                btrfs: btrfs.filter(|_| file_id.0 == task.device_id),
                 ancestors,
                 expected_device_id: task.expected_device_id,
                 allowed_secondary_device_id: task.allowed_secondary_device_id,
@@ -403,6 +365,244 @@ fn scan_directory(task: &ScanTask, ctx: &mut WorkerContext<'_>) {
 
     if ctx.builder.is_full() || ctx.last_flush.elapsed() >= FLUSH_INTERVAL {
         ctx.flush();
+    }
+}
+
+/// Lists one entry of the directory `task` reads: a node, and a task for a subdirectory to
+/// descend into. `child_path` makes the subdirectory's path, only when one is needed.
+fn add_entry(
+    task: &ScanTask,
+    ctx: &mut WorkerContext<'_>,
+    meta: &crate::arena::EntryMetadata,
+    child_path: impl FnOnce() -> PathBuf,
+) {
+    if !meta.is_dir {
+        ctx.builder
+            .push(&meta.name, FileNode::from_metadata(StringId(0), None, meta));
+        return;
+    }
+
+    // Skip virtual filesystems, device nodes, network mounts, and macOS APFS
+    // sub-volume mirror mount points when scanning the system root.
+    if should_skip_root_entry(&task.path, meta.name.as_str()) {
+        return;
+    }
+
+    // Mount Point / Device boundary safety protection check
+    if is_device_boundary_crossed(
+        task.expected_device_id,
+        task.allowed_secondary_device_id,
+        meta.file_id.0,
+    ) {
+        // Do not descend into subdirectories across filesystem boundaries (e.g. /sys or /proc)
+        return;
+    }
+
+    // Cycle Detection
+    if meta.file_id != (0, 0) && task.ancestors.contains(&meta.file_id) {
+        return;
+    }
+
+    let index = ctx.builder.listing_len() as u32;
+    ctx.builder
+        .push(&meta.name, FileNode::from_metadata(StringId(0), None, meta));
+
+    // Overlay mountpoints (e.g. a running container's `…/merged`)
+    // duplicate bytes already counted under the layer `diff/` dirs.
+    // The node stays visible (size 0) but no scan task is queued.
+    // Discovered directories are never the traversal root itself, so
+    // an explicit root scan of a mountpoint is unaffected. A mountpoint
+    // is on another device than its parent: only those are looked up.
+    let child_path = child_path();
+    if !ctx.overlay_mounts.is_empty()
+        && meta.file_id.0 != task.device_id
+        && super::mounts::is_overlay_mountpoint(ctx.overlay_mounts, &child_path)
+    {
+        return;
+    }
+
+    ctx.subdirs
+        .push((index, child_path, meta.file_id, meta.len));
+}
+
+/// Reads a directory through the standard library.
+#[cfg(not(target_os = "linux"))]
+fn read_directory(task: &ScanTask, ctx: &mut WorkerContext<'_>) -> Read {
+    let entries = match fs::read_dir(&task.path) {
+        Ok(entries) => entries,
+        Err(e) => {
+            if e.kind() == std::io::ErrorKind::PermissionDenied {
+                ctx.builder.deny(task.slot);
+            }
+            return Read::Unreadable;
+        }
+    };
+    ctx.builder.add_dirs(1);
+
+    for (entry_idx, entry_res) in entries.enumerate() {
+        if entry_idx % 256 == 0 && ctx.scan_cancel.load(Ordering::Relaxed) {
+            return Read::Cancelled;
+        }
+        let Ok(entry) = entry_res else { continue };
+        let Some(meta) = crate::arena::EntryMetadata::from_dir_entry(&entry) else {
+            continue;
+        };
+        add_entry(task, ctx, &meta, || entry.path());
+    }
+    Read::Listed { btrfs: None }
+}
+
+/// Reads directories with `getdents64` and `statx` (relative to the directory), as the standard
+/// library does, but with no allocation per entry and no `fstat` per directory; and on btrfs
+/// without the last, empty `getdents64`: a btrfs directory's size is twice the length of its
+/// entries' names, so once that many have been read, the directory is done (each `getdents64`
+/// on btrfs searches the filesystem tree, and the empty one is half of them).
+#[cfg(target_os = "linux")]
+mod linux {
+    use std::{ffi::OsStr, os::unix::ffi::OsStrExt as _, sync::atomic::Ordering};
+
+    use compact_str::CompactString;
+    use rustix::{
+        fs::{
+            AtFlags, CWD, FileType, Mode, OFlags, RawDir, StatxFlags, fstatfs, makedev, openat,
+            statx,
+        },
+        io::Errno,
+    };
+
+    use super::{Read, ScanTask, WorkerContext, add_entry};
+    use crate::arena::EntryMetadata;
+
+    const BTRFS_SUPER_MAGIC: u32 = 0x9123_683e;
+
+    /// Seconds since the epoch, as `time_utils::system_time_to_unix_timestamp` gives them.
+    fn seconds(tv_sec: i64) -> u32 {
+        u32::try_from(tv_sec.max(0)).unwrap_or(u32::MAX)
+    }
+
+    /// The entry's metadata, as `EntryMetadata::from_dir_entry` makes it.
+    fn metadata(
+        name: &[u8],
+        kind: FileType,
+        stat: &Result<rustix::fs::Statx, Errno>,
+    ) -> Option<EntryMetadata> {
+        let name = CompactString::from_utf8_lossy(name);
+        match stat {
+            Ok(stat) => {
+                let kind = FileType::from_raw_mode(u32::from(stat.stx_mode));
+                let created = if stat.stx_mask & StatxFlags::BTIME.bits() == 0 {
+                    0
+                } else {
+                    seconds(stat.stx_btime.tv_sec)
+                };
+                Some(EntryMetadata {
+                    name,
+                    is_dir: kind == FileType::Directory,
+                    is_symlink: kind == FileType::Symlink,
+                    is_dataless: false,
+                    is_special: matches!(
+                        kind,
+                        FileType::Fifo
+                            | FileType::Socket
+                            | FileType::BlockDevice
+                            | FileType::CharacterDevice
+                    ),
+                    len: stat.stx_size,
+                    modified_timestamp: seconds(stat.stx_mtime.tv_sec),
+                    created_timestamp: created,
+                    file_id: (
+                        makedev(stat.stx_dev_major, stat.stx_dev_minor),
+                        stat.stx_ino,
+                    ),
+                    no_permission: false,
+                })
+            }
+            Err(Errno::ACCESS | Errno::PERM) => Some(EntryMetadata {
+                name,
+                is_dir: kind == FileType::Directory,
+                is_symlink: kind == FileType::Symlink,
+                is_dataless: false,
+                is_special: false,
+                len: 0,
+                modified_timestamp: 0,
+                created_timestamp: 0,
+                file_id: (0, 0),
+                no_permission: true,
+            }),
+            Err(_) => None,
+        }
+    }
+
+    pub(super) fn read_directory(task: &ScanTask, ctx: &mut WorkerContext<'_>) -> Read {
+        let fd = match openat(
+            CWD,
+            &task.path,
+            OFlags::RDONLY | OFlags::DIRECTORY | OFlags::CLOEXEC | OFlags::NONBLOCK,
+            Mode::empty(),
+        ) {
+            Ok(fd) => fd,
+            Err(Errno::ACCESS | Errno::PERM) => {
+                ctx.builder.deny(task.slot);
+                return Read::Unreadable;
+            }
+            Err(_) => return Read::Unreadable,
+        };
+        ctx.builder.add_dirs(1);
+
+        let btrfs = task.btrfs.or_else(|| {
+            fstatfs(&fd)
+                .ok()
+                .map(|fs| fs.f_type as u32 == BTRFS_SUPER_MAGIC)
+        });
+        // The names' length a btrfs directory of this size holds.
+        let expected = btrfs.unwrap_or(false).then_some(task.dir_size);
+        if expected == Some(0) {
+            return Read::Listed { btrfs };
+        }
+
+        let mut buffer = std::mem::take(&mut ctx.dirents);
+        let read = list(task, ctx, &fd, &mut buffer, btrfs, expected);
+        ctx.dirents = buffer;
+        read
+    }
+
+    /// Lists every entry of the open directory `fd`, stopping once the names reach `expected`.
+    fn list(
+        task: &ScanTask,
+        ctx: &mut WorkerContext<'_>,
+        fd: &rustix::fd::OwnedFd,
+        buffer: &mut [std::mem::MaybeUninit<u8>],
+        btrfs: Option<bool>,
+        expected: Option<u64>,
+    ) -> Read {
+        let mut entries = RawDir::new(fd, buffer);
+        let mut name_bytes = 0u64;
+        let mut seen = 0usize;
+        while let Some(entry) = entries.next() {
+            let Ok(entry) = entry else { break };
+            let name = entry.file_name().to_bytes();
+            if name == b"." || name == b".." {
+                continue;
+            }
+            seen += 1;
+            if seen.is_multiple_of(256) && ctx.scan_cancel.load(Ordering::Relaxed) {
+                return Read::Cancelled;
+            }
+            name_bytes += name.len() as u64;
+            let stat = statx(
+                fd,
+                entry.file_name(),
+                AtFlags::SYMLINK_NOFOLLOW,
+                StatxFlags::BASIC_STATS | StatxFlags::BTIME,
+            );
+            if let Some(meta) = metadata(name, entry.file_type(), &stat) {
+                add_entry(task, ctx, &meta, || task.path.join(OsStr::from_bytes(name)));
+            }
+            if expected == Some(name_bytes * 2) {
+                break;
+            }
+        }
+        Read::Listed { btrfs }
     }
 }
 
@@ -1104,6 +1304,104 @@ mod tests {
         assert!(node_index(&snapshot, "héllo wörld-✓.txt").is_some());
         assert!(node_index(&snapshot, "日本語").is_some());
         assert!(node_index(&snapshot, "内部.txt").is_some());
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        Ok(())
+    }
+
+    /// Every entry of a folder larger than one read of its entries, whatever the bytes of its
+    /// names: on btrfs the listing stops when the names add up to the folder's size.
+    #[test]
+    #[cfg(unix)]
+    fn test_traversal_large_folder_odd_names_all_listed() -> Result<(), crate::EdirstatError> {
+        use std::os::unix::ffi::OsStrExt as _;
+
+        let temp_dir = std::env::current_dir()?
+            .join("target")
+            .join("test_traversal_large_folder");
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        std::fs::create_dir_all(temp_dir.join("sub"))?;
+        for i in 0..3000 {
+            std::fs::write(
+                temp_dir.join(format!("{i:04}-{}.dat", "x".repeat(40))),
+                b"a",
+            )?;
+        }
+        std::fs::write(temp_dir.join("ünïcødé-名前.txt"), b"bb")?;
+        std::fs::write(
+            temp_dir.join(std::ffi::OsStr::from_bytes(b"latin1-\xe9t\xe9.txt")),
+            b"ccc",
+        )?;
+        std::fs::write(temp_dir.join("sub").join("inner"), b"dddd")?;
+
+        let shared_state = Arc::new(SharedState::new());
+        let engine = TraversalEngine::new(shared_state.scan_stats.clone());
+        let (tx, rx) = crossbeam::channel::unbounded();
+        let handle = engine.start_traversal(
+            temp_dir.clone(),
+            false,
+            shared_state.scan_cancel.clone(),
+            tx,
+        )?;
+        let mut coordinator = Coordinator::new(rx, shared_state.clone());
+        coordinator.run_coordinator_loop(&temp_dir.to_string_lossy());
+        let _ = handle.join();
+
+        let snapshot = shared_state.current_snapshot.load();
+        assert_eq!(snapshot.nodes[0].file_count, 3003);
+        assert_eq!(snapshot.nodes[0].size, 3000 + 2 + 3 + 4);
+        assert!(node_index(&snapshot, "ünïcødé-名前.txt").is_some());
+        assert!(node_index(&snapshot, "latin1-\u{fffd}t\u{fffd}.txt").is_some());
+        assert!(node_index(&snapshot, "inner").is_some());
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        Ok(())
+    }
+
+    /// A folder that can be listed but not searched: its entries are there, marked unreadable.
+    #[test]
+    #[cfg(unix)]
+    fn test_traversal_unsearchable_folder_entries_marked() -> Result<(), crate::EdirstatError> {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let is_root = std::process::Command::new("id")
+            .arg("-u")
+            .output()
+            .ok()
+            .and_then(|out| String::from_utf8(out.stdout).ok())
+            .is_some_and(|uid| uid.trim() == "0");
+        if is_root {
+            return Ok(());
+        }
+
+        let temp_dir = std::env::current_dir()?
+            .join("target")
+            .join("test_traversal_unsearchable");
+        let locked = temp_dir.join("listable");
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        std::fs::create_dir_all(locked.join("child_dir"))?;
+        std::fs::write(locked.join("child_file"), b"secret")?;
+        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o444))?;
+
+        let shared_state = Arc::new(SharedState::new());
+        let engine = TraversalEngine::new(shared_state.scan_stats.clone());
+        let (tx, rx) = crossbeam::channel::unbounded();
+        let handle = engine.start_traversal(
+            temp_dir.clone(),
+            false,
+            shared_state.scan_cancel.clone(),
+            tx,
+        )?;
+        let mut coordinator = Coordinator::new(rx, shared_state.clone());
+        coordinator.run_coordinator_loop(&temp_dir.to_string_lossy());
+        let _ = handle.join();
+
+        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o755))?;
+        let snapshot = shared_state.current_snapshot.load();
+        let file = node_index(&snapshot, "child_file").map(|i| snapshot.nodes[i]);
+        let dir = node_index(&snapshot, "child_dir").map(|i| snapshot.nodes[i]);
+        assert!(file.is_some_and(|n| n.has_no_permission() && !n.is_directory() && n.size == 0));
+        assert!(dir.is_some_and(|n| n.has_no_permission() && n.is_directory()));
 
         let _ = std::fs::remove_dir_all(&temp_dir);
         Ok(())
