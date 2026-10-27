@@ -1,0 +1,38 @@
+name: Packages (dry run)
+
+# The release's packaging, rehearsed: seaworthy's reusable workflow builds
+# every core and the launcher and makes every package release.yml ships
+# (deb, rpm, pacman, tarball, Windows zip and MSI, macOS disk image), as a
+# development build: nothing is signed, nothing is published or deployed,
+# and no secret is handed over. It runs on pull requests that change how
+# eDirStat is built or packaged, and by hand (Actions → Packages (dry run)
+# → Run workflow) on any branch before tagging a release.
+on:
+  pull_request:
+    paths:
+      - seaworthy.toml
+      - launcher/**
+      - crates/edirstat_app/**
+      - .github/workflows/packages.yml
+      - .github/workflows/release.yml
+  workflow_dispatch:
+
+# A new push to a PR supersedes its in-flight run.
+concurrency:
+  group: packages-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  dist:
+    name: seaworthy (Linux, Windows, macOS packages)
+    # The commit Cargo.toml pins seaworthy to (scripts/use-seaworthy-git.sh).
+    uses: xangelix/seaworthy/.github/workflows/dist.yml@2224dc724a1a2fec447c298f4ddfc9e57b8d444c # seaworthy 2224dc724a1a
+    permissions:
+      contents: read
+    with:
+      # A development build: versioned from the manifest, unsigned.
+      release: false
+      ci-test-keys: false
