@@ -373,18 +373,19 @@ fn scan_directory(task: &ScanTask, ctx: &mut WorkerContext<'_>) {
 fn add_entry(
     task: &ScanTask,
     ctx: &mut WorkerContext<'_>,
+    name: &str,
     meta: &crate::arena::EntryMetadata,
     child_path: impl FnOnce() -> PathBuf,
 ) {
     if !meta.is_dir {
         ctx.builder
-            .push(&meta.name, FileNode::from_metadata(StringId(0), None, meta));
+            .push(name, FileNode::from_metadata(StringId(0), None, meta));
         return;
     }
 
     // Skip virtual filesystems, device nodes, network mounts, and macOS APFS
     // sub-volume mirror mount points when scanning the system root.
-    if should_skip_root_entry(&task.path, meta.name.as_str()) {
+    if should_skip_root_entry(&task.path, name) {
         return;
     }
 
@@ -405,7 +406,7 @@ fn add_entry(
 
     let index = ctx.builder.listing_len() as u32;
     ctx.builder
-        .push(&meta.name, FileNode::from_metadata(StringId(0), None, meta));
+        .push(name, FileNode::from_metadata(StringId(0), None, meta));
 
     // Overlay mountpoints (e.g. a running container's `…/merged`)
     // duplicate bytes already counted under the layer `diff/` dirs.
@@ -447,7 +448,7 @@ fn read_directory(task: &ScanTask, ctx: &mut WorkerContext<'_>) -> Read {
         let Some(meta) = crate::arena::EntryMetadata::from_dir_entry(&entry) else {
             continue;
         };
-        add_entry(task, ctx, &meta, || entry.path());
+        add_entry(task, ctx, &meta.name, &meta, || entry.path());
     }
     Read::Listed { btrfs: None }
 }
@@ -480,13 +481,10 @@ mod linux {
         u32::try_from(tv_sec.max(0)).unwrap_or(u32::MAX)
     }
 
-    /// The entry's metadata, as `EntryMetadata::from_dir_entry` makes it.
-    fn metadata(
-        name: &[u8],
-        kind: FileType,
-        stat: &Result<rustix::fs::Statx, Errno>,
-    ) -> Option<EntryMetadata> {
-        let name = CompactString::from_utf8_lossy(name);
+    /// The entry's metadata, as `EntryMetadata::from_dir_entry` makes it, but for its name,
+    /// which the caller keeps.
+    fn metadata(kind: FileType, stat: &Result<rustix::fs::Statx, Errno>) -> Option<EntryMetadata> {
+        let name = CompactString::default();
         match stat {
             Ok(stat) => {
                 let kind = FileType::from_raw_mode(u32::from(stat.stx_mode));
@@ -595,8 +593,12 @@ mod linux {
                 AtFlags::SYMLINK_NOFOLLOW,
                 StatxFlags::BASIC_STATS | StatxFlags::BTIME,
             );
-            if let Some(meta) = metadata(name, entry.file_type(), &stat) {
-                add_entry(task, ctx, &meta, || task.path.join(OsStr::from_bytes(name)));
+            if let Some(meta) = metadata(entry.file_type(), &stat) {
+                // Borrowed unless the name is not UTF-8, as `to_string_lossy` gives it.
+                let text = String::from_utf8_lossy(name);
+                add_entry(task, ctx, &text, &meta, || {
+                    task.path.join(OsStr::from_bytes(name))
+                });
             }
             if expected == Some(name_bytes * 2) {
                 break;

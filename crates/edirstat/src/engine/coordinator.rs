@@ -9,7 +9,7 @@ use hashbrown::HashTable;
 
 pub use edirstat_core::state::SharedState;
 
-use super::batch::ScanBatch;
+use super::batch::{BatchNames, SHARD_SHIFT, ScanBatch, split_name_id};
 use crate::arena::{FileArenaSnapshot, FileNode, NO_INDEX, NodeStorage, StringId, StringPool};
 
 pub struct Coordinator {
@@ -88,11 +88,13 @@ impl Coordinator {
 
 /// The tree being built: listings placed in the slots their producers reserved.
 ///
-/// Names are interned off this thread ([`Names`]): a node holds its name's place in the order
-/// names arrived until a snapshot looks up the interned id.
+/// Names are interned off this thread ([`Names`]): a node holds where its name was sent until a
+/// snapshot looks up the interned id.
 struct Tree {
     arena: Vec<FileNode>,
     names: Names,
+    /// Scratch: how many names each shard had before the batch being placed.
+    bases: Vec<u32>,
     extensions: std::collections::HashMap<CompactString, (u64, u32), ahash::RandomState>,
     /// Every slot below this one is filled.
     filled: usize,
@@ -109,11 +111,11 @@ const fn is_placeholder(slot: usize, node: &FileNode) -> bool {
 impl Tree {
     fn new(root_path_str: &str) -> Self {
         let mut arena = Vec::with_capacity(1024 * 1024); // Pre-allocate space for ~1M nodes
-        // The root's name arrives first: its place, 0, is its id.
-        arena.push(FileNode::new(StringId(0), None, true, false, 0, 0));
+        arena.push(FileNode::new(StringId(ROOT_PLACE), None, true, false, 0, 0));
         Self {
             arena,
             names: Names::start(root_path_str),
+            bases: Vec::new(),
             extensions: std::collections::HashMap::default(),
             filled: 1,
             dirty: false,
@@ -134,22 +136,35 @@ impl Tree {
             listings,
             nodes,
             names,
-            name_ends,
-            name_hashes,
             denied,
             extensions,
         } = batch;
-        let first_name = self.names.send(names, name_ends, name_hashes);
+        let mut bases = std::mem::take(&mut self.bases);
+        self.names.send(names, &mut bases);
 
         let mut nodes = nodes.iter();
         for listing in &listings {
             let first = listing.first_slot as usize;
             let end = first + listing.len as usize;
             self.grow_to(end);
-            for (slot, node) in self.arena[first..end].iter_mut().zip(nodes.by_ref()) {
+            for (index, (slot, node)) in self.arena[first..end]
+                .iter_mut()
+                .zip(nodes.by_ref())
+                .enumerate()
+            {
                 let pending = *slot;
                 *slot = *node;
-                slot.name_id = StringId(first_name + node.name_id.0);
+                slot.parent = listing.parent;
+                slot.next_sibling = if first + index + 1 == end {
+                    NO_INDEX
+                } else {
+                    (first + index + 1) as u32
+                };
+                let (shard, index) = split_name_id(node.name_id);
+                slot.name_id = StringId(
+                    ((shard as u32) << SHARD_SHIFT)
+                        | (bases.get(shard).copied().unwrap_or(0) + index as u32),
+                );
                 slot.first_child = pending.first_child;
                 slot.flags |= pending.flags;
             }
@@ -157,6 +172,8 @@ impl Tree {
             self.grow_to(parent + 1);
             self.arena[parent].first_child = listing.first_slot;
         }
+
+        self.bases = bases;
 
         for &slot in &denied {
             self.grow_to(slot as usize + 1);
@@ -181,13 +198,11 @@ impl Tree {
         }
         let filled = self.filled as u32;
         // Every name these nodes hold was sent before this request.
-        let (string_pool, interned) = self.names.snapshot();
+        let (string_pool, resolver) = self.names.snapshot();
         let mut nodes: Vec<FileNode> = self.arena[..self.filled]
             .iter()
             .map(|node| {
                 let mut node = *node;
-                node.name_id =
-                    StringId(interned.get(node.name_id.0 as usize).copied().unwrap_or(0));
                 if node.first_child >= filled {
                     node.first_child = NO_INDEX;
                 }
@@ -197,7 +212,7 @@ impl Tree {
                 node
             })
             .collect();
-        let dir_counts = propagate_all_sizes_bottom_up(&mut nodes);
+        let dir_counts = propagate_all_sizes_bottom_up(&mut nodes, |id| resolver.resolve(id));
         FileArenaSnapshot {
             nodes: Arc::new(NodeStorage::Owned(nodes)),
             string_pool: Arc::new(string_pool),
@@ -219,14 +234,11 @@ impl Tree {
         let Self {
             mut arena, names, ..
         } = self;
-        let (names, interned) = names.finish();
+        let (parts, resolver) = names.finish();
         let (string_pool, dir_counts) = std::thread::scope(|scope| {
-            let pool = scope.spawn(move || names.into_pool());
-            for node in &mut arena {
-                node.name_id =
-                    StringId(interned.get(node.name_id.0 as usize).copied().unwrap_or(0));
-            }
-            let dir_counts = propagate_all_sizes_bottom_up(&mut arena);
+            let pool = scope.spawn(move || parts.into_pool());
+            resolve_names(&mut arena, &resolver);
+            let dir_counts = propagate_all_sizes_bottom_up(&mut arena, |id| id);
             (pool.join().unwrap_or_default(), dir_counts)
         });
         FileArenaSnapshot {
@@ -249,12 +261,23 @@ impl Tree {
     }
 }
 
-/// The thread names are interned on, fed in the order batches are placed: a name's place in
-/// that order is what a node holds until a snapshot maps it to the name's id.
+/// Where a name was sent: its shard above `SHARD_SHIFT`, its index among that shard's names
+/// below. The root's name stays out of the shards: it is the pool's first.
+const ROOT_PLACE: u32 = u32::MAX;
+
+/// Names, split by hash among threads that each intern their part ([`super::batch::name_shards`]),
+/// fed in the order batches are placed. The pool a snapshot gets is the root's name, then each
+/// shard's in turn, so ids stay dense and every name appears once.
 struct Names {
+    root: String,
+    shards: Vec<NameShard>,
+}
+
+/// One interning thread.
+struct NameShard {
     tx: Option<crossbeam::channel::Sender<NamesMessage>>,
     thread: Option<std::thread::JoinHandle<(NamePool, Vec<u32>)>>,
-    /// Names sent so far, the root's included.
+    /// Names sent to this shard so far.
     sent: u32,
 }
 
@@ -264,75 +287,222 @@ enum NamesMessage {
         ends: Vec<u32>,
         hashes: Vec<u64>,
     },
-    Snapshot(crossbeam::channel::Sender<(StringPool, Vec<u32>)>),
+    /// The shard's names so far (as a pool's arena and offsets) and each one's id in them.
+    Snapshot(crossbeam::channel::Sender<(String, Vec<u32>, Vec<u32>)>),
+}
+
+/// Each shard's names laid out after the root's, and the id of every name sent.
+struct Resolver {
+    /// Where each shard's ids start in the pool.
+    bases: Vec<u32>,
+    /// Each shard's id of each name sent to it.
+    interned: Vec<Vec<u32>>,
+}
+
+impl Resolver {
+    fn resolve(&self, place: StringId) -> StringId {
+        if place.0 == ROOT_PLACE {
+            return StringId(0);
+        }
+        let shard = (place.0 >> SHARD_SHIFT) as usize;
+        let index = (place.0 & ((1 << SHARD_SHIFT) - 1)) as usize;
+        let id = self
+            .interned
+            .get(shard)
+            .and_then(|ids| ids.get(index))
+            .copied()
+            .unwrap_or(0);
+        StringId(self.bases.get(shard).copied().unwrap_or(0) + id)
+    }
+}
+
+/// The root's name and each shard's names and ids, to be laid out as one pool.
+struct NameParts {
+    root: String,
+    shards: Vec<(String, Vec<u32>)>,
+}
+
+impl NameParts {
+    /// Where each shard's ids start in the pool, and whether it fits there (a pool holds
+    /// 4 GiB of names).
+    fn bases(&self) -> Vec<(u32, bool)> {
+        let (mut bytes, mut ids) = (self.root.len(), 1u32);
+        self.shards
+            .iter()
+            .map(|(shard_bytes, shard_offsets)| {
+                let base = ids;
+                let fits = u32::try_from(bytes + shard_bytes.len()).is_ok();
+                if fits {
+                    bytes += shard_bytes.len();
+                    ids += shard_offsets.len().saturating_sub(1) as u32;
+                }
+                (base, fits)
+            })
+            .collect()
+    }
+
+    /// The pool's arena and offsets: the root's name, then each shard's; and where each
+    /// shard's ids start.
+    fn layout(&self) -> (String, Vec<u32>, Vec<u32>) {
+        let placed = self.bases();
+        let total = self.root.len()
+            + self
+                .shards
+                .iter()
+                .zip(&placed)
+                .filter(|(_, (_, fits))| *fits)
+                .map(|((shard_bytes, _), _)| shard_bytes.len())
+                .sum::<usize>();
+        let mut bytes = String::with_capacity(total);
+        let mut offsets = Vec::with_capacity(
+            2 + self
+                .shards
+                .iter()
+                .map(|(_, shard_offsets)| shard_offsets.len())
+                .sum::<usize>(),
+        );
+        bytes.push_str(&self.root);
+        offsets.extend([0, self.root.len() as u32]);
+        for ((shard_bytes, shard_offsets), &(_, fits)) in self.shards.iter().zip(&placed) {
+            if !fits {
+                continue;
+            }
+            let start = bytes.len() as u32;
+            bytes.push_str(shard_bytes);
+            offsets.extend(shard_offsets.iter().skip(1).map(|&end| start + end));
+        }
+        (
+            bytes,
+            offsets,
+            placed.into_iter().map(|(base, _)| base).collect(),
+        )
+    }
+
+    fn into_pool(self) -> StringPool {
+        let (bytes, offsets, _) = self.layout();
+        StringPool::frozen(Arc::from(bytes), offsets)
+    }
 }
 
 impl Names {
     fn start(root: &str) -> Self {
-        let (tx, rx) = crossbeam::channel::unbounded::<NamesMessage>();
-        let root = root.to_owned();
-        let thread = std::thread::spawn(move || {
-            let mut pool = NamePool::default();
-            let mut interned = Vec::with_capacity(NAMES_RESERVED);
-            interned.push(pool.intern(&root, super::batch::name_hash(&root)));
-            while let Ok(message) = rx.recv() {
-                match message {
-                    NamesMessage::Batch {
-                        names,
-                        ends,
-                        hashes,
-                    } => {
-                        let mut start = 0;
-                        for (&end, &hash) in ends.iter().zip(&hashes) {
-                            let name = names.get(start..end as usize).unwrap_or_default();
-                            interned.push(pool.intern(name, hash));
-                            start = end as usize;
+        Self::with_shards(root, super::batch::name_shards())
+    }
+
+    fn with_shards(root: &str, threads: usize) -> Self {
+        let shards = (0..threads)
+            .map(|_| {
+                let (tx, rx) = crossbeam::channel::unbounded::<NamesMessage>();
+                let thread = std::thread::spawn(move || {
+                    let mut pool = NamePool::with_capacity(NAMES_RESERVED / threads);
+                    let mut interned = Vec::with_capacity(NAMES_RESERVED / threads);
+                    while let Ok(message) = rx.recv() {
+                        match message {
+                            NamesMessage::Batch {
+                                names,
+                                ends,
+                                hashes,
+                            } => {
+                                let mut start = 0;
+                                for (&end, &hash) in ends.iter().zip(&hashes) {
+                                    let name = names.get(start..end as usize).unwrap_or_default();
+                                    interned.push(pool.intern(name, hash));
+                                    start = end as usize;
+                                }
+                            }
+                            NamesMessage::Snapshot(reply) => {
+                                let _ = reply.send((
+                                    pool.bytes.clone(),
+                                    pool.offsets.clone(),
+                                    interned.clone(),
+                                ));
+                            }
                         }
                     }
-                    NamesMessage::Snapshot(reply) => {
-                        let _ = reply.send((pool.to_pool(), interned.clone()));
-                    }
+                    (pool, interned)
+                });
+                NameShard {
+                    tx: Some(tx),
+                    thread: Some(thread),
+                    sent: 0,
                 }
-            }
-            (pool, interned)
-        });
+            })
+            .collect();
         Self {
-            tx: Some(tx),
-            thread: Some(thread),
-            sent: 1,
+            root: root.to_owned(),
+            shards,
         }
     }
 
-    /// Hands a batch's names over; returns the place of its first.
-    fn send(&mut self, names: String, ends: Vec<u32>, hashes: Vec<u64>) -> u32 {
-        let first = self.sent;
-        self.sent = self.sent.saturating_add(ends.len() as u32);
-        if let Some(tx) = &self.tx {
-            let _ = tx.send(NamesMessage::Batch {
-                names,
-                ends,
-                hashes,
-            });
+    /// Hands each shard its part of a batch's names; `bases` gets how many names each shard
+    /// had before.
+    fn send(&mut self, names: Vec<BatchNames>, bases: &mut Vec<u32>) {
+        bases.clear();
+        for (shard, part) in self.shards.iter_mut().zip(names) {
+            bases.push(shard.sent);
+            if part.ends.is_empty() {
+                continue;
+            }
+            shard.sent = shard.sent.saturating_add(part.ends.len() as u32);
+            if let Some(tx) = &shard.tx {
+                let _ = tx.send(NamesMessage::Batch {
+                    names: part.names,
+                    ends: part.ends,
+                    hashes: part.hashes,
+                });
+            }
         }
-        first
     }
 
-    /// Every name sent so far, and each place's id in that pool.
-    fn snapshot(&self) -> (StringPool, Vec<u32>) {
-        let (reply, answer) = crossbeam::channel::bounded(1);
-        if let Some(tx) = &self.tx {
-            let _ = tx.send(NamesMessage::Snapshot(reply));
+    /// Every name sent so far, as a pool, and how to find each one's id in it.
+    fn snapshot(&self) -> (StringPool, Resolver) {
+        let replies: Vec<_> = self
+            .shards
+            .iter()
+            .map(|shard| {
+                let (reply, answer) = crossbeam::channel::bounded(1);
+                if let Some(tx) = &shard.tx {
+                    let _ = tx.send(NamesMessage::Snapshot(reply));
+                }
+                answer
+            })
+            .collect();
+        let mut parts = NameParts {
+            root: self.root.clone(),
+            shards: Vec::with_capacity(replies.len()),
+        };
+        let mut interned = Vec::with_capacity(replies.len());
+        for answer in replies {
+            let (bytes, offsets, ids) = answer.recv().unwrap_or_default();
+            parts.shards.push((bytes, offsets));
+            interned.push(ids);
         }
-        answer.recv().unwrap_or_default()
+        let (bytes, offsets, bases) = parts.layout();
+        (
+            StringPool::frozen(Arc::from(bytes), offsets),
+            Resolver { bases, interned },
+        )
     }
 
-    /// Every name, once the thread is done with them, and each place's id.
-    fn finish(mut self) -> (NamePool, Vec<u32>) {
-        self.tx = None;
-        self.thread
-            .take()
-            .and_then(|thread| thread.join().ok())
-            .unwrap_or_default()
+    /// Every name, once the threads are done with them, and how to find each one's id.
+    fn finish(self) -> (NameParts, Resolver) {
+        let mut parts = NameParts {
+            root: self.root,
+            shards: Vec::with_capacity(self.shards.len()),
+        };
+        let mut interned = Vec::with_capacity(self.shards.len());
+        for mut shard in self.shards {
+            shard.tx = None;
+            let (pool, ids) = shard
+                .thread
+                .take()
+                .and_then(|thread| thread.join().ok())
+                .unwrap_or_default();
+            parts.shards.push((pool.bytes, pool.offsets));
+            interned.push(ids);
+        }
+        let bases = parts.bases().into_iter().map(|(base, _)| base).collect();
+        (parts, Resolver { bases, interned })
     }
 }
 
@@ -345,22 +515,26 @@ struct NamePool {
     offsets: Vec<u32>,
 }
 
-/// Names a pool makes room for up front, so that a large scan does not rehash every name
-/// on its way there.
-const NAMES_RESERVED: usize = 1 << 20;
+/// Names a scan's pools make room for up front, between them, so that a large scan does not
+/// rehash every name on its way there.
+const NAMES_RESERVED: usize = 1 << 16;
 
 impl Default for NamePool {
     fn default() -> Self {
-        Self {
-            table: HashTable::with_capacity(NAMES_RESERVED),
-            hashes: Vec::with_capacity(NAMES_RESERVED),
-            bytes: String::with_capacity(NAMES_RESERVED * 16),
-            offsets: Vec::from([0]),
-        }
+        Self::with_capacity(0)
     }
 }
 
 impl NamePool {
+    fn with_capacity(names: usize) -> Self {
+        Self {
+            table: HashTable::with_capacity(names),
+            hashes: Vec::with_capacity(names),
+            bytes: String::with_capacity(names * 16),
+            offsets: Vec::from([0]),
+        }
+    }
+
     fn get(&self, id: u32) -> &str {
         let id = id as usize;
         let (Some(&start), Some(&end)) = (self.offsets.get(id), self.offsets.get(id + 1)) else {
@@ -392,22 +566,35 @@ impl NamePool {
             .insert_unique(hash, id, |&id| hashes[id as usize]);
         id
     }
+}
 
-    fn to_pool(&self) -> StringPool {
-        StringPool::frozen(Arc::from(self.bytes.as_str()), self.offsets.clone())
-    }
-
-    fn into_pool(self) -> StringPool {
-        StringPool::frozen(Arc::from(self.bytes), self.offsets)
-    }
+/// Gives every node its name's id, on several threads: nodes do not depend on one another.
+fn resolve_names(arena: &mut [FileNode], resolver: &Resolver) {
+    let threads = std::thread::available_parallelism()
+        .map_or(1, std::num::NonZero::get)
+        .min(16);
+    let chunk = arena.len().div_ceil(threads).max(1 << 16);
+    std::thread::scope(|scope| {
+        for part in arena.chunks_mut(chunk) {
+            scope.spawn(move || {
+                for node in part {
+                    node.name_id = resolver.resolve(node.name_id);
+                }
+            });
+        }
+    });
 }
 
 /// Accumulates file sizes, counts, and latest timestamps from leaf nodes up
 /// to the root in a single, cache-friendly, reverse O(N) sweep, which also counts each
 /// directory's subdirectories (recursively). Children come after their parent in the arena.
-fn propagate_all_sizes_bottom_up(arena: &mut [FileNode]) -> Vec<u32> {
+fn propagate_all_sizes_bottom_up(
+    arena: &mut [FileNode],
+    name: impl Fn(StringId) -> StringId,
+) -> Vec<u32> {
     let mut dir_counts = vec![0u32; arena.len()];
     for idx in (0..arena.len()).rev() {
+        arena[idx].name_id = name(arena[idx].name_id);
         let parent = arena[idx].parent;
         if parent != NO_INDEX && (parent as usize) < idx {
             let parent_idx = parent as usize;
@@ -493,7 +680,7 @@ mod tests {
         arena[1].size = 100;
         arena[3].size = 50;
 
-        let dir_counts = propagate_all_sizes_bottom_up(&mut arena);
+        let dir_counts = propagate_all_sizes_bottom_up(&mut arena, |id| id);
 
         // Sizes and file counts accumulate from the leaves to the root
         assert_eq!(arena[2].size, 50);
@@ -655,8 +842,69 @@ mod tests {
         let b = names.intern("b", crate::engine::batch::name_hash("b"));
         assert_ne!(a, b);
         assert_eq!(names.intern("a", crate::engine::batch::name_hash("a")), a);
-        let pool = names.into_pool();
-        assert_eq!(pool.get(StringId(a)), Some("a"));
-        assert_eq!(pool.get(StringId(b)), Some("b"));
+        assert_eq!(names.get(a), "a");
+        assert_eq!(names.get(b), "b");
+    }
+
+    /// Names split among shards resolve to themselves, each name once, the root's first.
+    #[test]
+    fn test_sharded_names_resolve_densely() {
+        // Split as producers split them: one shard per name, always the same.
+        let batch = |words: &[String]| {
+            let mut parts_by_shard: Vec<BatchNames> =
+                (0..3).map(|_| BatchNames::default()).collect();
+            let mut ids = Vec::new();
+            for word in words {
+                let hash = crate::engine::batch::name_hash(word);
+                let shard = (hash >> 32) as usize % 3;
+                let part = &mut parts_by_shard[shard];
+                ids.push(((shard as u32) << SHARD_SHIFT) | part.ends.len() as u32);
+                part.names.push_str(word);
+                part.ends.push(part.names.len() as u32);
+                part.hashes.push(hash);
+            }
+            (parts_by_shard, ids)
+        };
+        let first: Vec<String> = (0..500).map(|i| format!("name-{i}")).collect();
+        // The second batch repeats half of the first.
+        let second: Vec<String> = (250..750).map(|i| format!("name-{i}")).collect();
+
+        let mut names = Names::with_shards("/root", 3);
+        let mut bases = Vec::new();
+        let mut sent = Vec::new();
+        for words in [&first, &second] {
+            let (parts_by_shard, ids) = batch(words);
+            names.send(parts_by_shard, &mut bases);
+            sent.extend(words.iter().cloned().zip(ids.iter().map(|&id| {
+                let (shard, index) = split_name_id(StringId(id));
+                ((shard as u32) << SHARD_SHIFT) | (bases[shard] + index as u32)
+            })));
+        }
+
+        let (pool, resolver) = names.snapshot();
+        assert_eq!(resolver.resolve(StringId(ROOT_PLACE)), StringId(0));
+        assert_eq!(pool.get(StringId(0)), Some("/root"));
+        for (word, place) in &sent {
+            assert_eq!(
+                pool.get(resolver.resolve(StringId(*place))),
+                Some(word.as_str())
+            );
+        }
+
+        let (parts, resolver) = names.finish();
+        let pool = parts.into_pool();
+        let mut ids: Vec<u32> = sent
+            .iter()
+            .map(|(word, place)| {
+                let id = resolver.resolve(StringId(*place));
+                assert_eq!(pool.get(id), Some(word.as_str()));
+                id.0
+            })
+            .collect();
+        ids.sort_unstable();
+        ids.dedup();
+        // 750 distinct names, in ids 1..=750 after the root's.
+        assert_eq!(ids.len(), 750);
+        assert_eq!((ids.first(), ids.last()), (Some(&1), Some(&750)));
     }
 }
