@@ -87,15 +87,16 @@ impl Coordinator {
 }
 
 /// The tree being built: listings placed in the slots their producers reserved.
+///
+/// Names are interned off this thread ([`Names`]): a node holds its name's place in the order
+/// names arrived until a snapshot looks up the interned id.
 struct Tree {
     arena: Vec<FileNode>,
-    names: NamePool,
+    names: Names,
     extensions: std::collections::HashMap<CompactString, (u64, u32), ahash::RandomState>,
     /// Every slot below this one is filled.
     filled: usize,
     dirty: bool,
-    /// Scratch: the pool's id of each name of the batch being placed.
-    name_ids: Vec<u32>,
 }
 
 /// A slot reserved but not filled yet. Only the root has no parent, and only placeholders
@@ -107,24 +108,15 @@ const fn is_placeholder(slot: usize, node: &FileNode) -> bool {
 
 impl Tree {
     fn new(root_path_str: &str) -> Self {
-        let mut names = NamePool::default();
-        let root_name_id = names.intern(root_path_str, super::batch::name_hash(root_path_str));
         let mut arena = Vec::with_capacity(1024 * 1024); // Pre-allocate space for ~1M nodes
-        arena.push(FileNode::new(
-            StringId(root_name_id),
-            None,
-            true,
-            false,
-            0,
-            0,
-        ));
+        // The root's name arrives first: its place, 0, is its id.
+        arena.push(FileNode::new(StringId(0), None, true, false, 0, 0));
         Self {
             arena,
-            names,
+            names: Names::start(root_path_str),
             extensions: std::collections::HashMap::default(),
             filled: 1,
             dirty: false,
-            name_ids: Vec::new(),
         }
     }
 
@@ -138,25 +130,26 @@ impl Tree {
     /// Places a batch's listings, marks its unreadable directories, and adds its extension
     /// totals.
     fn place(&mut self, batch: ScanBatch) {
-        self.name_ids.clear();
-        for (name, hash) in batch.names() {
-            self.name_ids.push(self.names.intern(name, hash));
-        }
+        let ScanBatch {
+            listings,
+            nodes,
+            names,
+            name_ends,
+            name_hashes,
+            denied,
+            extensions,
+        } = batch;
+        let first_name = self.names.send(names, name_ends, name_hashes);
 
-        let mut nodes = batch.nodes.iter();
-        for listing in &batch.listings {
+        let mut nodes = nodes.iter();
+        for listing in &listings {
             let first = listing.first_slot as usize;
             let end = first + listing.len as usize;
             self.grow_to(end);
             for (slot, node) in self.arena[first..end].iter_mut().zip(nodes.by_ref()) {
                 let pending = *slot;
                 *slot = *node;
-                slot.name_id = StringId(
-                    self.name_ids
-                        .get(node.name_id.0 as usize)
-                        .copied()
-                        .unwrap_or(0),
-                );
+                slot.name_id = StringId(first_name + node.name_id.0);
                 slot.first_child = pending.first_child;
                 slot.flags |= pending.flags;
             }
@@ -165,12 +158,12 @@ impl Tree {
             self.arena[parent].first_child = listing.first_slot;
         }
 
-        for &slot in &batch.denied {
+        for &slot in &denied {
             self.grow_to(slot as usize + 1);
             self.arena[slot as usize].flags |= FileNode::FLAG_NO_PERMISSION;
         }
 
-        for (ext, size, files) in batch.extensions {
+        for (ext, size, files) in extensions {
             let total = self.extensions.entry(ext).or_insert((0, 0));
             total.0 += size;
             total.1 += files;
@@ -187,10 +180,14 @@ impl Tree {
             self.filled += 1;
         }
         let filled = self.filled as u32;
+        // Every name these nodes hold was sent before this request.
+        let (string_pool, interned) = self.names.snapshot();
         let mut nodes: Vec<FileNode> = self.arena[..self.filled]
             .iter()
             .map(|node| {
                 let mut node = *node;
+                node.name_id =
+                    StringId(interned.get(node.name_id.0 as usize).copied().unwrap_or(0));
                 if node.first_child >= filled {
                     node.first_child = NO_INDEX;
                 }
@@ -203,7 +200,7 @@ impl Tree {
         let dir_counts = propagate_all_sizes_bottom_up(&mut nodes);
         FileArenaSnapshot {
             nodes: Arc::new(NodeStorage::Owned(nodes)),
-            string_pool: Arc::new(self.names.to_pool()),
+            string_pool: Arc::new(string_pool),
             dir_counts: Arc::new(dir_counts),
             extensions: crate::extensions::ExtensionStore::default(),
         }
@@ -222,8 +219,13 @@ impl Tree {
         let Self {
             mut arena, names, ..
         } = self;
+        let (names, interned) = names.finish();
         let (string_pool, dir_counts) = std::thread::scope(|scope| {
             let pool = scope.spawn(move || names.into_pool());
+            for node in &mut arena {
+                node.name_id =
+                    StringId(interned.get(node.name_id.0 as usize).copied().unwrap_or(0));
+            }
             let dir_counts = propagate_all_sizes_bottom_up(&mut arena);
             (pool.join().unwrap_or_default(), dir_counts)
         });
@@ -244,6 +246,93 @@ impl Tree {
             .collect();
         stats.sort_by_key(|b| std::cmp::Reverse(b.1));
         stats
+    }
+}
+
+/// The thread names are interned on, fed in the order batches are placed: a name's place in
+/// that order is what a node holds until a snapshot maps it to the name's id.
+struct Names {
+    tx: Option<crossbeam::channel::Sender<NamesMessage>>,
+    thread: Option<std::thread::JoinHandle<(NamePool, Vec<u32>)>>,
+    /// Names sent so far, the root's included.
+    sent: u32,
+}
+
+enum NamesMessage {
+    Batch {
+        names: String,
+        ends: Vec<u32>,
+        hashes: Vec<u64>,
+    },
+    Snapshot(crossbeam::channel::Sender<(StringPool, Vec<u32>)>),
+}
+
+impl Names {
+    fn start(root: &str) -> Self {
+        let (tx, rx) = crossbeam::channel::unbounded::<NamesMessage>();
+        let root = root.to_owned();
+        let thread = std::thread::spawn(move || {
+            let mut pool = NamePool::default();
+            let mut interned = Vec::with_capacity(NAMES_RESERVED);
+            interned.push(pool.intern(&root, super::batch::name_hash(&root)));
+            while let Ok(message) = rx.recv() {
+                match message {
+                    NamesMessage::Batch {
+                        names,
+                        ends,
+                        hashes,
+                    } => {
+                        let mut start = 0;
+                        for (&end, &hash) in ends.iter().zip(&hashes) {
+                            let name = names.get(start..end as usize).unwrap_or_default();
+                            interned.push(pool.intern(name, hash));
+                            start = end as usize;
+                        }
+                    }
+                    NamesMessage::Snapshot(reply) => {
+                        let _ = reply.send((pool.to_pool(), interned.clone()));
+                    }
+                }
+            }
+            (pool, interned)
+        });
+        Self {
+            tx: Some(tx),
+            thread: Some(thread),
+            sent: 1,
+        }
+    }
+
+    /// Hands a batch's names over; returns the place of its first.
+    fn send(&mut self, names: String, ends: Vec<u32>, hashes: Vec<u64>) -> u32 {
+        let first = self.sent;
+        self.sent = self.sent.saturating_add(ends.len() as u32);
+        if let Some(tx) = &self.tx {
+            let _ = tx.send(NamesMessage::Batch {
+                names,
+                ends,
+                hashes,
+            });
+        }
+        first
+    }
+
+    /// Every name sent so far, and each place's id in that pool.
+    fn snapshot(&self) -> (StringPool, Vec<u32>) {
+        let (reply, answer) = crossbeam::channel::bounded(1);
+        if let Some(tx) = &self.tx {
+            let _ = tx.send(NamesMessage::Snapshot(reply));
+        }
+        answer.recv().unwrap_or_default()
+    }
+
+    /// Every name, once the thread is done with them, and each place's id.
+    fn finish(mut self) -> (NamePool, Vec<u32>) {
+        self.tx = None;
+        self.thread
+            .take()
+            .and_then(|thread| thread.join().ok())
+            .unwrap_or_default()
     }
 }
 
