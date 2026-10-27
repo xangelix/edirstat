@@ -1,3 +1,4 @@
+pub mod batch;
 pub mod coordinator;
 pub mod docker;
 #[cfg(unix)]

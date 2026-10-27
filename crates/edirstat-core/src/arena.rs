@@ -224,7 +224,7 @@ impl StringPool {
     /// `xgx_intern::Interner::export_arena` (and by the snapshot decoders), so that
     /// the string for handle `i` is `arena[offsets[i]..offsets[i+1]]`.
     #[must_use]
-    pub(crate) const fn frozen(arena: Arc<str>, offsets: Vec<u32>) -> Self {
+    pub const fn frozen(arena: Arc<str>, offsets: Vec<u32>) -> Self {
         Self {
             state: StringPoolState::Frozen { arena, offsets },
         }

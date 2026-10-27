@@ -3,7 +3,7 @@ use std::{path::Path, sync::Arc, sync::atomic::AtomicUsize, time::Duration};
 use criterion::{Criterion, criterion_group, criterion_main};
 use edirstat::{
     engine::mft::try_scan_mft,
-    engine::traversal::{ScanEvent, TraversalStats},
+    engine::{batch::ScanBatch, traversal::TraversalStats},
 };
 
 fn bench_mft_parsing(c: &mut Criterion) {
@@ -27,7 +27,7 @@ fn bench_mft_parsing(c: &mut Criterion) {
     group.bench_function("parse_raw_mft", |b| {
         b.iter(|| {
             // Set up a channel to receive the parsed events
-            let (tx, rx) = crossbeam::channel::unbounded::<Vec<ScanEvent>>();
+            let (tx, rx) = crossbeam::channel::unbounded::<ScanBatch>();
 
             // Spawn a background thread to drain the channel instantly
             // to avoid backing up memory or blocking worker channels.

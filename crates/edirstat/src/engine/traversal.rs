@@ -7,59 +7,34 @@ use std::{
         atomic::{AtomicBool, AtomicUsize, Ordering},
     },
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
-use compact_str::CompactString;
 use crossbeam::{
     channel::Sender,
-    deque::{Injector, Worker},
+    deque::{Injector, Steal, Stealer, Worker},
 };
 
+use super::batch::{BatchBuilder, ScanBatch, Slots};
+use crate::arena::{FileNode, StringId};
 pub use edirstat_core::{file_id::get_file_id, state::TraversalStats};
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub struct LocalId(pub u32);
+/// A batch waiting this long is sent after the directory being read, full or not, so that the
+/// live tree keeps up with a slow volume.
+const FLUSH_INTERVAL: Duration = Duration::from_millis(50);
 
 #[derive(Clone)]
 pub struct ScanTask {
     pub path: PathBuf,
-    pub parent_id: LocalId,
-    pub worker_id: u8,
+    /// The directory's arena slot.
+    pub slot: u32,
+    /// The directory's own device (0 when unknown).
+    pub device_id: u64,
     pub ancestors: smallvec::SmallVec<[(u64, u64); 16]>,
     /// The device/volume identifier to restrict traversal within.
     pub expected_device_id: Option<u64>,
     /// Allowed secondary device identifier (e.g. macOS APFS Data volume paired with System root).
     pub allowed_secondary_device_id: Option<u64>,
-}
-
-pub enum ScanEvent {
-    DirDiscovered {
-        parent_worker_id: u8,
-        child_worker_id: u8,
-        local_parent_id: LocalId,
-        local_child_id: LocalId,
-        name: CompactString,
-        modified_timestamp: u32,
-        created_timestamp: u32,
-        no_permission: bool,
-    },
-    FileDiscovered {
-        parent_worker_id: u8,
-        local_parent_id: LocalId,
-        name: CompactString,
-        size: u64,
-        is_symlink: bool,
-        is_dataless: bool,
-        is_special: bool,
-        modified_timestamp: u32,
-        created_timestamp: u32,
-        no_permission: bool,
-    },
-    PermissionDenied {
-        worker_id: u8,
-        local_id: LocalId,
-    },
 }
 
 pub struct TraversalEngine {
@@ -95,7 +70,7 @@ impl TraversalEngine {
         root_path: PathBuf,
         same_filesystem: bool,
         scan_cancel: Arc<AtomicBool>,
-        event_tx: Sender<Vec<ScanEvent>>,
+        event_tx: Sender<ScanBatch>,
     ) -> Result<thread::JoinHandle<()>, crate::EdirstatError> {
         let num_threads = self.num_threads;
         let stats = self.stats.clone();
@@ -162,25 +137,21 @@ impl TraversalEngine {
 
             let initial_task = ScanTask {
                 path: root_path.clone(),
-                parent_id: LocalId(0),
-                worker_id: 0,
+                slot: 0,
+                device_id: root_file_id.0,
                 ancestors: smallvec::smallvec![root_file_id],
                 expected_device_id,
                 allowed_secondary_device_id,
             };
             injector.push(initial_task);
 
-            // Create local worker queues and stealers
-            let mut workers = Vec::with_capacity(num_threads);
-            let mut stealers = Vec::with_capacity(num_threads);
-            for _ in 0..num_threads {
-                let w = Worker::new_fifo();
-                let s = w.stealer();
-                workers.push(w);
-                stealers.push(s);
-            }
-
-            let stealers = Arc::new(stealers);
+            // Local queues are LIFO (depth-first: few queued tasks, the subtree just listed
+            // read while it is hot); thieves take the oldest tasks, the largest subtrees.
+            let workers: Vec<Worker<ScanTask>> =
+                (0..num_threads).map(|_| Worker::new_lifo()).collect();
+            let stealers: Arc<Vec<Stealer<ScanTask>>> =
+                Arc::new(workers.iter().map(Worker::stealer).collect());
+            let slots = Arc::new(Slots::default());
             // In-flight task count: tasks queued anywhere plus tasks currently
             // being scanned. Incremented when a task is queued (the root task
             // here, subdirectories inside `scan_directory`), decremented only
@@ -193,8 +164,7 @@ impl TraversalEngine {
 
             let mut thread_handles = Vec::with_capacity(num_threads);
 
-            for worker_idx in 0..num_threads {
-                let local_worker = workers.remove(0);
+            for (worker_idx, local_worker) in workers.into_iter().enumerate() {
                 let stealers = stealers.clone();
                 let injector = injector.clone();
                 let in_flight_tasks = in_flight_tasks.clone();
@@ -202,19 +172,23 @@ impl TraversalEngine {
                 let event_tx = event_tx.clone();
                 let scan_cancel = scan_cancel.clone();
                 let overlay_mounts = overlay_mounts.clone();
+                let slots = slots.clone();
 
                 let stats = stats.clone();
 
                 thread_handles.push(thread::spawn(move || {
-                    let mut ctx = WorkerContext::new(
-                        worker_idx as u8,
-                        &event_tx,
-                        &local_worker,
-                        &stats,
-                        &scan_cancel,
-                        &in_flight_tasks,
-                        &overlay_mounts,
-                    );
+                    let mut ctx = WorkerContext {
+                        builder: BatchBuilder::default(),
+                        last_flush: Instant::now(),
+                        subdirs: Vec::new(),
+                        event_tx: &event_tx,
+                        local_worker: &local_worker,
+                        stats: &stats,
+                        scan_cancel: &scan_cancel,
+                        in_flight_tasks: &in_flight_tasks,
+                        overlay_mounts: &overlay_mounts,
+                        slots: &slots,
+                    };
 
                     loop {
                         if ctx.scan_cancel.load(Ordering::Relaxed) {
@@ -224,32 +198,10 @@ impl TraversalEngine {
                             break;
                         }
 
-                        // Find a task
-                        let task_opt = ctx.local_worker.pop().or_else(|| {
-                            // Try stealing from the global injector
-                            let mut steal_res = injector.steal();
-                            while steal_res.is_retry() {
-                                steal_res = injector.steal();
-                            }
-                            if let crossbeam::deque::Steal::Success(t) = steal_res {
-                                return Some(t);
-                            }
-
-                            // Work stealing: try stealing from other workers
-                            for i in 0..stealers.len() {
-                                if i == worker_idx {
-                                    continue;
-                                }
-                                let mut steal_res = stealers[i].steal();
-                                while steal_res.is_retry() {
-                                    steal_res = stealers[i].steal();
-                                }
-                                if let crossbeam::deque::Steal::Success(t) = steal_res {
-                                    return Some(t);
-                                }
-                            }
-                            None
-                        });
+                        let task_opt = ctx
+                            .local_worker
+                            .pop()
+                            .or_else(|| steal(&injector, &stealers, worker_idx, &local_worker));
 
                         if let Some(task) = task_opt {
                             // Process the directory scan task; its in-flight
@@ -257,6 +209,9 @@ impl TraversalEngine {
                             scan_directory(&task, &mut ctx);
                             in_flight_tasks.fetch_sub(1, Ordering::SeqCst);
                         } else {
+                            // Idle: hand over what was listed so far.
+                            ctx.flush();
+
                             // No tasks available. Check termination condition.
                             // A zero in-flight count is stable: no task is
                             // queued anywhere, no scan is in progress, and only
@@ -274,7 +229,7 @@ impl TraversalEngine {
                         }
                     }
 
-                    // Flush final events remaining in buffer
+                    // Flush final batch remaining in buffer
                     ctx.flush();
                 }));
             }
@@ -289,60 +244,53 @@ impl TraversalEngine {
     }
 }
 
+/// A task from the injector, or else from another worker (half its queue, the oldest tasks),
+/// starting with the next one so that thieves spread out.
+fn steal(
+    injector: &Injector<ScanTask>,
+    stealers: &[Stealer<ScanTask>],
+    worker_idx: usize,
+    local_worker: &Worker<ScanTask>,
+) -> Option<ScanTask> {
+    loop {
+        let mut retry = false;
+        match injector.steal() {
+            Steal::Success(task) => return Some(task),
+            Steal::Retry => retry = true,
+            Steal::Empty => {}
+        }
+        for offset in 1..stealers.len() {
+            let victim = &stealers[(worker_idx + offset) % stealers.len()];
+            match victim.steal_batch_and_pop(local_worker) {
+                Steal::Success(task) => return Some(task),
+                Steal::Retry => retry = true,
+                Steal::Empty => {}
+            }
+        }
+        if !retry {
+            return None;
+        }
+    }
+}
+
 struct WorkerContext<'a> {
-    worker_id: u8,
-    local_id_counter: u32,
-    event_buffer: Vec<ScanEvent>,
-    event_tx: &'a Sender<Vec<ScanEvent>>,
+    builder: BatchBuilder,
+    last_flush: Instant,
+    /// Scratch: the subdirectories of the directory being read (listing index, path, id).
+    subdirs: Vec<(u32, PathBuf, (u64, u64))>,
+    event_tx: &'a Sender<ScanBatch>,
     local_worker: &'a Worker<ScanTask>,
     stats: &'a TraversalStats,
     scan_cancel: &'a Arc<AtomicBool>,
     in_flight_tasks: &'a AtomicUsize,
     overlay_mounts: &'a HashSet<PathBuf>,
+    slots: &'a Slots,
 }
 
-impl<'a> WorkerContext<'a> {
-    fn new(
-        worker_id: u8,
-        event_tx: &'a Sender<Vec<ScanEvent>>,
-        local_worker: &'a Worker<ScanTask>,
-        stats: &'a TraversalStats,
-        scan_cancel: &'a Arc<AtomicBool>,
-        in_flight_tasks: &'a AtomicUsize,
-        overlay_mounts: &'a HashSet<PathBuf>,
-    ) -> Self {
-        Self {
-            worker_id,
-            local_id_counter: 1, // Root is 0, workers start generating local child IDs
-            event_buffer: Vec::with_capacity(1024),
-            event_tx,
-            local_worker,
-            stats,
-            scan_cancel,
-            in_flight_tasks,
-            overlay_mounts,
-        }
-    }
-
-    fn emit_event(&mut self, event: ScanEvent, force_flush: bool) {
-        self.event_buffer.push(event);
-        if self.event_buffer.len() >= 1024 || (force_flush && !self.event_buffer.is_empty()) {
-            let batch = std::mem::replace(&mut self.event_buffer, Vec::with_capacity(1024));
-            let _ = self.event_tx.send(batch);
-        }
-    }
-
+impl WorkerContext<'_> {
     fn flush(&mut self) {
-        if !self.event_buffer.is_empty() {
-            let batch = std::mem::replace(&mut self.event_buffer, Vec::with_capacity(1024));
-            let _ = self.event_tx.send(batch);
-        }
-    }
-
-    const fn next_local_id(&mut self) -> LocalId {
-        let id = LocalId(self.local_id_counter);
-        self.local_id_counter += 1;
-        id
+        self.builder.flush(self.event_tx, self.stats);
+        self.last_flush = Instant::now();
     }
 }
 
@@ -351,29 +299,26 @@ fn scan_directory(task: &ScanTask, ctx: &mut WorkerContext<'_>) {
         return;
     }
     let dir_path = &task.path;
-    let parent_local_id = task.parent_id;
 
     // Try reading directory entries
-    let Ok(entries) = fs::read_dir(dir_path) else {
-        if let Err(e) = fs::read_dir(dir_path)
-            && e.kind() == std::io::ErrorKind::PermissionDenied
-        {
-            ctx.emit_event(
-                ScanEvent::PermissionDenied {
-                    worker_id: task.worker_id,
-                    local_id: parent_local_id,
-                },
-                true,
-            );
+    let entries = match fs::read_dir(dir_path) {
+        Ok(entries) => entries,
+        Err(e) => {
+            if e.kind() == std::io::ErrorKind::PermissionDenied {
+                ctx.builder.deny(task.slot);
+            }
+            return;
         }
-        return;
     };
 
-    ctx.stats.dirs_scanned.fetch_add(1, Ordering::Relaxed);
+    ctx.builder.add_dirs(1);
+    ctx.subdirs.clear();
 
     for (entry_idx, entry_res) in entries.enumerate() {
         if entry_idx % 256 == 0 && ctx.scan_cancel.load(Ordering::Relaxed) {
-            break;
+            // An interrupted listing is never sent: the scan is thrown away.
+            ctx.builder.discard_listing();
+            return;
         }
         let Ok(entry) = entry_res else { continue };
 
@@ -404,96 +349,61 @@ fn scan_directory(task: &ScanTask, ctx: &mut WorkerContext<'_>) {
                 continue;
             }
 
-            // Assign new local ID
-            let child_local_id = ctx.next_local_id();
-
-            // Emit directory discovery event immediately (force flush) to prevent work-stealing races
-            ctx.emit_event(
-                ScanEvent::DirDiscovered {
-                    parent_worker_id: task.worker_id,
-                    child_worker_id: ctx.worker_id,
-                    local_parent_id: parent_local_id,
-                    local_child_id: child_local_id,
-                    name: meta.name,
-                    modified_timestamp: meta.modified_timestamp,
-                    created_timestamp: meta.created_timestamp,
-                    no_permission: meta.no_permission,
-                },
-                true,
+            let index = ctx.builder.listing_len() as u32;
+            ctx.builder.push(
+                &meta.name,
+                FileNode::from_metadata(StringId(0), None, &meta),
             );
 
             // Overlay mountpoints (e.g. a running container's `…/merged`)
             // duplicate bytes already counted under the layer `diff/` dirs.
             // The node stays visible (size 0) but no scan task is queued.
             // Discovered directories are never the traversal root itself, so
-            // an explicit root scan of a mountpoint is unaffected.
+            // an explicit root scan of a mountpoint is unaffected. A mountpoint
+            // is on another device than its parent: only those are looked up.
             let child_path = entry.path();
             if !ctx.overlay_mounts.is_empty()
+                && meta.file_id.0 != task.device_id
                 && super::mounts::is_overlay_mountpoint(ctx.overlay_mounts, &child_path)
             {
                 continue;
             }
 
-            // Create a new task and push to local queue
-            let mut new_ancestors = task.ancestors.clone();
-            if meta.file_id != (0, 0) {
-                new_ancestors.push(meta.file_id);
-            }
-
-            let new_task = ScanTask {
-                path: child_path,
-                parent_id: child_local_id,
-                worker_id: ctx.worker_id,
-                ancestors: new_ancestors,
-                expected_device_id: task.expected_device_id,
-                allowed_secondary_device_id: task.allowed_secondary_device_id,
-            };
-            ctx.local_worker.push(new_task);
-            // Keep the in-flight count nonzero for as long as queued work
-            // exists; this scan's own count is released after it returns, so
-            // the increment always precedes that decrement.
-            ctx.in_flight_tasks.fetch_add(1, Ordering::SeqCst);
+            ctx.subdirs.push((index, child_path, meta.file_id));
         } else {
-            // It's a file
-            ctx.stats.files_scanned.fetch_add(1, Ordering::Relaxed);
-            ctx.stats
-                .bytes_scanned
-                .fetch_add(meta.len as usize, Ordering::Relaxed);
-
-            ctx.emit_event(
-                ScanEvent::FileDiscovered {
-                    parent_worker_id: task.worker_id,
-                    local_parent_id: parent_local_id,
-                    name: meta.name,
-                    size: meta.len,
-                    is_symlink: meta.is_symlink,
-                    is_dataless: meta.is_dataless,
-                    is_special: meta.is_special,
-                    modified_timestamp: meta.modified_timestamp,
-                    created_timestamp: meta.created_timestamp,
-                    no_permission: meta.no_permission,
-                },
-                false,
+            ctx.builder.push(
+                &meta.name,
+                FileNode::from_metadata(StringId(0), None, &meta),
             );
         }
     }
 
-    // Force flush events after completing a directory scan to keep coordinator updated
-    ctx.emit_event(
-        ScanEvent::FileDiscovered {
-            parent_worker_id: task.worker_id,
-            local_parent_id: parent_local_id,
-            name: CompactString::default(),
-            size: 0,
-            is_symlink: false,
-            is_dataless: false,
-            is_special: false,
-            modified_timestamp: 0,
-            created_timestamp: 0,
-            no_permission: false,
-        },
-        true,
-    );
+    // The listing's slots exist from here on: its subdirectories can be queued.
+    if let Some(first_slot) = ctx.builder.finish_listing(task.slot, ctx.slots) {
+        // Keep the in-flight count nonzero for as long as queued work
+        // exists; this scan's own count is released after it returns, so
+        // the increment always precedes that decrement.
+        ctx.in_flight_tasks
+            .fetch_add(ctx.subdirs.len(), Ordering::SeqCst);
+        for (index, path, file_id) in ctx.subdirs.drain(..) {
+            let mut ancestors = task.ancestors.clone();
+            if file_id != (0, 0) {
+                ancestors.push(file_id);
+            }
+            ctx.local_worker.push(ScanTask {
+                path,
+                slot: first_slot + index,
+                device_id: file_id.0,
+                ancestors,
+                expected_device_id: task.expected_device_id,
+                allowed_secondary_device_id: task.allowed_secondary_device_id,
+            });
+        }
+    }
+
+    if ctx.builder.is_full() || ctx.last_flush.elapsed() >= FLUSH_INTERVAL {
+        ctx.flush();
+    }
 }
 
 #[cfg(unix)]

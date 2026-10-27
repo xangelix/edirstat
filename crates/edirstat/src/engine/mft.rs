@@ -3,8 +3,8 @@
 //! A raw NTFS volume (Windows `\\.\C:`, a Linux block device) or an exported `$MFT` file is read
 //! by `ntfs-ng`'s parallel scan into its disk-usage table (every name of every live file, with
 //! its size and two times, extension records folded in) and a directory index; the tree under the
-//! scanned folder is then streamed as [`ScanEvent`]s, directories before their contents, in
-//! batches.
+//! scanned folder is then streamed as listings ([`ScanBatch`]es), directories before their
+//! contents.
 
 use std::{
     io,
@@ -15,7 +15,6 @@ use std::{
     },
 };
 
-use compact_str::CompactString;
 use crossbeam::channel::Sender;
 use ntfs_ng::{
     index::{DirId, PathPolicy, group},
@@ -26,12 +25,14 @@ use ntfs_ng::{
     usage::{Usage, usage_flags},
 };
 
-use super::traversal::{LocalId, ScanEvent, TraversalStats};
+use super::{
+    batch::{BatchBuilder, ScanBatch, Slots},
+    traversal::TraversalStats,
+};
+use crate::arena::{FileNode, StringId};
 
 /// Most records scanned: a guard against a damaged volume that claims an absurd `$MFT`.
 const MAX_RECORDS: u64 = 50_000_000;
-/// Events per batch sent.
-const BATCH_SIZE: usize = 8192;
 /// Most threads reading and parsing `$MFT`: more only contend for the same memory bandwidth
 /// (measured: 8 threads 15% faster than 32 on a 16-core machine, with a third of the CPU time).
 const SCAN_THREADS: usize = 8;
@@ -48,7 +49,7 @@ fn scan_mft<S: ReadAt>(
     inside_volume: Option<&Path>,
     allow_manual_fs_checks: bool,
     scan_cancel: &Arc<AtomicBool>,
-    event_tx: &Sender<Vec<ScanEvent>>,
+    event_tx: &Sender<ScanBatch>,
     stats: &TraversalStats,
 ) -> Result<(), crate::EdirstatError> {
     let records = mft.records();
@@ -111,18 +112,19 @@ fn scan_mft<S: ReadAt>(
     }
     let base_depth = index.depth(target);
 
-    // Depth-first from the target: each directory's entries, directories before their content.
-    let mut local_ids = 1u32;
-    let mut stack = vec![(target, LocalId(0))];
+    // Depth-first from the target: each directory listed whole, its subdirectories after.
+    let slots = Slots::default();
+    let mut builder = BatchBuilder::default();
+    // The folder scanned counts as a directory read, as the walker counts it.
+    builder.add_dirs(1);
+    let mut stack = vec![(target, 0u32)];
     let mut visited = vec![0u64; index.len().div_ceil(64)];
     if let Some(word) = visited.get_mut(target as usize / 64) {
         *word |= 1 << (target % 64);
     }
-    let mut batch = Vec::with_capacity(BATCH_SIZE);
-    // The folder scanned counts as a directory read, as the walker counts it.
-    let (mut local_files, mut local_dirs, mut local_bytes) = (0usize, 1usize, 0usize);
+    let mut subdirs = Vec::new();
     let mut ancestors = Vec::new();
-    while let Some((dir, parent_local)) = stack.pop() {
+    while let Some((dir, slot)) = stack.pop() {
         if scan_cancel.load(Ordering::Relaxed) {
             break;
         }
@@ -143,24 +145,12 @@ fn scan_mft<S: ReadAt>(
                     continue;
                 }
                 *word |= bit;
-                local_dirs += 1;
-                if local_dirs >= 512 {
-                    stats.dirs_scanned.fetch_add(local_dirs, Ordering::Relaxed);
-                    local_dirs = 0;
-                }
-                let child_local = LocalId(local_ids);
-                local_ids = local_ids.saturating_add(1);
-                batch.push(ScanEvent::DirDiscovered {
-                    parent_worker_id: 0,
-                    child_worker_id: 0,
-                    local_parent_id: parent_local,
-                    local_child_id: child_local,
-                    name: CompactString::new(name),
-                    modified_timestamp: modified,
-                    created_timestamp: created,
-                    no_permission: false,
-                });
-                stack.push((child, child_local));
+                builder.add_dirs(1);
+                subdirs.push((child, builder.listing_len() as u32));
+                builder.push(
+                    name,
+                    FileNode::new(StringId(0), None, true, false, modified, created),
+                );
             } else {
                 let link = entry.flags & usage_flags::LINK != 0;
                 let mut size = entry.size;
@@ -183,53 +173,24 @@ fn scan_mft<S: ReadAt>(
                         size = meta.len();
                     }
                 }
-                local_files += 1;
-                local_bytes += usize::try_from(size).unwrap_or(usize::MAX);
-                if local_files >= 2048 {
-                    stats
-                        .files_scanned
-                        .fetch_add(local_files, Ordering::Relaxed);
-                    stats
-                        .bytes_scanned
-                        .fetch_add(local_bytes, Ordering::Relaxed);
-                    local_files = 0;
-                    local_bytes = 0;
-                }
-                batch.push(ScanEvent::FileDiscovered {
-                    parent_worker_id: 0,
-                    local_parent_id: parent_local,
-                    name: CompactString::new(name),
-                    size,
-                    is_symlink: link,
-                    is_dataless: false,
-                    is_special: false,
-                    modified_timestamp: modified,
-                    created_timestamp: created,
-                    no_permission: false,
-                });
-            }
-            if batch.len() >= BATCH_SIZE {
-                let _ = event_tx.send(std::mem::replace(
-                    &mut batch,
-                    Vec::with_capacity(BATCH_SIZE),
-                ));
+                let mut node = FileNode::new(StringId(0), None, false, link, modified, created);
+                node.size = size;
+                builder.push(name, node);
             }
         }
+        if let Some(first_slot) = builder.finish_listing(slot, &slots) {
+            stack.extend(
+                subdirs
+                    .iter()
+                    .map(|&(child, index)| (child, first_slot + index)),
+            );
+        }
+        subdirs.clear();
+        if builder.is_full() {
+            builder.flush(event_tx, stats);
+        }
     }
-    if local_dirs > 0 {
-        stats.dirs_scanned.fetch_add(local_dirs, Ordering::Relaxed);
-    }
-    if local_files > 0 {
-        stats
-            .files_scanned
-            .fetch_add(local_files, Ordering::Relaxed);
-        stats
-            .bytes_scanned
-            .fetch_add(local_bytes, Ordering::Relaxed);
-    }
-    if !batch.is_empty() {
-        let _ = event_tx.send(batch);
-    }
+    builder.flush(event_tx, stats);
     Ok(())
 }
 
@@ -241,7 +202,7 @@ fn scan_mft_file(
     file_path: &Path,
     search_root_path: Option<&Path>,
     scan_cancel: &Arc<AtomicBool>,
-    event_tx: &Sender<Vec<ScanEvent>>,
+    event_tx: &Sender<ScanBatch>,
     stats: &TraversalStats,
 ) -> Result<(), crate::EdirstatError> {
     let source = ntfs_ng::source::FileSource::open(file_path)?;
@@ -263,7 +224,7 @@ fn scan_mft_file(
 pub fn try_scan_mft(
     root_path: &Path,
     scan_cancel: &Arc<AtomicBool>,
-    event_tx: &Sender<Vec<ScanEvent>>,
+    event_tx: &Sender<ScanBatch>,
     stats: &TraversalStats,
 ) -> Result<(), crate::EdirstatError> {
     if root_path

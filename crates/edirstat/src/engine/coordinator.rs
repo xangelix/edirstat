@@ -5,23 +5,22 @@ use std::{
 
 use compact_str::CompactString;
 use crossbeam::channel::Receiver;
+use hashbrown::HashTable;
 
 pub use edirstat_core::state::SharedState;
 
-use super::traversal::{LocalId, ScanEvent};
-use crate::arena::{
-    FileArenaSnapshot, FileNode, NO_INDEX, NodeStorage, StringPool, precompute_dir_counts,
-};
+use super::batch::ScanBatch;
+use crate::arena::{FileArenaSnapshot, FileNode, NO_INDEX, NodeStorage, StringId, StringPool};
 
 pub struct Coordinator {
-    /// Lock-free channel to receive events
-    event_rx: Receiver<Vec<ScanEvent>>,
+    /// Lock-free channel to receive batches
+    event_rx: Receiver<ScanBatch>,
     /// Shared state wrapper for swapping snapshots
     shared_state: Arc<SharedState>,
 }
 
 impl Coordinator {
-    pub const fn new(event_rx: Receiver<Vec<ScanEvent>>, shared_state: Arc<SharedState>) -> Self {
+    pub const fn new(event_rx: Receiver<ScanBatch>, shared_state: Arc<SharedState>) -> Self {
         Self {
             event_rx,
             shared_state,
@@ -31,167 +30,16 @@ impl Coordinator {
     pub fn run_coordinator_loop(&mut self, root_path_str: &str) {
         self.shared_state.is_scanning.store(true, Ordering::SeqCst);
 
-        let mut arena = Vec::with_capacity(1024 * 1024); // Pre-allocate space for ~1M nodes
-        let mut string_pool = StringPool::new();
-
-        // Local extension tracking in the background thread
-        let mut ext_map: std::collections::HashMap<CompactString, (u64, u32), ahash::RandomState> =
-            std::collections::HashMap::with_hasher(ahash::RandomState::new());
-
-        // Local to Global ID mapping: outer index is worker_id, inner is local_id.0
-        let mut id_map: Vec<Vec<u32>> = Vec::new();
-
-        // Track the last child inserted for each parent global index to ensure O(1) appends
-        let mut last_child_map: Vec<u32> = Vec::new();
-
-        // Register root directory node (Global ID 0)
-        let root_name_id = string_pool.get_or_insert(root_path_str.as_bytes());
-        let root_node = FileNode::new(root_name_id, None, true, false, 0, 0);
-        arena.push(root_node);
-        last_child_map.push(NO_INDEX);
-
-        // Map root node: LocalId(0) for worker 0 is global index 0
-        register_id(&mut id_map, 0, LocalId(0), 0);
-
+        let mut tree = Tree::new(root_path_str);
         let mut last_publish = Instant::now();
         let mut publish_interval = Duration::from_millis(100);
-        let mut dirty = false;
 
         while let Ok(batch) = self.event_rx.recv() {
-            for event in batch {
-                match event {
-                    ScanEvent::DirDiscovered {
-                        parent_worker_id,
-                        child_worker_id,
-                        local_parent_id,
-                        local_child_id,
-                        name,
-                        modified_timestamp,
-                        created_timestamp,
-                        no_permission,
-                    } => {
-                        // Resolve parent global index using the parent's creator worker ID
-                        if let Some(parent_global_id) =
-                            resolve_id(&id_map, parent_worker_id, local_parent_id)
-                        {
-                            let name_id = string_pool.get_or_insert(name.as_bytes());
-                            let child_global_id = arena.len() as u32;
-
-                            // Create the directory node with initial timestamps
-                            let mut dir_node = FileNode::new(
-                                name_id,
-                                Some(parent_global_id),
-                                true,
-                                false,
-                                modified_timestamp,
-                                created_timestamp,
-                            );
-                            if no_permission {
-                                dir_node.flags |= FileNode::FLAG_NO_PERMISSION;
-                            }
-                            arena.push(dir_node);
-                            last_child_map.push(NO_INDEX);
-
-                            // Map worker's local child ID to our global index using the child's creator worker ID
-                            register_id(
-                                &mut id_map,
-                                child_worker_id,
-                                local_child_id,
-                                child_global_id,
-                            );
-
-                            // Connect child to sibling chain in O(1) using last_child_map
-                            connect_child(
-                                &mut arena,
-                                &mut last_child_map,
-                                parent_global_id,
-                                child_global_id,
-                            );
-
-                            dirty = true;
-                        }
-                    }
-                    ScanEvent::FileDiscovered {
-                        parent_worker_id,
-                        local_parent_id,
-                        name,
-                        size,
-                        is_symlink,
-                        is_dataless,
-                        is_special,
-                        modified_timestamp,
-                        created_timestamp,
-                        no_permission,
-                    } => {
-                        if name.is_empty() && size == 0 {
-                            // Directory completion signal
-                            continue;
-                        }
-
-                        // Resolve parent global index using the parent's creator worker ID
-                        if let Some(parent_global_id) =
-                            resolve_id(&id_map, parent_worker_id, local_parent_id)
-                        {
-                            let name_id = string_pool.get_or_insert(name.as_bytes());
-                            let file_global_id = arena.len() as u32;
-
-                            // Create file node (parent pointer is set)
-                            let mut file_node = FileNode::new(
-                                name_id,
-                                Some(parent_global_id),
-                                false,
-                                is_symlink,
-                                modified_timestamp,
-                                created_timestamp,
-                            );
-                            file_node.size = size;
-                            if no_permission {
-                                file_node.flags |= FileNode::FLAG_NO_PERMISSION;
-                            }
-                            if is_dataless {
-                                file_node.flags |= FileNode::FLAG_DATALESS;
-                            }
-                            if is_special {
-                                file_node.flags |= FileNode::FLAG_SPECIAL;
-                            }
-                            arena.push(file_node);
-                            last_child_map.push(NO_INDEX);
-
-                            // Connect child to sibling chain in O(1)
-                            connect_child(
-                                &mut arena,
-                                &mut last_child_map,
-                                parent_global_id,
-                                file_global_id,
-                            );
-
-                            // O(1) Background Live Extension Tracking
-                            let ext_slice = crate::arena::get_ext_slice(&name);
-                            crate::arena::with_lowercase_ext(ext_slice, |ext_lowercased| {
-                                let ext = CompactString::new(ext_lowercased);
-                                let entry = ext_map.entry(ext).or_insert((0, 0));
-                                entry.0 += size;
-                                entry.1 += 1;
-                            });
-
-                            dirty = true;
-                        }
-                    }
-                    ScanEvent::PermissionDenied {
-                        worker_id,
-                        local_id,
-                    } => {
-                        if let Some(global_id) = resolve_id(&id_map, worker_id, local_id) {
-                            arena[global_id as usize].flags |= FileNode::FLAG_NO_PERMISSION;
-                            dirty = true;
-                        }
-                    }
-                }
-            }
+            tree.place(batch);
 
             // Publish snapshot if dirty and scaled interval elapsed
-            if dirty && last_publish.elapsed() >= publish_interval {
-                let current_size = arena.len();
+            if tree.dirty && last_publish.elapsed() >= publish_interval {
+                let current_size = tree.arena.len();
 
                 // Dynamically scale updates to prevent main thread rendering stutter
                 publish_interval = if current_size > 500_000 {
@@ -202,29 +50,13 @@ impl Coordinator {
                     Duration::from_millis(100)
                 };
 
-                // Propagate sizes bottom-up before publishing
-                let mut published_arena = arena.clone();
-                propagate_all_sizes_bottom_up(&mut published_arena);
-
-                let dir_counts = Arc::new(precompute_dir_counts(&published_arena));
-                let snapshot = FileArenaSnapshot {
-                    nodes: Arc::new(NodeStorage::Owned(published_arena)),
-                    string_pool: Arc::new(string_pool.clone()),
-                    dir_counts,
-                    extensions: crate::extensions::ExtensionStore::default(),
-                };
-                self.shared_state.store_snapshot(snapshot);
-
-                // Publish background sorted statistics
-                let mut stats_vec: Vec<(CompactString, u64, u32)> = ext_map
-                    .iter()
-                    .map(|(ext, &(total_size, file_count))| (ext.clone(), total_size, file_count))
-                    .collect();
-                stats_vec.sort_by_key(|b| std::cmp::Reverse(b.1));
-                self.shared_state.extension_stats.store(Arc::new(stats_vec));
+                self.shared_state.store_snapshot(tree.snapshot());
+                self.shared_state
+                    .extension_stats
+                    .store(Arc::new(tree.extension_stats()));
 
                 last_publish = Instant::now();
-                dirty = false;
+                tree.dirty = false;
             }
         }
 
@@ -243,39 +75,256 @@ impl Coordinator {
                 .store(Arc::new(Vec::new()));
             self.shared_state.scan_stats.reset();
         } else {
-            // Final size propagation and metrics compilation upon loop exit
-            propagate_all_sizes_bottom_up(&mut arena);
-
-            let dir_counts = Arc::new(precompute_dir_counts(&arena));
-            let snapshot = FileArenaSnapshot {
-                nodes: Arc::new(NodeStorage::Owned(arena)),
-                string_pool: Arc::new(string_pool),
-                dir_counts,
-                extensions: crate::extensions::ExtensionStore::default(),
-            };
-            self.shared_state.store_snapshot(snapshot);
-
-            let mut stats_vec: Vec<(CompactString, u64, u32)> = ext_map
-                .into_iter()
-                .map(|(ext, (total_size, file_count))| (ext, total_size, file_count))
-                .collect();
-            stats_vec.sort_by_key(|b| std::cmp::Reverse(b.1));
-            self.shared_state.extension_stats.store(Arc::new(stats_vec));
+            let extension_stats = tree.extension_stats();
+            self.shared_state.store_snapshot(tree.finish());
+            self.shared_state
+                .extension_stats
+                .store(Arc::new(extension_stats));
         }
 
         self.shared_state.is_scanning.store(false, Ordering::SeqCst);
     }
 }
 
+/// The tree being built: listings placed in the slots their producers reserved.
+struct Tree {
+    arena: Vec<FileNode>,
+    names: NamePool,
+    extensions: std::collections::HashMap<CompactString, (u64, u32), ahash::RandomState>,
+    /// Every slot below this one is filled.
+    filled: usize,
+    dirty: bool,
+    /// Scratch: the pool's id of each name of the batch being placed.
+    name_ids: Vec<u32>,
+}
+
+/// A slot reserved but not filled yet. Only the root has no parent, and only placeholders
+/// carry anything into a fill: the first child and flags of a directory whose listing, or
+/// whose permission failure, came first.
+const fn is_placeholder(slot: usize, node: &FileNode) -> bool {
+    slot != 0 && node.parent == NO_INDEX
+}
+
+impl Tree {
+    fn new(root_path_str: &str) -> Self {
+        let mut names = NamePool::default();
+        let root_name_id = names.intern(root_path_str, super::batch::name_hash(root_path_str));
+        let mut arena = Vec::with_capacity(1024 * 1024); // Pre-allocate space for ~1M nodes
+        arena.push(FileNode::new(
+            StringId(root_name_id),
+            None,
+            true,
+            false,
+            0,
+            0,
+        ));
+        Self {
+            arena,
+            names,
+            extensions: std::collections::HashMap::default(),
+            filled: 1,
+            dirty: false,
+            name_ids: Vec::new(),
+        }
+    }
+
+    fn grow_to(&mut self, len: usize) {
+        if self.arena.len() < len {
+            self.arena
+                .resize(len, FileNode::new(StringId(0), None, false, false, 0, 0));
+        }
+    }
+
+    /// Places a batch's listings, marks its unreadable directories, and adds its extension
+    /// totals.
+    fn place(&mut self, batch: ScanBatch) {
+        self.name_ids.clear();
+        for (name, hash) in batch.names() {
+            self.name_ids.push(self.names.intern(name, hash));
+        }
+
+        let mut nodes = batch.nodes.iter();
+        for listing in &batch.listings {
+            let first = listing.first_slot as usize;
+            let end = first + listing.len as usize;
+            self.grow_to(end);
+            for (slot, node) in self.arena[first..end].iter_mut().zip(nodes.by_ref()) {
+                let pending = *slot;
+                *slot = *node;
+                slot.name_id = StringId(
+                    self.name_ids
+                        .get(node.name_id.0 as usize)
+                        .copied()
+                        .unwrap_or(0),
+                );
+                slot.first_child = pending.first_child;
+                slot.flags |= pending.flags;
+            }
+            let parent = listing.parent as usize;
+            self.grow_to(parent + 1);
+            self.arena[parent].first_child = listing.first_slot;
+        }
+
+        for &slot in &batch.denied {
+            self.grow_to(slot as usize + 1);
+            self.arena[slot as usize].flags |= FileNode::FLAG_NO_PERMISSION;
+        }
+
+        for (ext, size, files) in batch.extensions {
+            let total = self.extensions.entry(ext).or_insert((0, 0));
+            total.0 += size;
+            total.1 += files;
+        }
+        self.dirty = true;
+    }
+
+    /// The tree so far: every slot up to the first unfilled one, sizes propagated. Links into
+    /// the unfilled part are cut: those directories look empty until their listing arrives.
+    fn snapshot(&mut self) -> FileArenaSnapshot {
+        while self.filled < self.arena.len()
+            && !is_placeholder(self.filled, &self.arena[self.filled])
+        {
+            self.filled += 1;
+        }
+        let filled = self.filled as u32;
+        let mut nodes: Vec<FileNode> = self.arena[..self.filled]
+            .iter()
+            .map(|node| {
+                let mut node = *node;
+                if node.first_child >= filled {
+                    node.first_child = NO_INDEX;
+                }
+                if node.next_sibling >= filled {
+                    node.next_sibling = NO_INDEX;
+                }
+                node
+            })
+            .collect();
+        let dir_counts = propagate_all_sizes_bottom_up(&mut nodes);
+        FileArenaSnapshot {
+            nodes: Arc::new(NodeStorage::Owned(nodes)),
+            string_pool: Arc::new(self.names.to_pool()),
+            dir_counts: Arc::new(dir_counts),
+            extensions: crate::extensions::ExtensionStore::default(),
+        }
+    }
+
+    /// The finished tree, once every producer is done: then every reserved slot is filled.
+    fn finish(self) -> FileArenaSnapshot {
+        debug_assert!(
+            self.arena
+                .iter()
+                .enumerate()
+                .all(|(slot, node)| !is_placeholder(slot, node)),
+            "every reserved slot is filled at the end of a scan"
+        );
+        // The names are copied out while the sizes are summed.
+        let Self {
+            mut arena, names, ..
+        } = self;
+        let (string_pool, dir_counts) = std::thread::scope(|scope| {
+            let pool = scope.spawn(move || names.into_pool());
+            let dir_counts = propagate_all_sizes_bottom_up(&mut arena);
+            (pool.join().unwrap_or_default(), dir_counts)
+        });
+        FileArenaSnapshot {
+            nodes: Arc::new(NodeStorage::Owned(arena)),
+            string_pool: Arc::new(string_pool),
+            dir_counts: Arc::new(dir_counts),
+            extensions: crate::extensions::ExtensionStore::default(),
+        }
+    }
+
+    /// (ext, total size, file count), sorted descending by total size.
+    fn extension_stats(&self) -> Vec<(CompactString, u64, u32)> {
+        let mut stats: Vec<(CompactString, u64, u32)> = self
+            .extensions
+            .iter()
+            .map(|(ext, &(total_size, file_count))| (ext.clone(), total_size, file_count))
+            .collect();
+        stats.sort_by_key(|b| std::cmp::Reverse(b.1));
+        stats
+    }
+}
+
+/// Names interned on the hashes their producers computed, laid out as a frozen
+/// [`StringPool`]: name `i` is `bytes[offsets[i]..offsets[i + 1]]`.
+struct NamePool {
+    table: HashTable<u32>,
+    hashes: Vec<u64>,
+    bytes: String,
+    offsets: Vec<u32>,
+}
+
+/// Names a pool makes room for up front, so that a large scan does not rehash every name
+/// on its way there.
+const NAMES_RESERVED: usize = 1 << 20;
+
+impl Default for NamePool {
+    fn default() -> Self {
+        Self {
+            table: HashTable::with_capacity(NAMES_RESERVED),
+            hashes: Vec::with_capacity(NAMES_RESERVED),
+            bytes: String::with_capacity(NAMES_RESERVED * 16),
+            offsets: Vec::from([0]),
+        }
+    }
+}
+
+impl NamePool {
+    fn get(&self, id: u32) -> &str {
+        let id = id as usize;
+        let (Some(&start), Some(&end)) = (self.offsets.get(id), self.offsets.get(id + 1)) else {
+            return "";
+        };
+        self.bytes
+            .get(start as usize..end as usize)
+            .unwrap_or_default()
+    }
+
+    /// The id of `name`, whose [`super::batch::name_hash`] is `hash`: the existing one, or a
+    /// new one (0, the root's, once 4 GiB of names would overflow the offsets).
+    fn intern(&mut self, name: &str, hash: u64) -> u32 {
+        if let Some(&id) = self.table.find(hash, |&id| self.get(id) == name) {
+            return id;
+        }
+        let Some(end) = u32::try_from(self.bytes.len() + name.len())
+            .ok()
+            .filter(|_| self.hashes.len() < NO_INDEX as usize)
+        else {
+            return 0;
+        };
+        let id = self.hashes.len() as u32;
+        self.bytes.push_str(name);
+        self.offsets.push(end);
+        self.hashes.push(hash);
+        let hashes = &self.hashes;
+        self.table
+            .insert_unique(hash, id, |&id| hashes[id as usize]);
+        id
+    }
+
+    fn to_pool(&self) -> StringPool {
+        StringPool::frozen(Arc::from(self.bytes.as_str()), self.offsets.clone())
+    }
+
+    fn into_pool(self) -> StringPool {
+        StringPool::frozen(Arc::from(self.bytes), self.offsets)
+    }
+}
+
 /// Accumulates file sizes, counts, and latest timestamps from leaf nodes up
-/// to the root in a single, cache-friendly, reverse O(N) sweep.
-fn propagate_all_sizes_bottom_up(arena: &mut [FileNode]) {
+/// to the root in a single, cache-friendly, reverse O(N) sweep, which also counts each
+/// directory's subdirectories (recursively). Children come after their parent in the arena.
+fn propagate_all_sizes_bottom_up(arena: &mut [FileNode]) -> Vec<u32> {
+    let mut dir_counts = vec![0u32; arena.len()];
     for idx in (0..arena.len()).rev() {
         let parent = arena[idx].parent;
-        if parent != NO_INDEX {
+        if parent != NO_INDEX && (parent as usize) < idx {
             let parent_idx = parent as usize;
             let size = arena[idx].size;
             let file_count = if arena[idx].is_directory() {
+                dir_counts[parent_idx] += 1 + dir_counts[idx];
                 arena[idx].file_count
             } else {
                 1
@@ -295,63 +344,47 @@ fn propagate_all_sizes_bottom_up(arena: &mut [FileNode]) {
             }
         }
     }
-}
-
-#[inline]
-fn register_id(id_map: &mut Vec<Vec<u32>>, worker_id: u8, local_id: LocalId, global_id: u32) {
-    let w_idx = worker_id as usize;
-    if w_idx >= id_map.len() {
-        id_map.resize(w_idx + 1, Vec::new());
-    }
-    let l_idx = local_id.0 as usize;
-    if l_idx >= id_map[w_idx].len() {
-        let needed_len = l_idx + 1;
-        let new_len = needed_len.next_power_of_two().max(128);
-        id_map[w_idx].resize(new_len, NO_INDEX);
-    }
-    id_map[w_idx][l_idx] = global_id;
-}
-
-#[inline]
-fn resolve_id(id_map: &[Vec<u32>], worker_id: u8, local_id: LocalId) -> Option<u32> {
-    let w_idx = worker_id as usize;
-    if w_idx < id_map.len() {
-        let l_idx = local_id.0 as usize;
-        if l_idx < id_map[w_idx].len() {
-            let gid = id_map[w_idx][l_idx];
-            if gid != NO_INDEX {
-                return Some(gid);
-            }
-        }
-    }
-    None
-}
-
-#[inline]
-const fn connect_child(
-    arena: &mut [FileNode],
-    last_child_map: &mut [u32],
-    parent_global_id: u32,
-    child_global_id: u32,
-) {
-    let p_idx = parent_global_id as usize;
-    let last_child = last_child_map[p_idx];
-
-    if last_child == NO_INDEX {
-        // This is the first child of the parent
-        arena[p_idx].first_child = child_global_id;
-    } else {
-        // We have a previous child, attach as its next sibling
-        arena[last_child as usize].next_sibling = child_global_id;
-    }
-
-    // Update the last child pointer for this parent
-    last_child_map[p_idx] = child_global_id;
+    dir_counts
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::batch::{BatchBuilder, Slots};
+    use crate::traversal::TraversalStats;
+
+    fn file(size: u64, modified: u32) -> FileNode {
+        let mut node = FileNode::new(StringId(0), None, false, false, modified, 0);
+        node.size = size;
+        node
+    }
+
+    fn dir() -> FileNode {
+        FileNode::new(StringId(0), None, true, false, 0, 0)
+    }
+
+    /// Lists `entries` as the content of `parent`, returning the batch and the first slot.
+    fn listing(slots: &Slots, parent: u32, entries: &[(&str, FileNode)]) -> (ScanBatch, u32) {
+        let mut builder = BatchBuilder::default();
+        for (name, node) in entries {
+            builder.push(name, *node);
+        }
+        let first = builder.finish_listing(parent, slots).unwrap_or(NO_INDEX);
+        let (tx, rx) = crossbeam::channel::unbounded();
+        builder.flush(&tx, &TraversalStats::default());
+        (rx.try_recv().unwrap_or_default(), first)
+    }
+
+    fn run(batches: Vec<ScanBatch>) -> Arc<SharedState> {
+        let shared = Arc::new(SharedState::new());
+        let (tx, rx) = crossbeam::channel::unbounded();
+        for batch in batches {
+            let _ = tx.send(batch);
+        }
+        drop(tx);
+        Coordinator::new(rx, shared.clone()).run_coordinator_loop("/root");
+        shared
+    }
 
     #[test]
     fn test_propagate_all_sizes_bottom_up() {
@@ -371,7 +404,7 @@ mod tests {
         arena[1].size = 100;
         arena[3].size = 50;
 
-        propagate_all_sizes_bottom_up(&mut arena);
+        let dir_counts = propagate_all_sizes_bottom_up(&mut arena);
 
         // Sizes and file counts accumulate from the leaves to the root
         assert_eq!(arena[2].size, 50);
@@ -383,107 +416,72 @@ mod tests {
         assert_eq!(arena[2].created_timestamp, 700);
         assert_eq!(arena[0].modified_timestamp, 2000);
         assert_eq!(arena[0].created_timestamp, 700);
+        // Subdirectories, counted recursively
+        assert_eq!(dir_counts, [1, 0, 0, 0]);
     }
 
     #[test]
-    fn test_register_and_resolve_id() {
-        let mut id_map: Vec<Vec<u32>> = Vec::new();
-        register_id(&mut id_map, 0, LocalId(5), 42);
-
-        assert_eq!(resolve_id(&id_map, 0, LocalId(5)), Some(42));
-        // Never-registered local id on a known worker
-        assert_eq!(resolve_id(&id_map, 0, LocalId(6)), None);
-        // Never-registered worker
-        assert_eq!(resolve_id(&id_map, 3, LocalId(9)), None);
-    }
-
-    #[test]
-    fn test_coordinator_drops_events_with_unresolvable_parent() -> Result<(), crate::EdirstatError>
-    {
-        let shared = Arc::new(SharedState::new());
-        let (tx, rx) = crossbeam::channel::unbounded();
-
-        // Worker 7 / LocalId 42 was never registered: the event is dropped silently
-        tx.send(vec![ScanEvent::FileDiscovered {
-            parent_worker_id: 7,
-            local_parent_id: LocalId(42),
-            name: CompactString::new("x"),
-            size: 10,
-            is_symlink: false,
-            is_dataless: false,
-            is_special: false,
-            modified_timestamp: 0,
-            created_timestamp: 0,
-            no_permission: false,
-        }])
-        .map_err(std::io::Error::other)?;
-        drop(tx);
-
-        let mut coordinator = Coordinator::new(rx, shared.clone());
-        coordinator.run_coordinator_loop("/root");
+    fn test_coordinator_builds_tree_from_listings() {
+        let slots = Slots::default();
+        let (root, first) = listing(&slots, 0, &[("d1", dir()), ("f2", file(36, 0))]);
+        let (d1, _) = listing(&slots, first, &[("f1", file(64, 0))]);
+        let shared = run(vec![root, d1]);
 
         let snapshot = shared.current_snapshot.load();
-        assert_eq!(snapshot.nodes.len(), 1);
-        assert!(snapshot.nodes[0].is_directory());
-        assert!(shared.extension_stats.load().is_empty());
-        Ok(())
+        assert_eq!(snapshot.nodes.len(), 4);
+
+        let root = &snapshot.nodes[0];
+        assert!(root.is_directory());
+        assert_eq!(root.size, 100);
+        assert_eq!(root.file_count, 2);
+        assert_eq!(root.first_child, 1);
+
+        let d1 = &snapshot.nodes[1];
+        assert_eq!(snapshot.string_pool.get(d1.name_id), Some("d1"));
+        assert!(d1.is_directory());
+        assert_eq!((d1.parent, d1.next_sibling, d1.first_child), (0, 2, 3));
+        assert_eq!(d1.size, 64);
+        assert_eq!(d1.file_count, 1);
+
+        assert_eq!(snapshot.get_full_path(0), "/root");
+        assert_eq!(snapshot.get_full_path(1), "/root/d1");
+        assert_eq!(snapshot.get_full_path(2), "/root/f2");
+        assert_eq!(snapshot.get_full_path(3), "/root/d1/f1");
+        assert_eq!(snapshot.dir_counts.as_slice(), [1, 0, 0, 0]);
     }
 
     #[test]
-    fn test_coordinator_skips_sentinel_flush_event() -> Result<(), crate::EdirstatError> {
-        let shared = Arc::new(SharedState::new());
-        let (tx, rx) = crossbeam::channel::unbounded();
-
-        // Empty name + zero size is the directory-completion sentinel, not a file
-        tx.send(vec![ScanEvent::FileDiscovered {
-            parent_worker_id: 0,
-            local_parent_id: LocalId(0),
-            name: CompactString::default(),
-            size: 0,
-            is_symlink: false,
-            is_dataless: false,
-            is_special: false,
-            modified_timestamp: 0,
-            created_timestamp: 0,
-            no_permission: false,
-        }])
-        .map_err(std::io::Error::other)?;
-        drop(tx);
-
-        let mut coordinator = Coordinator::new(rx, shared.clone());
-        coordinator.run_coordinator_loop("/root");
+    fn test_coordinator_places_listings_in_any_order() {
+        // root <- a/ <- b/ <- c.txt; the deepest listing arrives first.
+        let slots = Slots::default();
+        let (root, a) = listing(&slots, 0, &[("a", dir())]);
+        let (a_listing, b) = listing(&slots, a, &[("b", dir()), ("same", file(1, 0))]);
+        let (b_listing, _) = listing(&slots, b, &[("c.txt", file(10, 0)), ("same", file(2, 0))]);
+        let shared = run(vec![b_listing, root, a_listing]);
 
         let snapshot = shared.current_snapshot.load();
-        assert_eq!(snapshot.nodes.len(), 1);
-        Ok(())
+        assert_eq!(snapshot.nodes.len(), 6);
+        assert_eq!(snapshot.nodes[0].size, 13);
+        assert_eq!(snapshot.get_full_path(4), "/root/a/b/c.txt");
+        let a_node = &snapshot.nodes[a as usize];
+        assert_eq!(a_node.first_child, b);
+        assert_eq!(a_node.size, 13);
+        // Names are interned across batches
+        assert_eq!(snapshot.nodes[3].name_id, snapshot.nodes[5].name_id);
+        assert_eq!(snapshot.dir_counts[0], 2);
     }
 
     #[test]
-    fn test_coordinator_permission_denied_sets_flag() -> Result<(), crate::EdirstatError> {
-        let shared = Arc::new(SharedState::new());
+    fn test_coordinator_permission_denied_sets_flag() {
+        let slots = Slots::default();
+        let (root, d) = listing(&slots, 0, &[("d", dir())]);
+        let mut builder = BatchBuilder::default();
+        builder.deny(d);
         let (tx, rx) = crossbeam::channel::unbounded();
-
-        tx.send(vec![
-            ScanEvent::DirDiscovered {
-                parent_worker_id: 0,
-                child_worker_id: 0,
-                local_parent_id: LocalId(0),
-                local_child_id: LocalId(1),
-                name: CompactString::new("d"),
-                modified_timestamp: 0,
-                created_timestamp: 0,
-                no_permission: false,
-            },
-            ScanEvent::PermissionDenied {
-                worker_id: 0,
-                local_id: LocalId(1),
-            },
-        ])
-        .map_err(std::io::Error::other)?;
-        drop(tx);
-
-        let mut coordinator = Coordinator::new(rx, shared.clone());
-        coordinator.run_coordinator_loop("/root");
+        builder.flush(&tx, &TraversalStats::default());
+        let denied = rx.try_recv().unwrap_or_default();
+        // The denial arrives before the directory's own listing: the flag must survive it.
+        let shared = run(vec![denied, root]);
 
         let snapshot = shared.current_snapshot.load();
         assert_eq!(snapshot.nodes.len(), 2);
@@ -493,190 +491,83 @@ mod tests {
             Some("d")
         );
         assert!(snapshot.nodes[1].has_no_permission());
-        Ok(())
     }
 
     #[test]
-    fn test_coordinator_builds_tree_from_events() -> Result<(), crate::EdirstatError> {
-        let shared = Arc::new(SharedState::new());
-        let (tx, rx) = crossbeam::channel::unbounded();
-
-        tx.send(vec![
-            ScanEvent::DirDiscovered {
-                parent_worker_id: 0,
-                child_worker_id: 0,
-                local_parent_id: LocalId(0),
-                local_child_id: LocalId(1),
-                name: CompactString::new("d1"),
-                modified_timestamp: 0,
-                created_timestamp: 0,
-                no_permission: false,
-            },
-            ScanEvent::FileDiscovered {
-                parent_worker_id: 0,
-                local_parent_id: LocalId(1),
-                name: CompactString::new("f1"),
-                size: 64,
-                is_symlink: false,
-                is_dataless: false,
-                is_special: false,
-                modified_timestamp: 0,
-                created_timestamp: 0,
-                no_permission: false,
-            },
-            ScanEvent::FileDiscovered {
-                parent_worker_id: 0,
-                local_parent_id: LocalId(0),
-                name: CompactString::new("f2"),
-                size: 36,
-                is_symlink: false,
-                is_dataless: false,
-                is_special: false,
-                modified_timestamp: 0,
-                created_timestamp: 0,
-                no_permission: false,
-            },
-        ])
-        .map_err(std::io::Error::other)?;
-        drop(tx);
-
-        let mut coordinator = Coordinator::new(rx, shared.clone());
-        coordinator.run_coordinator_loop("/root");
-
-        let snapshot = shared.current_snapshot.load();
-        assert_eq!(snapshot.nodes.len(), 4);
-
-        let root = &snapshot.nodes[0];
-        assert!(root.is_directory());
-        assert_eq!(root.size, 100);
-        assert_eq!(root.file_count, 2);
-
-        let d1 = &snapshot.nodes[1];
-        assert_eq!(snapshot.string_pool.get(d1.name_id), Some("d1"));
-        assert!(d1.is_directory());
-        assert_eq!(d1.parent, 0);
-        assert_eq!(d1.size, 64);
-        assert_eq!(d1.file_count, 1);
-
-        let f1 = &snapshot.nodes[2];
-        assert_eq!(snapshot.string_pool.get(f1.name_id), Some("f1"));
-        assert!(!f1.is_directory());
-        assert_eq!(f1.parent, 1);
-        assert_eq!(f1.size, 64);
-
-        let f2 = &snapshot.nodes[3];
-        assert_eq!(snapshot.string_pool.get(f2.name_id), Some("f2"));
-        assert_eq!(f2.parent, 0);
-        assert_eq!(f2.size, 36);
-
-        assert_eq!(snapshot.get_full_path(0), "/root");
-        assert_eq!(snapshot.get_full_path(1), "/root/d1");
-        assert_eq!(snapshot.get_full_path(2), "/root/d1/f1");
-        assert_eq!(snapshot.get_full_path(3), "/root/f2");
-        Ok(())
-    }
-
-    #[test]
-    fn test_coordinator_extension_stats_case_insensitive() -> Result<(), crate::EdirstatError> {
-        let shared = Arc::new(SharedState::new());
-        let (tx, rx) = crossbeam::channel::unbounded();
-
-        tx.send(vec![
-            ScanEvent::FileDiscovered {
-                parent_worker_id: 0,
-                local_parent_id: LocalId(0),
-                name: CompactString::new("A.TXT"),
-                size: 10,
-                is_symlink: false,
-                is_dataless: false,
-                is_special: false,
-                modified_timestamp: 0,
-                created_timestamp: 0,
-                no_permission: false,
-            },
-            ScanEvent::FileDiscovered {
-                parent_worker_id: 0,
-                local_parent_id: LocalId(0),
-                name: CompactString::new("b.txt"),
-                size: 20,
-                is_symlink: false,
-                is_dataless: false,
-                is_special: false,
-                modified_timestamp: 0,
-                created_timestamp: 0,
-                no_permission: false,
-            },
-        ])
-        .map_err(std::io::Error::other)?;
-        drop(tx);
-
-        let mut coordinator = Coordinator::new(rx, shared.clone());
-        coordinator.run_coordinator_loop("/root");
+    fn test_coordinator_extension_stats_merge_batches() {
+        let slots = Slots::default();
+        let (first, _) = listing(&slots, 0, &[("A.TXT", file(10, 0)), ("x.rs", file(1, 0))]);
+        let (second, _) = listing(&slots, 0, &[("b.txt", file(20, 0))]);
+        let shared = run(vec![first, second]);
 
         let stats = shared.extension_stats.load();
-        assert_eq!(stats.len(), 1);
+        assert_eq!(stats.len(), 2);
         assert_eq!(stats[0].0.as_str(), "txt");
         assert_eq!(stats[0].1, 30);
         assert_eq!(stats[0].2, 2);
-        Ok(())
+        assert_eq!(stats[1].0.as_str(), "rs");
     }
 
     #[test]
-    fn test_coordinator_populates_dataless_and_special_flags() -> Result<(), crate::EdirstatError> {
-        let shared = Arc::new(SharedState::new());
-        let (tx, rx) = crossbeam::channel::unbounded();
-
-        tx.send(vec![
-            ScanEvent::FileDiscovered {
-                parent_worker_id: 0,
-                local_parent_id: LocalId(0),
-                name: CompactString::new("cloud.mp4"),
-                size: 1_000_000,
-                is_symlink: false,
-                is_dataless: true,
-                is_special: false,
-                modified_timestamp: 0,
-                created_timestamp: 0,
-                no_permission: false,
-            },
-            ScanEvent::FileDiscovered {
-                parent_worker_id: 0,
-                local_parent_id: LocalId(0),
-                name: CompactString::new("ipc.sock"),
-                size: 0,
-                is_symlink: false,
-                is_dataless: false,
-                is_special: true,
-                modified_timestamp: 0,
-                created_timestamp: 0,
-                no_permission: false,
-            },
-        ])
-        .map_err(std::io::Error::other)?;
-        drop(tx);
-
-        let mut coordinator = Coordinator::new(rx, shared.clone());
-        coordinator.run_coordinator_loop("/root");
+    fn test_coordinator_populates_dataless_and_special_flags() {
+        let slots = Slots::default();
+        let mut cloud = file(1_000_000, 0);
+        cloud.flags |= FileNode::FLAG_DATALESS;
+        let mut socket = file(0, 0);
+        socket.flags |= FileNode::FLAG_SPECIAL;
+        let (batch, _) = listing(&slots, 0, &[("cloud.mp4", cloud), ("ipc.sock", socket)]);
+        let shared = run(vec![batch]);
 
         let snapshot = shared.current_snapshot.load();
         assert_eq!(snapshot.nodes.len(), 3);
+        assert!(snapshot.nodes[1].is_dataless());
+        assert!(!snapshot.nodes[1].is_special());
+        assert!(!snapshot.nodes[2].is_dataless());
+        assert!(snapshot.nodes[2].is_special());
+    }
 
-        let cloud_node = &snapshot.nodes[1];
+    /// A live snapshot holds only the slots up to the first unfilled one, with no link past it.
+    #[test]
+    fn test_snapshot_publishes_filled_prefix() {
+        let slots = Slots::default();
+        let (root, a) = listing(&slots, 0, &[("a", dir()), ("b", dir())]);
+        let (a_listing, _) = listing(&slots, a, &[("in_a", file(5, 0))]);
+        let (b_listing, _) = listing(&slots, a + 1, &[("in_b", file(7, 0))]);
+
+        let mut tree = Tree::new("/root");
+        tree.place(root);
+        tree.place(b_listing);
+        let snapshot = tree.snapshot();
+        // Slot 3 (a's listing) is missing: b's content, in slot 4, is not shown yet.
+        assert_eq!(snapshot.nodes.len(), 3);
+        assert!(snapshot.nodes.iter().all(|n| {
+            n.first_child == NO_INDEX || (n.first_child as usize) < snapshot.nodes.len()
+        }));
+        assert_eq!(snapshot.nodes[2].first_child, NO_INDEX);
+
+        tree.place(a_listing);
+        let snapshot = tree.snapshot();
+        assert_eq!(snapshot.nodes.len(), 5);
+        assert_eq!(snapshot.nodes[0].size, 12);
+        assert_eq!(snapshot.dir_counts[0], 2);
+
+        let finished = tree.finish();
+        assert_eq!(finished.nodes.len(), 5);
         assert_eq!(
-            snapshot.string_pool.get(cloud_node.name_id),
-            Some("cloud.mp4")
+            finished.string_pool.get(finished.nodes[4].name_id),
+            Some("in_b")
         );
-        assert!(cloud_node.is_dataless());
-        assert!(!cloud_node.is_special());
+    }
 
-        let special_node = &snapshot.nodes[2];
-        assert_eq!(
-            snapshot.string_pool.get(special_node.name_id),
-            Some("ipc.sock")
-        );
-        assert!(!special_node.is_dataless());
-        assert!(special_node.is_special());
-
-        Ok(())
+    #[test]
+    fn test_name_pool_deduplicates() {
+        let mut names = NamePool::default();
+        let a = names.intern("a", crate::engine::batch::name_hash("a"));
+        let b = names.intern("b", crate::engine::batch::name_hash("b"));
+        assert_ne!(a, b);
+        assert_eq!(names.intern("a", crate::engine::batch::name_hash("a")), a);
+        let pool = names.into_pool();
+        assert_eq!(pool.get(StringId(a)), Some("a"));
+        assert_eq!(pool.get(StringId(b)), Some("b"));
     }
 }
