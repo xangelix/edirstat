@@ -48,10 +48,7 @@ smallvec = "1.16.1"
 sysinfo = { version = "0.39.6", default-features = false, features = ["disk"] }
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61.2", features = [
-    "Win32_Foundation",
-    "Win32_Storage_FileSystem",
-] }
+windows-sys = { version = "0.61.2", features = ["Win32_Storage_FileSystem"] }
 
 # feature: profile-tracy
 tracy-client = { version = "0.19.0", optional = true }
