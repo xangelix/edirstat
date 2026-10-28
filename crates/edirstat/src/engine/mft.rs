@@ -45,6 +45,7 @@ fn invalid(error: impl std::fmt::Display) -> crate::EdirstatError {
 fn scan_mft<S: ReadAt>(
     mft: &Mft<S>,
     search_root: &Path,
+    inside_volume: Option<&Path>,
     allow_manual_fs_checks: bool,
     scan_cancel: &Arc<AtomicBool>,
     event_tx: &Sender<Vec<ScanEvent>>,
@@ -87,10 +88,11 @@ fn scan_mft<S: ReadAt>(
         return Err(invalid("the volume has no root directory"));
     };
 
-    // The folder scanned: its components followed from the root, case-insensitively; the root
-    // when they cannot be (an exported $MFT, a path outside the volume).
+    // The folder scanned: its components on the volume (below its mount point, on Linux)
+    // followed from the root, case-insensitively; the root when they cannot be (an exported
+    // $MFT, a path outside the volume).
     let mut target = root;
-    for component in search_root.components() {
+    for component in inside_volume.unwrap_or(search_root).components() {
         let std::path::Component::Normal(name) = component else {
             continue;
         };
@@ -117,7 +119,8 @@ fn scan_mft<S: ReadAt>(
         *word |= 1 << (target % 64);
     }
     let mut batch = Vec::with_capacity(BATCH_SIZE);
-    let (mut local_files, mut local_dirs, mut local_bytes) = (0usize, 0usize, 0usize);
+    // The folder scanned counts as a directory read, as the walker counts it.
+    let (mut local_files, mut local_dirs, mut local_bytes) = (0usize, 1usize, 0usize);
     let mut ancestors = Vec::new();
     while let Some((dir, parent_local)) = stack.pop() {
         if scan_cancel.load(Ordering::Relaxed) {
@@ -159,16 +162,24 @@ fn scan_mft<S: ReadAt>(
                 });
                 stack.push((child, child_local));
             } else {
+                let link = entry.flags & usage_flags::LINK != 0;
                 let mut size = entry.size;
                 if allow_manual_fs_checks && entry.size_untrusted() {
-                    // The volume knows better than a stale record: ask it.
+                    // The volume knows better than a stale record: ask it. A link's own size, as
+                    // the walker counts it, not its target's; other reparse points (a cloud
+                    // placeholder) are followed to the size they stand for.
                     index.ancestors(dir, &mut ancestors);
                     let mut path = PathBuf::from(search_root);
                     for &ancestor in ancestors.get(base_depth..).unwrap_or_default() {
                         path.push(index.name_str(ancestor));
                     }
                     path.push(name);
-                    if let Ok(meta) = std::fs::metadata(&path) {
+                    let meta = if link {
+                        std::fs::symlink_metadata(&path)
+                    } else {
+                        std::fs::metadata(&path)
+                    };
+                    if let Ok(meta) = meta {
                         size = meta.len();
                     }
                 }
@@ -189,7 +200,7 @@ fn scan_mft<S: ReadAt>(
                     local_parent_id: parent_local,
                     name: CompactString::new(name),
                     size,
-                    is_symlink: entry.flags & usage_flags::LINK != 0,
+                    is_symlink: link,
                     is_dataless: false,
                     is_special: false,
                     modified_timestamp: modified,
@@ -235,9 +246,11 @@ fn scan_mft_file(
 ) -> Result<(), crate::EdirstatError> {
     let source = ntfs_ng::source::FileSource::open(file_path)?;
     let mft = Mft::from_file(source).map_err(invalid)?;
+    let inside_volume = search_root_path.and_then(path_inside_volume);
     scan_mft(
         &mft,
         search_root_path.unwrap_or(file_path),
+        inside_volume.as_deref(),
         search_root_path.is_some(),
         scan_cancel,
         event_tx,
@@ -261,6 +274,28 @@ pub fn try_scan_mft(
         return scan_mft_file(root_path, None, scan_cancel, event_tx, stats);
     }
 
+    // The volume's `$MFT` file is read on ntfs-3g (FUSE), which serves it as it is now. The
+    // kernel's ntfs3 serves it as it was when the volume was mounted, without anything written
+    // since: there the device is read, or else (without access to it) the folders are walked.
+    #[cfg(target_os = "linux")]
+    {
+        let fuse = {
+            let disks = sysinfo::Disks::new_with_refreshed_list();
+            get_disk(root_path, &disks)
+                .is_some_and(|disk| disk.file_system().eq_ignore_ascii_case("fuseblk"))
+        };
+        if fuse {
+            let Some(mft_path) = find_mft_file_at_mount(root_path) else {
+                return Err(io::Error::new(
+                    io::ErrorKind::NotFound,
+                    "$MFT file not found in root of disk",
+                )
+                .into());
+            };
+            return scan_mft_file(&mft_path, Some(root_path), scan_cancel, event_tx, stats);
+        }
+    }
+
     let volume_path = get_volume_path(root_path).ok_or_else(|| {
         io::Error::new(
             io::ErrorKind::Unsupported,
@@ -276,30 +311,37 @@ pub fn try_scan_mft(
     let device =
         volume_path.and_then(|volume_path| ntfs_ng::source::Device::open(&volume_path, options));
 
-    #[cfg(target_os = "linux")]
-    {
-        let only_mft = {
-            let disks = sysinfo::Disks::new_with_refreshed_list();
-            get_disk(root_path, &disks)
-                .is_some_and(|disk| disk.file_system().eq_ignore_ascii_case("fuseblk"))
-        };
-
-        if (device.is_err() || only_mft)
-            && let Some(mft_path) = find_mft_file_at_mount(root_path)
-        {
-            // $MFT file is available in drive root
-            return scan_mft_file(&mft_path, Some(root_path), scan_cancel, event_tx, stats);
-        } else if only_mft {
-            return Err(io::Error::new(
-                io::ErrorKind::NotFound,
-                "$MFT file not found in root of disk",
-            )
-            .into());
-        }
-    }
-
     let volume = ntfs_ng::volume::Volume::open(device?).map_err(invalid)?;
-    scan_mft(volume.mft(), root_path, true, scan_cancel, event_tx, stats)
+    let inside_volume = path_inside_volume(root_path);
+    scan_mft(
+        volume.mft(),
+        root_path,
+        inside_volume.as_deref(),
+        true,
+        scan_cancel,
+        event_tx,
+        stats,
+    )
+}
+
+/// Where `path` is on the volume mounted at `mount_point`: on Linux a volume's folders are under
+/// its mount point (`/mnt/windows/Users` is `Users` on the volume).
+fn relative_to_mount(path: &Path, mount_point: &Path) -> Option<PathBuf> {
+    path.strip_prefix(mount_point).ok().map(Path::to_path_buf)
+}
+
+/// Where `path` is on its volume (Linux), from its canonical path: the one the volume was found
+/// by. `None` elsewhere, where paths already start at the volume (`C:\Users`).
+#[cfg(target_os = "linux")]
+fn path_inside_volume(path: &Path) -> Option<PathBuf> {
+    let disks = sysinfo::Disks::new_with_refreshed_list();
+    let mount_point = get_disk(path, &disks)?.mount_point().to_path_buf();
+    relative_to_mount(&path.canonicalize().ok()?, &mount_point)
+}
+
+#[cfg(not(target_os = "linux"))]
+const fn path_inside_volume(_path: &Path) -> Option<PathBuf> {
+    None
 }
 
 /// Resolves the Windows partition volume path from a standard file path
@@ -395,6 +437,26 @@ pub fn is_ntfs(path: &Path) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// On Linux the folder scanned is followed from below the volume's mount point.
+    #[test]
+    fn test_relative_to_mount() {
+        let mount = Path::new("/mnt/windows");
+        assert_eq!(
+            relative_to_mount(Path::new("/mnt/windows/Users/x"), mount),
+            Some(PathBuf::from("Users/x"))
+        );
+        assert_eq!(
+            relative_to_mount(Path::new("/mnt/windows"), mount),
+            Some(PathBuf::new())
+        );
+        // Not on the volume: not followed from it.
+        assert_eq!(
+            relative_to_mount(Path::new("/elsewhere/Users"), mount),
+            None
+        );
+        assert_eq!(relative_to_mount(Path::new("/mnt/windows2/x"), mount), None);
+    }
 
     #[test]
     fn test_nt_time_to_unix_zero_and_pre_epoch() {

@@ -26,6 +26,9 @@
 - **💽 4 KiB MFT records:** Volumes formatted with 4 KiB file records (common on 4Kn disks) are scanned; every record used to be rejected, and the scan found nothing.
 - **🧭 Reused MFT records:** A file whose folder was deleted, and whose folder's record was reused, is no longer placed in the new folder: parent links must match the folder's sequence number.
 - **🧷 Links in MFT scans:** Symbolic links and junctions are marked as links, as they are in regular scans.
+- **💾 NTFS drives without root on Linux:** Drives mounted with the kernel's `ntfs3` driver are scanned in full without root. eDirStat read the drive's `$MFT` file, which `ntfs3` serves as it was when the drive was mounted, so anything written since was missing (on a drive filled since it was mounted, everything). It now reads the device when it may and walks the folders otherwise; drives mounted with `ntfs-3g`, which keeps `$MFT` current, are still read through it.
+- **📂 NTFS folders on Linux:** Scanning a folder of a mounted NTFS drive through its MFT (as root, or through the drive's `$MFT` file) scans that folder; the whole drive was scanned instead, whichever folder was given.
+- **📐 Link sizes in MFT scans:** A symbolic link or junction counts its own size, as in regular scans, not its target's: a link to a large file counted that file a second time.
 
 - **🔀 Overlay mounts no longer double-counted:** Full-filesystem scans on Linux now skip `overlay` filesystem mountpoints (e.g. running containers' `merged/` views), whose bytes are already counted under their layer `diff/` directories.
 
