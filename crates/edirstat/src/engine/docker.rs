@@ -670,10 +670,7 @@ fn collect_vhdx(dir: &Path, depth: usize, out: &mut Vec<PathBuf>) {
 fn vhdx_sizes(path: &Path) -> (u64, u64) {
     use std::os::windows::ffi::OsStrExt as _;
 
-    use windows_sys::Win32::{
-        Foundation::{ERROR_SUCCESS, GetLastError},
-        Storage::FileSystem::GetCompressedFileSizeW,
-    };
+    use windows_sys::Win32::Storage::FileSystem::GetCompressedFileSizeW;
 
     let apparent = fs::metadata(path).map_or(0, |meta| meta.len());
 
@@ -683,12 +680,10 @@ fn vhdx_sizes(path: &Path) -> (u64, u64) {
     // SAFETY: `wide` is a NUL-terminated UTF-16 buffer valid for the call's
     // duration; `high` is a valid out-pointer to stack storage.
     let low = unsafe { GetCompressedFileSizeW(wide.as_ptr(), &raw mut high) };
-    if low == u32::MAX {
-        // SAFETY: `GetLastError` takes no parameters and has no side effects.
-        let err = unsafe { GetLastError() };
-        if err != ERROR_SUCCESS {
-            return (apparent, apparent);
-        }
+    // `u32::MAX` is also a valid low half: the call failed only if it set an
+    // error (`last_os_error` reads `GetLastError`; 0 is `ERROR_SUCCESS`).
+    if low == u32::MAX && std::io::Error::last_os_error().raw_os_error() != Some(0) {
+        return (apparent, apparent);
     }
     (apparent, (u64::from(high) << 32) | u64::from(low))
 }
