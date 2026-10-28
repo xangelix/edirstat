@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # use-seaworthy-git.sh — move eDirStat to another seaworthy commit: the
 # seaworthy-launcher pins in Cargo.toml and launcher/Cargo.toml and the
-# reusable seaworthy workflow (dist.yml) that release.yml and packages.yml
-# call, all to one commit of github.com/xangelix/seaworthy, then both
+# reusable seaworthy workflows (dist.yml, delete-artifacts.yml) that
+# release.yml and packages.yml call, all to one commit of
+# github.com/xangelix/seaworthy, then both
 # lockfiles refreshed for the new source alone (cargo metadata: nothing else
 # is upgraded).
 #
@@ -38,7 +39,12 @@ pin launcher/Cargo.toml \
     "s#(seaworthy-launcher = \\{ git = \"https://github.com/xangelix/seaworthy\", rev = \")[0-9a-f]{40}(\" \\})#\\1$rev\\2#"
 for workflow in .github/workflows/release.yml .github/workflows/packages.yml; do
     pin "$workflow" \
-        "s#(uses: xangelix/seaworthy/\\.github/workflows/dist\\.yml@)[0-9a-f]{40}( \\# seaworthy )[0-9a-f]{12}#\\1$rev\\2${rev:0:12}#"
+        "s#(uses: xangelix/seaworthy/\\.github/workflows/[a-z-]+\\.yml@)[0-9a-f]{40}( \\# seaworthy )[0-9a-f]{12}#\\1$rev\\2${rev:0:12}#"
+    # Every seaworthy workflow it calls, at the one commit.
+    if grep -E 'xangelix/seaworthy/\.github/workflows/' "$workflow" | grep -v -q "@$rev # seaworthy ${rev:0:12}\$"; then
+        echo "error: $workflow calls a seaworthy workflow that isn't pinned as \`@<sha> # seaworthy <12 hex>\`" >&2
+        exit 1
+    fi
 done
 
 echo "==> Refreshing the lockfiles for the new source"

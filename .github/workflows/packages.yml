@@ -7,6 +7,12 @@ name: Packages (dry run)
 # and no secret is handed over. It runs on pull requests that change how
 # eDirStat is built or packaged, and by hand (Actions → Packages (dry run)
 # → Run workflow) on any branch before tagging a release.
+#
+# The packages are the paid builds in all but signature and version, and
+# artifacts of a public repository are not private (any signed-in GitHub
+# user, and proxies such as nightly.link for anyone). So a pull request's
+# run only checks them and deletes its artifacts when it passes; a run by
+# hand, which only maintainers can start, keeps them for 3 days to download.
 on:
   pull_request:
     paths:
@@ -29,10 +35,23 @@ jobs:
   dist:
     name: seaworthy (Linux, Windows, macOS packages)
     # The commit Cargo.toml pins seaworthy to (scripts/use-seaworthy-git.sh).
-    uses: xangelix/seaworthy/.github/workflows/dist.yml@2224dc724a1a2fec447c298f4ddfc9e57b8d444c # seaworthy 2224dc724a1a
+    uses: xangelix/seaworthy/.github/workflows/dist.yml@912c440b1d86b5c6c14948ede5069a484103cc4a # seaworthy 912c440b1d86
     permissions:
       contents: read
     with:
       # A development build: versioned from the manifest, unsigned.
       release: false
       ci-test-keys: false
+      # A failed pull request run keeps its artifacts a day, for "Re-run
+      # failed jobs".
+      retention-days: ${{ github.event_name == 'pull_request' && 1 || 3 }}
+
+  delete-artifacts:
+    name: Delete the Packages
+    needs: [dist]
+    # A fork's pull request gets a read-only token: its artifacts expire.
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    # seaworthy's, at the commit dist.yml is pinned to.
+    uses: xangelix/seaworthy/.github/workflows/delete-artifacts.yml@912c440b1d86b5c6c14948ede5069a484103cc4a # seaworthy 912c440b1d86
+    permissions:
+      actions: write # to delete this run's artifacts

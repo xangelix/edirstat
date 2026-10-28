@@ -18,7 +18,7 @@ jobs:
   dist:
     name: seaworthy (Linux, Windows, macOS packages)
     # The commit Cargo.toml pins seaworthy to (scripts/use-seaworthy-git.sh).
-    uses: xangelix/seaworthy/.github/workflows/dist.yml@2224dc724a1a2fec447c298f4ddfc9e57b8d444c # seaworthy 2224dc724a1a
+    uses: xangelix/seaworthy/.github/workflows/dist.yml@912c440b1d86b5c6c14948ede5069a484103cc4a # seaworthy 912c440b1d86
     # contents: read alone: id-token: write is for Azure Artifact Signing
     # (the azure-* inputs), and dist.yml refuses it without them.
     permissions:
@@ -39,6 +39,9 @@ jobs:
       allow-unsigned: true
       # No CI test keys: eDirStat has no update helper.
       ci-test-keys: false
+      # Long enough to check the disk image before approving the itch.io
+      # deploy; delete-artifacts removes them once the deploys are done.
+      retention-days: 3
     secrets:
       APPLE_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
       APPLE_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
@@ -47,7 +50,8 @@ jobs:
       APPLE_NOTARY_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
 
   # macOS beyond seaworthy's Apple Silicon disk image: the Intel (x86_64)
-  # Developer ID build, and the Mac App Store package (aarch64).
+  # Developer ID build (itch.io's osx-x86_64 channel), and the Mac App Store
+  # package (aarch64).
   build-macos:
     name: Package macOS Production (${{ matrix.target }})
     runs-on: macos-latest
@@ -125,7 +129,7 @@ jobs:
         if: matrix.target == 'x86_64-apple-darwin'
         run: ./scripts/package_macos.sh --target "${{ matrix.target }}" --validate
 
-      - name: Store macOS Package as Private Artifact
+      - name: Upload the Intel Disk Image
         if: matrix.target == 'x86_64-apple-darwin'
         uses: actions/upload-artifact@v7
         with:
@@ -133,6 +137,7 @@ jobs:
           path: |
             edirstat-macos-*.dmg
             edirstat-macos-*.zip
+          retention-days: 3
 
       - name: Build & Package Mac App Store .pkg (aarch64)
         if: matrix.target == 'aarch64-apple-darwin' && env.APPSTORE_PROVISIONPROFILE != ''
@@ -143,12 +148,13 @@ jobs:
           ./scripts/package_macos.sh --target aarch64-apple-darwin --appstore --build "${{ github.run_number }}" --validate
           rm -f appstore.provisionprofile
 
-      - name: Store Mac App Store .pkg as Private Artifact
+      - name: Upload the Mac App Store .pkg
         if: matrix.target == 'aarch64-apple-darwin' && env.APPSTORE_PROVISIONPROFILE != ''
         uses: actions/upload-artifact@v7
         with:
           name: edirstat-appstore-pkg
           path: edirstat-appstore-*.pkg
+          retention-days: 3
 
       - name: Cleanup keychain & sensitive files
         if: always()
@@ -159,7 +165,7 @@ jobs:
   deploy-itchio:
     name: Deploy to itch.io
     runs-on: ubuntu-latest
-    needs: [dist]
+    needs: [dist, build-macos]
     # Environment scoping enables an approval gate before pushing to the paid
     # store, and lets the BUTLER_API_KEY secret be scoped to this deployment
     # (Settings → Environments → itchio).
@@ -172,6 +178,12 @@ jobs:
           name: ${{ needs.dist.outputs.packages-artifact }}
           path: dl-packages
 
+      - name: Download the Intel disk image
+        uses: actions/download-artifact@v8
+        with:
+          name: edirstat-macos-x86_64-apple-darwin
+          path: dl-macos-x86_64
+
       - name: Stage Channels
         env:
           TAG: ${{ github.event.release.tag_name }}
@@ -182,7 +194,7 @@ jobs:
           VERSION="${TAG#v}"
           linux=dl-packages/packages/edirstat/packages
           macos=dl-packages/packages-macos/edirstat/packages
-          mkdir -p staging-windows staging-windows-installer staging-osx
+          mkdir -p staging-windows staging-windows-installer staging-osx staging-osx-intel
           mkdir -p staging-linux-portable staging-linux-deb staging-linux-rpm staging-linux-pacman
 
           # Windows portable: the launcher, its per-CPU cores and the license
@@ -197,6 +209,9 @@ jobs:
 
           # macOS (Apple Silicon): seaworthy's Developer ID disk image
           cp "$macos"/*-macos-arm64.dmg "staging-osx/edirstat-$VERSION-macos-aarch64.dmg"
+
+          # macOS (Intel): the Developer ID single-binary build (build-macos)
+          cp dl-macos-x86_64/edirstat-macos-x86_64-*.dmg "staging-osx-intel/edirstat-$VERSION-macos-x86_64.dmg"
 
           # Linux portable: the launcher, lib/ with the cores, the license
           tar --zstd -xf "$linux"/*-linux-x86_64.tar.zst -C staging-linux-portable --strip-components=1
@@ -229,8 +244,9 @@ jobs:
           butler push staging-windows/ xangelix/edirstat:windows-portable --userversion "$VERSION"
           butler push staging-windows-installer/ xangelix/edirstat:windows-setup --userversion "$VERSION"
 
-          # Push macOS package
+          # Push macOS packages
           butler push staging-osx/ xangelix/edirstat:osx-arm64 --userversion "$VERSION"
+          butler push staging-osx-intel/ xangelix/edirstat:osx-x86_64 --userversion "$VERSION"
 
           # Push dedicated Linux channels
           butler push staging-linux-portable/ xangelix/edirstat:linux-portable --userversion "$VERSION"
@@ -273,3 +289,18 @@ jobs:
           fi
           echo "==> Delivering $PKG to Mac App Store..."
           ./scripts/deliver_macos.sh --pkg "$PKG"
+
+  # This run's artifacts are what itch.io sells: the per-CPU cores, every
+  # package and the signed disk images. Artifacts of a public repository are
+  # not private: any signed-in GitHub user can download them, and proxies
+  # such as nightly.link serve them without a login. So once itch.io and
+  # App Store Connect have the builds, they are deleted. A failed or
+  # rejected deploy leaves them for "Re-run failed jobs" until they expire
+  # (retention-days above).
+  delete-artifacts:
+    name: Delete the Release Artifacts
+    needs: [deploy-itchio, deliver-appstore]
+    # seaworthy's, at the commit dist.yml is pinned to.
+    uses: xangelix/seaworthy/.github/workflows/delete-artifacts.yml@912c440b1d86b5c6c14948ede5069a484103cc4a # seaworthy 912c440b1d86
+    permissions:
+      actions: write # to delete this run's artifacts
