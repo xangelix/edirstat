@@ -35,7 +35,7 @@ jobs:
   dist:
     name: seaworthy (Linux, Windows, macOS packages)
     # The commit Cargo.toml pins seaworthy to (scripts/use-seaworthy-git.sh).
-    uses: xangelix/seaworthy/.github/workflows/dist.yml@2224dc724a1a2fec447c298f4ddfc9e57b8d444c # seaworthy 2224dc724a1a
+    uses: xangelix/seaworthy/.github/workflows/dist.yml@912c440b1d86b5c6c14948ede5069a484103cc4a # seaworthy 912c440b1d86
     permissions:
       contents: read
     with:
@@ -48,23 +48,10 @@ jobs:
 
   delete-artifacts:
     name: Delete the Packages
-    runs-on: ubuntu-latest
     needs: [dist]
     # A fork's pull request gets a read-only token: its artifacts expire.
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    # seaworthy's, at the commit dist.yml is pinned to.
+    uses: xangelix/seaworthy/.github/workflows/delete-artifacts.yml@912c440b1d86b5c6c14948ede5069a484103cc4a # seaworthy 912c440b1d86
     permissions:
       actions: write # to delete this run's artifacts
-    steps:
-      - name: Delete every artifact of this run
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          # The whole listing first: deleting while paging would skip some.
-          artifacts="$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts" \
-            --jq '.artifacts[] | "\(.id) \(.name)"')"
-          while read -r id name; do
-            [ -n "$id" ] || continue
-            echo "Deleting $name"
-            gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$id"
-          done <<< "$artifacts"
