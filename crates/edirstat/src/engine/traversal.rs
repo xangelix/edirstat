@@ -1328,10 +1328,15 @@ mod tests {
             )?;
         }
         std::fs::write(temp_dir.join("ünïcødé-名前.txt"), b"bb")?;
-        std::fs::write(
+        // A name that is not UTF-8, where the filesystem takes one (APFS refuses it: EILSEQ).
+        let not_utf8 = match std::fs::write(
             temp_dir.join(std::ffi::OsStr::from_bytes(b"latin1-\xe9t\xe9.txt")),
             b"ccc",
-        )?;
+        ) {
+            Ok(()) => true,
+            Err(error) if error.raw_os_error() == Some(libc::EILSEQ) => false,
+            Err(error) => return Err(error.into()),
+        };
         std::fs::write(temp_dir.join("sub").join("inner"), b"dddd")?;
 
         let shared_state = Arc::new(SharedState::new());
@@ -1348,10 +1353,11 @@ mod tests {
         let _ = handle.join();
 
         let snapshot = shared_state.current_snapshot.load();
-        assert_eq!(snapshot.nodes[0].file_count, 3003);
-        assert_eq!(snapshot.nodes[0].size, 3000 + 2 + 3 + 4);
+        let (odd_files, odd_bytes) = if not_utf8 { (1, 3) } else { (0, 0) };
+        assert_eq!(snapshot.nodes[0].file_count, 3002 + odd_files);
+        assert_eq!(snapshot.nodes[0].size, 3000 + 2 + 4 + odd_bytes);
         assert!(node_index(&snapshot, "ünïcødé-名前.txt").is_some());
-        assert!(node_index(&snapshot, "latin1-\u{fffd}t\u{fffd}.txt").is_some());
+        assert!(!not_utf8 || node_index(&snapshot, "latin1-\u{fffd}t\u{fffd}.txt").is_some());
         assert!(node_index(&snapshot, "inner").is_some());
 
         let _ = std::fs::remove_dir_all(&temp_dir);

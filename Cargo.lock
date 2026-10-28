@@ -1255,6 +1255,7 @@ dependencies = [
  "edirstat-gui",
  "eframe",
  "hashbrown 0.17.1",
+ "libc",
  "mimalloc-rspack",
  "ntfs-ng",
  "rustix 1.1.5",
