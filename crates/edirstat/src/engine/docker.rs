@@ -664,15 +664,22 @@ fn collect_vhdx(dir: &Path, depth: usize, out: &mut Vec<PathBuf>) {
     }
 }
 
-/// Apparent and host-allocated bytes of a (possibly sparse) `*.vhdx`.
+/// Apparent and host-allocated bytes of a (possibly sparse) `*.vhdx`; both the apparent size
+/// when the allocated one is unknown (or not asked for, without the `unsafe` feature).
 #[cfg(windows)]
-#[allow(unsafe_code)]
 fn vhdx_sizes(path: &Path) -> (u64, u64) {
+    let apparent = fs::metadata(path).map_or(0, |meta| meta.len());
+    (apparent, allocated_bytes(path).unwrap_or(apparent))
+}
+
+/// The bytes a file takes on its volume, less than its size when it is sparse or compressed;
+/// `None` when Windows cannot say.
+#[cfg(all(windows, feature = "unsafe"))]
+#[allow(unsafe_code)]
+fn allocated_bytes(path: &Path) -> Option<u64> {
     use std::os::windows::ffi::OsStrExt as _;
 
     use windows_sys::Win32::Storage::FileSystem::GetCompressedFileSizeW;
-
-    let apparent = fs::metadata(path).map_or(0, |meta| meta.len());
 
     let mut wide: Vec<u16> = path.as_os_str().encode_wide().collect();
     wide.push(0);
@@ -683,9 +690,14 @@ fn vhdx_sizes(path: &Path) -> (u64, u64) {
     // `u32::MAX` is also a valid low half: the call failed only if it set an
     // error (`last_os_error` reads `GetLastError`; 0 is `ERROR_SUCCESS`).
     if low == u32::MAX && std::io::Error::last_os_error().raw_os_error() != Some(0) {
-        return (apparent, apparent);
+        return None;
     }
-    (apparent, (u64::from(high) << 32) | u64::from(low))
+    Some((u64::from(high) << 32) | u64::from(low))
+}
+
+#[cfg(all(windows, not(feature = "unsafe")))]
+const fn allocated_bytes(_path: &Path) -> Option<u64> {
+    None
 }
 
 /// Storage-driver marker dirs: a root is classified by the first driver whose

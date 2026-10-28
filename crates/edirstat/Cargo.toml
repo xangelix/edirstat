@@ -26,9 +26,14 @@ include = [
 ]
 
 [features]
-default = ["online"]
+default = ["online", "unsafe"]
 online = ["edirstat-gui/online"]
 profile-tracy = ["tracy-client", "edirstat-gui/profile-tracy"]
+
+# This crate's own unsafe code, each call with a safe fallback (its dependencies have their own).
+# Without it the crate forbids unsafe code: Docker Desktop's disk images (Windows) then show
+# their full size, not the space they take.
+unsafe = ["dep:windows-sys"]
 
 [dependencies]
 edirstat-core = { path = "../edirstat-core", version = "2.2.0" }
@@ -53,7 +58,7 @@ sysinfo = { version = "0.39.6", default-features = false, features = ["disk"] }
 rustix = { version = "1.1.5", features = ["fs"] }
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61.2", features = ["Win32_Storage_FileSystem"] }
+windows-sys = { version = "0.61.2", features = ["Win32_Storage_FileSystem"], optional = true }
 
 # feature: profile-tracy
 tracy-client = { version = "0.19.0", optional = true }

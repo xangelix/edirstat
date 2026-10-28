@@ -12,6 +12,7 @@
 - **🇧🇷 Brazilian Portuguese (`pt-BR`):** New dedicated Brazilian Portuguese translation (19 languages total). System locale detection now routes `pt-BR` and a bare `pt` (macOS's tag for Brazilian Portuguese) to `pt-BR`, while `pt-PT` and other regional variants (`pt-AO`, `pt-MZ`, …) keep the European Portuguese translation; previously every Portuguese locale fell back to `pt-PT`.
 - **💻 Intel Mac download:** Intel (x86_64) Macs get their own Developer ID-signed and notarized disk image on itch.io (the `osx-x86_64` download), beside the Apple Silicon one.
 - **🇺🇦 Ukrainian (`uk-UA`):** New Ukrainian translation (20 languages total), with full CLDR plural forms (`one`/`few`/`many`/`other`). Ukrainian system locales (`uk`, `uk-UA`) are detected automatically; previously they fell back to English.
+- **🔒 `unsafe` build feature:** eDirStat's own unsafe code (one Windows call, which measures the space Docker Desktop's sparse disk images take) is behind the `unsafe` Cargo feature, on by default. Built without it (`--no-default-features --features online`), the crate forbids unsafe code, and Docker Desktop's disk images show their full size instead.
 
 ### Changed
 

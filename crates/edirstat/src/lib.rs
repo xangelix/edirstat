@@ -1,6 +1,7 @@
-// `deny` (not `forbid`) so the one sanctioned `windows-sys` FFI call for
-// `GetCompressedFileSizeW` can opt back in locally (see engine::docker).
-#![deny(unsafe_code)]
+// With the `unsafe` feature (on by default) the calls that need it (see the feature in
+// Cargo.toml) opt back in locally; without it the crate forbids unsafe code outright.
+#![cfg_attr(feature = "unsafe", deny(unsafe_code))]
+#![cfg_attr(not(feature = "unsafe"), forbid(unsafe_code))]
 // -- Clippy Denies --
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 // --- Clippy Lint Groups & Specific Warnings ---
