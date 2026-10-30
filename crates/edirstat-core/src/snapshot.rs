@@ -1,6 +1,6 @@
 use std::{
     fs::File,
-    io::{Read, Write},
+    io::{Read, Write, BufWriter},
     path::Path,
     sync::Arc,
 };
@@ -890,6 +890,85 @@ fn take_column(
         return Err(crate::EdirstatError::TruncatedNodes);
     }
     Ok((&data[start..end], end))
+}
+
+pub fn save_snapshot_ext_txt_or_csv(
+    nodes: &[FileNode],
+    string_pool: &StringPool,
+    path: &Path,
+    csv: bool,
+) -> Result<(), crate::EdirstatError> {
+
+    let txt_path = path;
+    let mut txt_writer = BufWriter::new(File::create(&txt_path)?);
+
+    if csv {
+        let tempstr = String::from("Type,FullPath,SizeInBytes,Count,LastModifiedTime,LastModifiedTicks,Flags");
+        writeln!(txt_writer,"{}",tempstr)?;
+    }
+
+    for node in nodes {
+
+        // Reconstruct the hierarchical absolute file path string
+        let node_name = string_pool.get(node.name_id).unwrap_or("Unknown");
+        let mut full_path = node_name.to_string();
+        let mut current_parent = node.parent;
+        
+        while current_parent != crate::arena::NO_INDEX && (current_parent as usize) < nodes.len() {
+            let p_node = &nodes[current_parent as usize];
+            let p_name = string_pool.get(p_node.name_id).unwrap_or("");
+            if !p_name.is_empty() {
+                full_path = format!("{}\\{}", p_name.trim_end_matches('\\'), full_path.trim_start_matches('\\'));
+            }
+            current_parent = p_node.parent;
+        }
+
+        let size_str=node.size.to_string();
+        let count_str=node.file_count.to_string();
+        let modified_str=node.modified_timestamp.to_string();
+        let flags_str=node.flags.to_string();
+
+        let secs_since_unix=node.modified_timestamp as i64;
+        let readable_time_str = match chrono::DateTime::from_timestamp(secs_since_unix, 0) {
+            Some(dt) => dt.format("%Y-%m-%d %H:%M:%S").to_string(),
+            None => "Unknown Date".to_string(),
+        };
+
+        let nodetype;
+        if node.is_directory(){
+            nodetype="DIRECTORY";
+        }else if node.is_symlink(){
+            nodetype="SYMLINK";
+        }else if node.is_special(){
+            nodetype="SPECIAL";
+        }else{
+            nodetype="FILE";
+        }
+
+        // Export the fields
+        if csv {
+            let escaped_path=full_path.replace("\"","\"\"");
+            writeln!(txt_writer,"{},\"{}\",{},{},{},{},{}",
+            nodetype,
+            escaped_path,
+            size_str,
+            count_str,
+            readable_time_str,
+            modified_str,
+            flags_str)?;
+        } else {
+            writeln!(txt_writer,"{}",nodetype)?;
+            writeln!(txt_writer,"{}",full_path)?;
+            writeln!(txt_writer,"{}",size_str)?;
+            writeln!(txt_writer,"{}",count_str)?;
+            writeln!(txt_writer,"{}",readable_time_str)?;
+            writeln!(txt_writer,"{}",modified_str)?;
+            writeln!(txt_writer,"{}",flags_str)?;
+        }
+    }
+
+    txt_writer.flush()?;
+    Ok(())
 }
 
 #[cfg(test)]
