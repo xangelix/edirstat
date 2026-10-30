@@ -132,9 +132,25 @@ fn run_headless_scan_and_save(
         .into());
     }
 
-    let ext = if no_compression { "edst" } else { "edst.zst" };
-    if to_path.extension().is_none_or(|s| s != ext) {
-        to_path = to_path.with_added_extension(ext);
+    //let ext = if no_compression { "edst" } else { "edst.zst" };
+    //if to_path.extension().is_none_or(|s| s != ext) {
+    //    to_path = to_path.with_added_extension(ext);
+    //}
+    let ext: String;
+    if is_csv_file(&to_path) || is_txt_file(&to_path) {
+        ext = to_path
+            .extension()
+            .and_then(|s| s.to_str())
+            .unwrap_or("")
+            .to_owned();
+    } else {
+        ext = if no_compression {
+            "edst".to_owned()
+        } else {
+            "edst.zst".to_owned()
+        };
+
+        to_path = to_path.with_added_extension(&ext);
     }
 
     println!("Headless scanning started for: {}", scan_path.display());
@@ -167,7 +183,7 @@ fn run_headless_scan_and_save(
         collect_docker_to_extensions(&shared_state.scan_cancel, &mut extensions);
     }
 
-    let mut dest_path = to_path;
+    let mut dest_path = to_path.clone();
     if dest_path.is_dir() {
         let folder_name = scan_path
             .file_name()
@@ -176,13 +192,38 @@ fn run_headless_scan_and_save(
     }
 
     println!("Saving snapshot to: {}", dest_path.display());
-    crate::snapshot::save_snapshot_ext(
-        &snapshot.nodes,
-        &snapshot.string_pool,
-        &dest_path,
-        !no_compression,
-        &extensions,
-    )?;
+
+    //crate::snapshot::save_snapshot_ext(
+    //    &snapshot.nodes,
+    //    &snapshot.string_pool,
+    //    &dest_path,
+    //    !no_compression,
+    //    &extensions,
+    //)?;
+    if is_csv_file(&to_path){
+        crate::snapshot::save_snapshot_ext_txt_or_csv(
+            &snapshot.nodes,
+            &snapshot.string_pool,
+            &dest_path,
+            true,
+        )?;
+    } else if is_txt_file(&to_path) {
+        crate::snapshot::save_snapshot_ext_txt_or_csv(
+            &snapshot.nodes,
+            &snapshot.string_pool,
+            &dest_path,
+            false,
+        )?;
+    } else {
+        crate::snapshot::save_snapshot_ext(
+            &snapshot.nodes,
+            &snapshot.string_pool,
+            &dest_path,
+            !no_compression,
+            &extensions,
+        )?;
+    }
+
     println!("Snapshot saved successfully.");
 
     Ok(())
@@ -294,4 +335,16 @@ pub fn main() -> anyhow::Result<()> {
     )?;
 
     Ok(())
+}
+
+fn is_csv_file(path: &Path) -> bool {
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("csv"))
+}
+
+fn is_txt_file(path: &Path) -> bool {
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("txt"))
 }
