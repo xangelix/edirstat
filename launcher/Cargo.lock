@@ -74,7 +74,7 @@ dependencies = [
 [[package]]
 name = "seaworthy-fsguard"
 version = "0.1.0"
-source = "git+https://github.com/xangelix/seaworthy?rev=912c440b1d86b5c6c14948ede5069a484103cc4a#912c440b1d86b5c6c14948ede5069a484103cc4a"
+source = "git+https://github.com/xangelix/seaworthy?rev=21a23431487ca40f2f249c0edde938efc8e09b1e#21a23431487ca40f2f249c0edde938efc8e09b1e"
 dependencies = [
  "libc",
  "thiserror",
@@ -84,7 +84,7 @@ dependencies = [
 [[package]]
 name = "seaworthy-launcher"
 version = "0.1.0"
-source = "git+https://github.com/xangelix/seaworthy?rev=912c440b1d86b5c6c14948ede5069a484103cc4a#912c440b1d86b5c6c14948ede5069a484103cc4a"
+source = "git+https://github.com/xangelix/seaworthy?rev=21a23431487ca40f2f249c0edde938efc8e09b1e#21a23431487ca40f2f249c0edde938efc8e09b1e"
 dependencies = [
  "libc",
  "seaworthy-fsguard",
@@ -95,7 +95,7 @@ dependencies = [
 [[package]]
 name = "seaworthy-levels"
 version = "0.1.0"
-source = "git+https://github.com/xangelix/seaworthy?rev=912c440b1d86b5c6c14948ede5069a484103cc4a#912c440b1d86b5c6c14948ede5069a484103cc4a"
+source = "git+https://github.com/xangelix/seaworthy?rev=21a23431487ca40f2f249c0edde938efc8e09b1e#21a23431487ca40f2f249c0edde938efc8e09b1e"
 dependencies = [
  "libc",
  "object",

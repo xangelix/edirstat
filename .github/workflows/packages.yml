@@ -35,7 +35,7 @@ jobs:
   dist:
     name: seaworthy (Linux, Windows, macOS packages)
     # The commit Cargo.toml pins seaworthy to (scripts/use-seaworthy-git.sh).
-    uses: xangelix/seaworthy/.github/workflows/dist.yml@912c440b1d86b5c6c14948ede5069a484103cc4a # seaworthy 912c440b1d86
+    uses: xangelix/seaworthy/.github/workflows/dist.yml@21a23431487ca40f2f249c0edde938efc8e09b1e # seaworthy 21a23431487c
     permissions:
       contents: read
     with:
@@ -52,6 +52,6 @@ jobs:
     # A fork's pull request gets a read-only token: its artifacts expire.
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
     # seaworthy's, at the commit dist.yml is pinned to.
-    uses: xangelix/seaworthy/.github/workflows/delete-artifacts.yml@912c440b1d86b5c6c14948ede5069a484103cc4a # seaworthy 912c440b1d86
+    uses: xangelix/seaworthy/.github/workflows/delete-artifacts.yml@21a23431487ca40f2f249c0edde938efc8e09b1e # seaworthy 21a23431487c
     permissions:
       actions: write # to delete this run's artifacts

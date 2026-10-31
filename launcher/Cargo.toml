@@ -30,7 +30,7 @@ LegalCopyright = "Copyright © 2026 Cody Wyatt Neiman (xangelix) <neiman@cody.to
 
 [dependencies]
 # seaworthy, pinned to the commit the workspace pins (scripts/use-seaworthy-git.sh).
-seaworthy-launcher = { git = "https://github.com/xangelix/seaworthy", rev = "912c440b1d86b5c6c14948ede5069a484103cc4a" }
+seaworthy-launcher = { git = "https://github.com/xangelix/seaworthy", rev = "21a23431487ca40f2f249c0edde938efc8e09b1e" }
 
 [build-dependencies]
 winresource = "0.1.31"
