@@ -18,7 +18,7 @@ jobs:
   dist:
     name: seaworthy (Linux, Windows, macOS packages)
     # The commit Cargo.toml pins seaworthy to (scripts/use-seaworthy-git.sh).
-    uses: xangelix/seaworthy/.github/workflows/dist.yml@912c440b1d86b5c6c14948ede5069a484103cc4a # seaworthy 912c440b1d86
+    uses: xangelix/seaworthy/.github/workflows/dist.yml@21a23431487ca40f2f249c0edde938efc8e09b1e # seaworthy 21a23431487c
     # contents: read alone: id-token: write is for Azure Artifact Signing
     # (the azure-* inputs), and dist.yml refuses it without them.
     permissions:
@@ -301,6 +301,6 @@ jobs:
     name: Delete the Release Artifacts
     needs: [deploy-itchio, deliver-appstore]
     # seaworthy's, at the commit dist.yml is pinned to.
-    uses: xangelix/seaworthy/.github/workflows/delete-artifacts.yml@912c440b1d86b5c6c14948ede5069a484103cc4a # seaworthy 912c440b1d86
+    uses: xangelix/seaworthy/.github/workflows/delete-artifacts.yml@21a23431487ca40f2f249c0edde938efc8e09b1e # seaworthy 21a23431487c
     permissions:
       actions: write # to delete this run's artifacts
